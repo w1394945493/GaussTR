@@ -9,6 +9,7 @@ import argparse
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -16,33 +17,11 @@ from mmengine.config import Config
 from mmengine.registry import init_default_scope
 from mmdet3d.registry import MODELS,DATASETS,DATA_SAMPLERS,METRICS,HOOKS
 
-
-
-from gausstr import *
-
-
-
-def collate_fn(batch):
-    inputs_list = []
-    data_samples_list = []
-    # 遍历 batch 中的每一个元素
-    for sample in batch:
-        inputs_list.append(sample['inputs'])
-        data_samples_list.append(sample['data_samples'])
-
-    inputs = {}
-    for key in inputs_list[0].keys():  # 假设每个 sample 的 inputs 字典结构相同
-        values = [input_dict[key] for input_dict in inputs_list]
-        if isinstance(values[0], torch.Tensor):
-            inputs['imgs'] = torch.stack(values)
-        else:
-            inputs['imgs'] = torch.from_numpy(np.stack(values))
-
-    return inputs, data_samples_list
+from gausstr.datasets import collate_fn
 
 def main(args):
     cfg = Config.fromfile(args.py_config)
-    # todo  init_default_scope: 初始化默认的作用域
+    # init_default_scope: 初始化默认的注册域
     init_default_scope(cfg.get('default_scope', 'mmdet3d'))
 
     model = MODELS.build(cfg.model)
@@ -66,7 +45,8 @@ def main(args):
         ckpt = torch.load(args.checkpoint,map_location='cpu')
         model.load_state_dict(ckpt['state_dict'],strict=True)
         print(f"Loaded pretrained weights: {args.checkpoint}")
-    # 获取设备（GPU 或 CPU）
+
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -96,6 +76,7 @@ def main(args):
                                             outputs = outputs,
                                             )
         results=test_evaluator.compute_metrics(results)
+
     return
 
 

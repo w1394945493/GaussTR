@@ -134,8 +134,11 @@ class GaussTR(BaseModel):
     def forward(self, inputs, data_samples, mode='loss'):
         inputs, data_samples = self.prepare_inputs(inputs, data_samples)
         bs, n = inputs.shape[:2]
+
+        # todo ---------------------------------#
+        # todo 使用预训练的VFM进行多视图特征提取
         if hasattr(self, 'backbone'):
-            inputs = inputs.flatten(0, 1)
+            inputs = inputs.flatten(0, 1) # (b,v,3,h,w) -> ((b v) 3 h w)
             if self.frozen_backbone:
                 if self.backbone.training:
                     self.backbone.eval()
@@ -149,7 +152,7 @@ class GaussTR(BaseModel):
                             inputs)['x_norm_patchtokens']
                         x = x.mT.reshape(bs * n, -1,
                                          inputs.shape[-2] // self.patch_size,
-                                         inputs.shape[-1] // self.patch_size)
+                                         inputs.shape[-1] // self.patch_size) # 转置 -> 重新整合为特征图
             else:
                 x = self.backbone(inputs)[0]
         else:

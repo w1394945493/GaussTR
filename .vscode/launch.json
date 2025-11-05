@@ -34,7 +34,7 @@
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py",
                 "--checkpoint",
                 "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
-                "--vis_result",
+                // "--vis_result",
             ],
             "console": "integratedTerminal",
             // "justMyCode": false,

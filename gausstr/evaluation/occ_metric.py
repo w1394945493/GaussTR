@@ -58,7 +58,7 @@ class OccMetric(BaseMetric):
 
         preds = preds.flatten().cpu().numpy()
         labels = labels.flatten().cpu().numpy()
-        hist_ = fast_hist(preds, labels, self.num_classes)
+        hist_ = fast_hist(preds, labels, self.num_classes) # 计算混淆矩阵
         self.hist += hist_
 
     def compute_metrics(self, results):

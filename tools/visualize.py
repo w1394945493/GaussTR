@@ -1,11 +1,15 @@
 import argparse
 import os
+# os.environ['ETS_TOOLKIT'] = 'null'
+# os.environ['QT_QPA_PLATFORM'] = 'offscreen'  # 强制 Qt 使用 offscreen 渲染
+
 import pickle
 from glob import glob
 
 import numpy as np
 from mayavi import mlab
-from rich.progress import track
+# from rich.progress import track
+from tqdm import tqdm
 
 COLORS = np.array([
     [0, 0, 0, 255],
@@ -56,15 +60,31 @@ def plot(
          voxels.flatten()]).T
     for lbl in ignore_labels:
         voxels = voxels[voxels[:, 3] != lbl]
+    # 禁用后端显示
+    mlab.options.off_screen = True  # 这行是禁用GUI后端的关键
 
     mlab.figure(bgcolor=bg_color)
+
+
+    # plt_plot = mlab.points3d(
+    #     *voxels.T,
+    #     scale_factor=voxel_size,
+    #     mode='cube',
+    #     opacity=1.0,
+    #     vmin=0,
+    #     vmax=16)
+    x, y, z = voxels[:, 0], voxels[:, 1], voxels[:, 2]
+    scalars = voxels[:, 3]
+
     plt_plot = mlab.points3d(
-        *voxels.T,
+        x, y, z,
+        # scalars,
         scale_factor=voxel_size,
         mode='cube',
         opacity=1.0,
         vmin=0,
-        vmax=16)
+        vmax=16,
+    )
     plt_plot.glyph.scale_mode = 'scale_by_vector'
     plt_plot.module_manager.scalar_lut_manager.lut.table = colors
 
@@ -72,15 +92,18 @@ def plot(
     if save:
         mlab.savefig(save, size=(1200, 1200))
         mlab.close()
-    else:
-        mlab.show()
+
 
 
 def main():
     args = parse_args()
-    files = glob(args.path)
+    files = glob(f'{args.path}*.pkl')
+    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test/visualizations'
+    os.makedirs(save_dir,exist_ok=True)
 
-    for file in track(files):
+
+    # for file in track(files):
+    for file in tqdm(files):
         with open(file, 'rb') as f:
             outputs = pickle.load(f)
 
@@ -89,7 +112,8 @@ def main():
             plot(
                 occ,
                 colors=COLORS,
-                save=f"visualizations/{file_name}_{'gt' if i else 'pred'}.png"
+                # save=f"visualizations/{file_name}_{'gt' if i else 'pred'}.png"
+                save=f"{save_dir}/{file_name}_{'gt' if i else 'pred'}.png"
                 if args.save else None)
 
 

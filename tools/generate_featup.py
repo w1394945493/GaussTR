@@ -10,15 +10,21 @@ from featup.util import norm
 from PIL import Image
 from tqdm import tqdm
 
-image_dir = 'data/nuscenes/samples/'
-save_dir = 'data/nuscenes_featup/'
+# image_dir = 'data/nuscenes/samples/'
+# save_dir = 'data/nuscenes_featup/'
 
+image_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini/samples'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_featup/'
 
 def main():
     device = torch.device('cuda')
     upsampler = torch.hub.load(
         'mhamilton723/FeatUp', 'maskclip', use_norm=False).to(device)
     upsampler.eval()
+
+    from featup.featurizers import maskclip
+    upsampler = maskclip.load()
+
     transform = T.Compose([T.Resize((432, 768)), T.ToTensor(), norm])
 
     for view_dir in os.listdir(image_dir):

@@ -1,5 +1,11 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test' # todo
+
+custom_hooks = [
+    dict(type='DumpResultHook'),
+]  # todo "DumpResultHook": 自定义的
+
 custom_imports = dict(imports=['gausstr'])
 
 input_size = (504, 896)
@@ -17,7 +23,7 @@ model = dict(
         std=[58.395, 57.12, 57.375]),
     backbone=dict(
         type='TorchHubModel',
-        repo_or_dir='facebookresearch/dinov2',
+        repo_or_dir='facebookresearch/dinov2', # todo
         model_name='dinov2_vitb14_reg'),
     neck=dict(
         type='ViTDetFPN',
@@ -47,7 +53,8 @@ model = dict(
             mode='sigmoid',
             range=(1, 16)),
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
-        text_protos='ckpts/text_proto_embeds_talk2dino.pth', 
+        # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
+        text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth',
         reduce_dims=reduce_dims,
         image_shape=input_size,
         patch_size=patch_size,
@@ -61,7 +68,8 @@ model = dict(
 
 # Data
 dataset_type = 'NuScenesOccDataset'
-data_root = 'data/nuscenes/'
+# data_root = 'data/nuscenes/'
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini' # todo
 data_prefix = dict(
     CAM_FRONT='samples/CAM_FRONT',
     CAM_FRONT_LEFT='samples/CAM_FRONT_LEFT',
@@ -84,7 +92,8 @@ train_pipeline = [
         is_train=True),
     dict(
         type='LoadFeatMaps',
-        data_root='data/nuscenes_metric3d',
+        # data_root='data/nuscenes_metric3d', # todo
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d',
         key='depth',
         apply_aug=True),
     dict(
@@ -105,7 +114,8 @@ test_pipeline = [
     dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
     dict(
         type='LoadFeatMaps',
-        data_root='data/nuscenes_metric3d',
+        # data_root='data/nuscenes_metric3d', # todo
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d',
         key='depth',
         apply_aug=True),
     dict(
@@ -131,7 +141,8 @@ train_dataloader = dict(
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
-        ann_file='nuscenes_infos_train.pkl',
+        # ann_file='nuscenes_infos_train.pkl',
+        ann_file='nuscenes_mini_infos_train.pkl',
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(
@@ -142,7 +153,8 @@ val_dataloader = dict(
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
-        ann_file='nuscenes_infos_val.pkl',
+        # ann_file='nuscenes_infos_val.pkl',
+        ann_file='nuscenes_mini_infos_val.pkl',
         pipeline=test_pipeline,
         **shared_dataset_cfg))
 test_dataloader = val_dataloader

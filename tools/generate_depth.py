@@ -1,3 +1,8 @@
+# 设置进程名
+from setproctitle import setproctitle
+setproctitle("wys")
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 import os.path as osp
 import numpy as np
 import torch
@@ -10,6 +15,10 @@ except:
     from torchvision import transforms as T
 from torch.utils.data import DataLoader
 from rich.progress import track
+
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gausstr import *
 
@@ -49,15 +58,21 @@ def test_loop(model, dataset_cfg, dataloader_cfg, save_dir):
 
 
 if __name__ == '__main__':
+    # ann_files = [
+    #     'nuscenes_infos_train.pkl', 'nuscenes_infos_val.pkl',
+    #     # 'nuscenes_infos_mini_train.pkl', 'nuscenes_infos_mini_val.pkl'
+    # ]
+    # todo -----------------#
     ann_files = [
-        'nuscenes_infos_train.pkl', 'nuscenes_infos_val.pkl',
-        # 'nuscenes_infos_mini_train.pkl', 'nuscenes_infos_mini_val.pkl'
+        'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl'
     ]
-    cfg = Config.fromfile('configs/gausstr_featup.py')
+    # cfg = Config.fromfile('configs/gausstr_featup.py')
+    cfg = Config.fromfile('configs/customs/gausstr_featup.py')
     model = MODELS.build(
         dict(type='Metric3D', model_name='metric3d_vit_large')).cuda()
-    save_dir = 'data/nuscenes_metric3d'
-
+    # save_dir = 'data/nuscenes_metric3d'
+    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d'
+    os.makedirs(save_dir,exist_ok=True)
     dataloader_cfg = cfg.test_dataloader
     dataloader_cfg.pop('sampler')
     dataset_cfg = dataloader_cfg.pop('dataset')

@@ -6,12 +6,13 @@ import mmengine
 from nuscenes import NuScenes
 
 
-def update_nuscenes_infos(pkl_path, out_dir):
+def update_nuscenes_infos(root_path, pkl_path, out_dir):
     print(f'{pkl_path} will be modified.')
     data = mmengine.load(pkl_path)
     nusc = NuScenes(
         version=data['metainfo']['version'],
-        dataroot='data/nuscenes',
+        # dataroot='data/nuscenes',
+        dataroot=root_path,
         verbose=True)
 
     print('Start updating:')
@@ -49,10 +50,19 @@ def nuscenes_data_prep(root_path,
     """
     info_train_path = osp.join(out_dir, f'{info_prefix}_infos_train.pkl')
     info_val_path = osp.join(out_dir, f'{info_prefix}_infos_val.pkl')
-    update_nuscenes_infos(out_dir=out_dir, pkl_path=info_train_path)
-    update_nuscenes_infos(out_dir=out_dir, pkl_path=info_val_path)
+    update_nuscenes_infos(
+        root_path,
+        out_dir=out_dir,
+        pkl_path=info_train_path)
+    update_nuscenes_infos(
+        root_path,
+        out_dir=out_dir,
+        pkl_path=info_val_path)
 
 
+
+
+# todo -----------------------------#
 parser = argparse.ArgumentParser(description='Data converter arg parser')
 parser.add_argument('dataset', metavar='kitti', help='name of the dataset')
 parser.add_argument(
@@ -104,6 +114,7 @@ if __name__ == '__main__':
             dataset_name='NuScenesDataset',
             out_dir=args.out_dir,
             max_sweeps=args.max_sweeps)
+    # todo -----------------------------#
     elif args.dataset == 'nuscenes' and args.version == 'v1.0-mini':
         train_version = f'{args.version}'
         nuscenes_data_prep(

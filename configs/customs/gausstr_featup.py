@@ -2,11 +2,11 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 custom_imports = dict(imports=['gausstr'])
 
-input_size = (504, 896)
+input_size = (432, 768)
 embed_dims = 256
-feat_dims = 768
+feat_dims = 512
 reduce_dims = 128
-patch_size = 14
+patch_size = 16
 
 model = dict(
     type='GaussTR',
@@ -15,10 +15,6 @@ model = dict(
         type='Det3DDataPreprocessor',
         mean=[123.675, 116.28, 103.53],
         std=[58.395, 57.12, 57.375]),
-    backbone=dict(
-        type='TorchHubModel',
-        repo_or_dir='facebookresearch/dinov2',
-        model_name='dinov2_vitb14_reg'),
     neck=dict(
         type='ViTDetFPN',
         in_channels=feat_dims,
@@ -47,23 +43,23 @@ model = dict(
             mode='sigmoid',
             range=(1, 16)),
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
-        text_protos='ckpts/text_proto_embeds_talk2dino.pth', 
+        # text_protos='ckpts/text_proto_embeds_clip.pth', # todo clip嵌入
+        text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_clip.pth',
         reduce_dims=reduce_dims,
+        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=26),
         image_shape=input_size,
         patch_size=patch_size,
         voxelizer=dict(
             type='GaussianVoxelizer',
             vol_range=[-40, -40, -1, 40, 40, 5.4],
-            voxel_size=0.4,
-            filter_gaussians=True,
-            opacity_thresh=0.6,
-            covariance_thresh=1.5e-2)))
+            voxel_size=0.4)))
 
 # Data
 dataset_type = 'NuScenesOccDataset'
-data_root = 'data/nuscenes/'
+# data_root = 'data/nuscenes/' # todo 根目录
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini'
 data_prefix = dict(
-    CAM_FRONT='samples/CAM_FRONT',
+    CAM_FRONT='samples/CAM_FRONT', # todo 位于根目录下
     CAM_FRONT_LEFT='samples/CAM_FRONT_LEFT',
     CAM_FRONT_RIGHT='samples/CAM_FRONT_RIGHT',
     CAM_BACK='samples/CAM_BACK',
@@ -80,19 +76,24 @@ train_pipeline = [
     dict(
         type='ImageAug3D',
         final_dim=input_size,
-        resize_lim=[0.56, 0.56],
+        resize_lim=[0.48, 0.48],
         is_train=True),
+    dict(type='LoadFeatMaps',
+         data_root='data/nuscenes_metric3d', # todo 相对路径
+         key='depth',
+         apply_aug=True),
+    dict(type='LoadFeatMaps', data_root='data/nuscenes_featup', key='feats'), # todo 相对路径
     dict(
         type='LoadFeatMaps',
-        data_root='data/nuscenes_metric3d',
-        key='depth',
+        data_root='data/nuscenes_grounded_sam2', # todo 相对路径
+        key='sem_seg',
         apply_aug=True),
     dict(
         type='Pack3DDetInputs',
         keys=['img'],
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
-            'num_views', 'img_path', 'depth', 'feats'
+            'num_views', 'img_path', 'depth', 'feats', 'sem_seg'
         ])
 ]
 test_pipeline = [
@@ -102,12 +103,13 @@ test_pipeline = [
         color_type='color',
         num_views=6),
     dict(type='LoadOccFromFile'),
-    dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
+    dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.48, 0.48]),
     dict(
         type='LoadFeatMaps',
         data_root='data/nuscenes_metric3d',
         key='depth',
         apply_aug=True),
+    dict(type='LoadFeatMaps', data_root='data/nuscenes_featup', key='feats'),
     dict(
         type='Pack3DDetInputs',
         keys=['img', 'gt_semantic_seg'],
@@ -129,20 +131,24 @@ train_dataloader = dict(
     num_workers=4,
     persistent_workers=True,
     pin_memory=True,
+
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
-        ann_file='nuscenes_infos_train.pkl',
+        # ann_file='nuscenes_infos_train.pkl',
+        ann_file='nuscenes_mini_infos_train.pkl',
         pipeline=train_pipeline,
         **shared_dataset_cfg))
+
 val_dataloader = dict(
-    batch_size=4,
+    batch_size=1,
     num_workers=4,
     persistent_workers=True,
     pin_memory=True,
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
-        ann_file='nuscenes_infos_val.pkl',
+        # ann_file='nuscenes_infos_val.pkl', # todo pkl文件
+        ann_file='nuscenes_mini_infos_val.pkl',
         pipeline=test_pipeline,
         **shared_dataset_cfg))
 test_dataloader = val_dataloader

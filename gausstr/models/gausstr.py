@@ -8,6 +8,9 @@ from mmdet3d.registry import MODELS
 
 from .utils import flatten_multi_scale_feats
 
+from colorama import Fore
+def cyan(text: str) -> str:
+    return f"{Fore.CYAN}{text}{Fore.RESET}"
 
 @MODELS.register_module()
 class GaussTR(BaseModel):
@@ -25,9 +28,28 @@ class GaussTR(BaseModel):
                  **kwargs):
         super().__init__(**kwargs)
         if backbone is not None:
+            # todo ------------------#
             if backbone.type == 'TorchHubModel':
-                self.backbone = torch.hub.load(backbone.repo_or_dir,
-                                               backbone.model_name)
+
+
+                # self.backbone = torch.hub.load(backbone.repo_or_dir, # todo 'facebookresearch/dinov2'
+                #                             backbone.model_name)  # todo dinov2_vitb14_reg
+
+                from dinov2.models.vision_transformer import vit_base
+                self.backbone = vit_base(
+                    img_size = 518,
+                    patch_size = 14,
+                    init_values = 1.0,
+                    ffn_layer = "mlp",
+                    block_chunks = 0,
+                    num_register_tokens=4,
+                    interpolate_antialias = False,
+                    interpolate_offset = 0.1,
+                    )
+                model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
+                state_dict = torch.load(model_url, map_location="cpu")
+                self.backbone.load_state_dict(state_dict, strict=True)
+                print(cyan(f"load checkpoint from{model_url}."))
                 self.backbone.requires_grad_(False)
                 self.backbone.is_init = True  # otherwise it will be re-inited by mmengine
                 self.patch_size = self.backbone.patch_size

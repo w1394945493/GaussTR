@@ -112,7 +112,7 @@ class GaussTRHead(BaseModule):
                                  torch.load(text_protos, map_location='cpu'))
 
         self.voxelizer = MODELS.build(voxelizer)
-        self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg'))
+        self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
 
     def forward(self,
                 x,

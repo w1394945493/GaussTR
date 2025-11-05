@@ -11,8 +11,11 @@ from mmdet3d.registry import HOOKS
 @HOOKS.register_module()
 class DumpResultHook(Hook):
 
-    def __init__(self, interval=1):
+    def __init__(self, interval=1,save_dir='output/vis'):
         self.interval = interval
+        os.makedirs(save_dir,exist_ok=True)
+        self.save_dir = save_dir
+
 
     def after_test_iter(self,
                         runner,
@@ -29,8 +32,6 @@ class DumpResultHook(Hook):
                 mask_camera=data_sample.mask_camera,
                 img_path=data_sample.img_path)
             # todo ------------------------#
-            save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test/outputs'
-            os.makedirs(save_dir,exist_ok=True)
-
-            with open(f'{save_dir}/{data_sample.sample_idx}.pkl', 'wb') as f:
+            # save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test/outputs'
+            with open(f'{self.save_dir}/{data_sample.sample_idx}.pkl', 'wb') as f:
                 pickle.dump(output, f)

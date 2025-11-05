@@ -16,6 +16,8 @@ python tools/generate_depth.py
 # todo 使用talk2dino model：
 PYTHONPATH=. mim test mmdet3d [CONFIG] -C [CKPT_PATH] [-l pytorch -G [GPU_NUM]]
 
+# todo PYTHONPATH=.:设置了环境变量,在当前目录下寻找模块和包,确保自定义模块可以被正确导入
+export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim test mmdet3d configs/customs/gausstr_talk2dino.py \
     -C /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
     -l pytorch -G 1

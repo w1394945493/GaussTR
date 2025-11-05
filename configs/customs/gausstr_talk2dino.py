@@ -1,10 +1,14 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test' # todo
+import os
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
 
 custom_hooks = [
-    dict(type='DumpResultHook'),
-]  # todo "DumpResultHook": 自定义的
+    dict(type='DumpResultHook',
+         interval=1,
+         save_dir = os.path.join(work_dir,'vis')
+         ),
+]  #
 
 custom_imports = dict(imports=['gausstr'])
 
@@ -18,7 +22,7 @@ model = dict(
     type='GaussTR',
     num_queries=300,
     data_preprocessor=dict(
-        type='Det3DDataPreprocessor',
+        type='Det3DDataPreprocessor', #? Det3DDataPreprocesser
         mean=[123.675, 116.28, 103.53],
         std=[58.395, 57.12, 57.375]),
     backbone=dict(
@@ -29,7 +33,7 @@ model = dict(
         type='ViTDetFPN',
         in_channels=feat_dims,
         out_channels=embed_dims,
-        norm_cfg=dict(type='LN2d')),
+        norm_cfg=dict(type='LN2d')), #? LN2d
     decoder=dict(
         type='GaussTRDecoder',
         num_layers=3,
@@ -155,7 +159,7 @@ val_dataloader = dict(
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
         ann_file='nuscenes_mini_infos_val.pkl',
-        pipeline=test_pipeline,
+        pipeline=test_pipeline, # todo 定义数据集时已做
         **shared_dataset_cfg))
 test_dataloader = val_dataloader
 

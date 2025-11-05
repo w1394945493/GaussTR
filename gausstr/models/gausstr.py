@@ -5,12 +5,16 @@ import torch
 import torch.nn as nn
 from mmengine.model import BaseModel, BaseModule, ModuleList
 from mmdet3d.registry import MODELS
-
 from .utils import flatten_multi_scale_feats
 
 from colorama import Fore
 def cyan(text: str) -> str:
     return f"{Fore.CYAN}{text}{Fore.RESET}"
+
+
+# from mmdet3d.models.data_preprocessors import Det3DDataPreprocessor
+# from mmengine.registry import MODELS as MMENGIN_MODELS
+# MMENGIN_MODELS.register_module('Det3DDataPreprocessor',module=Det3DDataPreprocessor)
 
 @MODELS.register_module()
 class GaussTR(BaseModel):
@@ -30,8 +34,6 @@ class GaussTR(BaseModel):
         if backbone is not None:
             # todo ------------------#
             if backbone.type == 'TorchHubModel':
-
-
                 # self.backbone = torch.hub.load(backbone.repo_or_dir, # todo 'facebookresearch/dinov2'
                 #                             backbone.model_name)  # todo dinov2_vitb14_reg
 
@@ -104,7 +106,7 @@ class GaussTR(BaseModel):
                     {'img_aug_mat': data_samples[i].img_aug_mat[:num_views]})
                 img_aug_mat.append(data_samples[i].img_aug_mat)
             depth.append(data_samples[i].depth)
-            if hasattr(data_samples[i], 'feats'):
+            if hasattr(data_samples[i], 'feats'): # FeatUp有"feats"和"sem_seg"内容
                 feats.append(data_samples[i].feats)
             if hasattr(data_samples[i], 'sem_seg'):
                 sem_segs.append(data_samples[i].sem_seg)

@@ -167,20 +167,20 @@ class GaussTR(BaseModel):
             x = x.reshape(bs, n, *x.shape[1:])
             x = x[:, :data_samples['num_views']].flatten(0, 1)
 
-        feats = self.neck(x)
+        feats = self.neck(x) # list
 
         if hasattr(self, 'encoder'):
             encoder_inputs, decoder_inputs = self.pre_transformer(feats)
             feats = self.forward_encoder(**encoder_inputs)
         else:
-            decoder_inputs = self.pre_transformer(feats)
+            decoder_inputs = self.pre_transformer(feats) # todo 处理多尺度特征，整理为Transformer编解码器所需格式
             feats = flatten_multi_scale_feats(feats)[0]
         decoder_inputs.update(self.pre_decoder(feats))
         decoder_outputs = self.forward_decoder(
             reg_branches=[h.regress_head for h in self.gauss_heads],
             **decoder_inputs)
 
-        query = decoder_outputs['hidden_states']
+        query = decoder_outputs['hidden_states'] # todo 各解码层的query和参考点坐标
         reference_points = decoder_outputs['references']
 
         if mode == 'predict':
@@ -284,9 +284,9 @@ class GaussTR(BaseModel):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
 
         encoder_inputs_dict = dict(
-            feat=feat_flatten,
+            feat=feat_flatten, # todo 展平后的特征
             feat_mask=mask_flatten,
-            feat_pos=lvl_pos_embed_flatten,
+            feat_pos=lvl_pos_embed_flatten, # todo 经位置编码后的特征
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             valid_ratios=valid_ratios)

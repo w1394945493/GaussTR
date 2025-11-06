@@ -37,7 +37,21 @@
                 // "--vis_result",
             ],
             "console": "integratedTerminal",
-            // "justMyCode": false,
+            "justMyCode": false,
+        },
+        {
+            "name": "test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/test.py",
+            "args": [
+                "configs/customs/gausstr_talk2dino.py",
+                "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
+                "--launcher",
+                "pytorch",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
         },
     ]
 }

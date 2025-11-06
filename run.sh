@@ -22,6 +22,13 @@ PYTHONPATH=. mim test mmdet3d configs/customs/gausstr_talk2dino.py \
     -C /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
     -l pytorch -G 1
 
+# todo 参考 mim/tools/test.py
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    configs/customs/gausstr_talk2dino.py \
+    /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
+    --launcher pytorch \
+
+
 # todo 可视化
 python tools/visualize.py [PKL_PATH] [--save]
 
@@ -32,7 +39,7 @@ python tools/visualize.py \
 # todo demo 推理 与 终端 PYTHONPATH=. mim test mmdet3d 命令运行结果不一致, 待寻找原因
 python /home/lianghao/wangyushen/Projects/GaussTR/demo.py \
     --py-config \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py \
+    customs/gausstr_talk2dino.py \
     --checkpoint \
     /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
     --vis_result \

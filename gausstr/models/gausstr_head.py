@@ -109,7 +109,7 @@ class GaussTRHead(BaseModule):
                 self.projection.requires_grad_(False)
         if text_protos is not None:
             self.register_buffer('text_proto_embeds',
-                                 torch.load(text_protos, map_location='cpu'))
+                                 torch.load(text_protos, map_location='cpu')) # todo CLIP类别嵌入 (h_dim,n_class)
 
         self.voxelizer = MODELS.build(voxelizer)
         self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
@@ -126,48 +126,48 @@ class GaussTRHead(BaseModule):
                 sem_segs=None,
                 **kwargs):
         bs, n = cam2img.shape[:2]
-        x = x.reshape(bs, n, *x.shape[1:])
+        x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
 
-        deltas = self.regress_head(x)
+        deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整
         ref_pts = (
             deltas[..., :2] +
-            inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid()
+            inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # 参考点位置更新，参考点与x，y偏移量相加，得到新的参考点
         depth = depth.clamp(max=self.depth_limit)
         sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None],
-                                           ref_pts.unsqueeze(2) * 2 - 1)
+                                           ref_pts.unsqueeze(2) * 2 - 1) # 根据参考点对深度图进行采样，得到每个参考点的信息
         sample_depth = sample_depth[:, :, 0, 0, :, None]
         points = torch.cat([
             ref_pts * torch.tensor(self.image_shape[::-1]).to(x),
             sample_depth * (1 + deltas[..., 2:3])
-        ], -1)
-        means3d = cam2world(points, cam2img, cam2ego, img_aug_mat)
-
-        opacities = self.opacity_head(x).float()
-        features = self.feature_head(x).float()
+        ], -1) # 计算3D点 (b,v,300,3)
+        means3d = cam2world(points, cam2img, cam2ego, img_aug_mat) # 将2D图像坐标转换为3D世界坐标
+        # 从高斯查询中，预测高斯属性：透明度、特征向量(代替SH)、缩放因子、旋转四元数
+        opacities = self.opacity_head(x).float() # 不透明度、特征和尺度计算
+        features = self.feature_head(x).float() # (b,v,300,768)
         scales = self.scale_head(x) * self.scale_transform(
             sample_depth, cam2img[..., 0, 0]).clamp(1e-6)
 
         covariances = flatten_bsn_forward(get_covariance, scales,
                                           cam2ego[..., None, :3, :3])
         rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])
-        rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1)
+        rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
         if mode == 'predict':
-            features = features @ self.text_proto_embeds
+            features = features @ self.text_proto_embeds # 查询特征与文本嵌入结合，帮助模型理解类别信息 (b,v,300,768) @ (768 21)
             density, grid_feats = self.voxelizer(
                 means3d=means3d.flatten(1, 2),
                 opacities=opacities.flatten(1, 2),
                 features=features.flatten(1, 2).softmax(-1),
-                covariances=covariances.flatten(1, 2))
+                covariances=covariances.flatten(1, 2)) # 体素化：计算每个体素的密度和网格特征
             if self.prompt_denoising:
                 probs = prompt_denoising(grid_feats)
             else:
                 probs = grid_feats.softmax(-1)
 
-            probs = merge_probs(probs, OCC3D_CATEGORIES)
-            preds = probs.argmax(-1)
+            probs = merge_probs(probs, OCC3D_CATEGORIES) # (bs,h,w,16,16)
+            preds = probs.argmax(-1) # (bs,h,w,16)
             preds += (preds > 10) * 1 + 1  # skip two classes of "others"
-            preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17)
+            preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17
             return preds
 
         tgt_feats = feats.flatten(-2).mT

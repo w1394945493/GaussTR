@@ -159,7 +159,7 @@ val_dataloader = dict(
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
         ann_file='nuscenes_mini_infos_val.pkl',
-        pipeline=test_pipeline, # todo 定义数据集时已做
+        pipeline=test_pipeline, # todo 定义数据集
         **shared_dataset_cfg))
 test_dataloader = val_dataloader
 

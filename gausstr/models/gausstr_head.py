@@ -117,13 +117,13 @@ class GaussTRHead(BaseModule):
     def forward(self,
                 x,
                 ref_pts,
-                depth,
+                depth, # todo x, ref_pts, depth: 网络输出结果
                 cam2img,
                 cam2ego,
-                mode='tensor',
                 feats=None,
                 img_aug_mat=None,
-                sem_segs=None,
+                sem_segs=None, # todo cam2img, cam2ego, feats, img_aug_mat, sem_segs: 标注和真值
+                mode='tensor',
                 **kwargs):
         bs, n = cam2img.shape[:2]
         x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
@@ -153,6 +153,8 @@ class GaussTRHead(BaseModule):
         rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
         if mode == 'predict':
+            # todo -----------------------------------#
+            # todo 占据预测 3.3 开放词汇占据预测
             features = features @ self.text_proto_embeds # 查询特征与文本嵌入结合，帮助模型理解类别信息 (b,v,300,768) @ (768 21)
             density, grid_feats = self.voxelizer(
                 means3d=means3d.flatten(1, 2),
@@ -170,19 +172,20 @@ class GaussTRHead(BaseModule):
             preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17
             return preds
 
-        tgt_feats = feats.flatten(-2).mT
+        # todo feats: 视觉基础模型提取的特征图
+        tgt_feats = feats.flatten(-2).mT # todo .mT: 对矩阵转置，即交换最后两个维度
         if hasattr(self, 'projection'):
             tgt_feats = self.projection(tgt_feats)[0]
-
+        # 执行PCA(主成分分析)降维操作，对输入张量进行低秩近似，减少特征维度
         u, s, v = torch.pca_lowrank(
-            tgt_feats.flatten(0, 2).double(), q=self.reduce_dims, niter=4)
+            tgt_feats.flatten(0, 2).double(), q=self.reduce_dims, niter=4) # (b,v,(h w),c) -> v: (c,q) q：降维后的维度
         tgt_feats = tgt_feats @ v.to(tgt_feats)
         features = features @ v.to(features)
         features = features.float()
-
+        # gsplat 进行渲染
         rendered = rasterize_gaussians(
-            means3d.flatten(1, 2),
-            features.flatten(1, 2),
+            means3d.flatten(1, 2), # (b,vx300,3)
+            features.flatten(1, 2), # (b,vx300,128)
             opacities.squeeze(-1).flatten(1, 2),
             scales.flatten(1, 2),
             rotations.flatten(1, 2),
@@ -193,14 +196,16 @@ class GaussTRHead(BaseModule):
             near_plane=0.1,
             far_plane=100,
             render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
-            channel_chunk=32).flatten(0, 1)
-        rendered_depth = rendered[:, -1]
-        rendered = rendered[:, :-1]
-
+            channel_chunk=32).flatten(0, 1) # ((b v) c h w)
+        rendered_depth = rendered[:, -1] # todo ((b v) h w) 深度图
+        rendered = rendered[:, :-1] #  ((b v) c h w) -> ((b v) c-1 h w)
+        # todo ------------------------------#
+        # todo 损失计算 3.2 VFM对齐的自监督学习
         losses = {}
         depth = torch.where(depth < self.depth_limit, depth,
-                            1e-3).flatten(0, 1)
-        losses['loss_depth'] = self.depth_loss(rendered_depth, depth)
+                            1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
+        # todo 深度预测监督：结合尺度不变对数和L1损失
+        losses['loss_depth'] = self.depth_loss(rendered_depth, depth) # todo 深度图计算损失
         losses['mae_depth'] = self.depth_loss(
             rendered_depth, depth, criterion='l1')
 
@@ -213,11 +218,13 @@ class GaussTRHead(BaseModule):
             tgt_feats, scale_factor=self.patch_size, mode='bilinear')
         rendered = rendered.flatten(2).mT
         tgt_feats = tgt_feats.flatten(2).mT.flatten(0, 1)
+        # todo 通过高斯点积进行渲染监督：
         losses['loss_cosine'] = F.cosine_embedding_loss(
             rendered.flatten(0, 1), tgt_feats, torch.ones_like(
                 tgt_feats[:, 0])) * 5
 
-        if self.segment_head:
+        # --------------------#
+        if self.segment_head: # (optional) 分割损失
             losses['loss_ce'] = F.cross_entropy(
                 self.segment_head(rendered).mT,
                 sem_segs.flatten(0, 1).flatten(1).long(),

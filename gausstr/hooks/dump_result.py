@@ -26,9 +26,9 @@ class DumpResultHook(Hook):
         for i in range(outputs.size(0)):
             data_sample = data_batch['data_samples'][i]
             output = dict(
-                occ_pred=outputs[i].cpu().numpy(),
+                occ_pred=outputs[i].cpu().numpy(),  # (200,200,16)
                 occ_gt=(data_sample.gt_pts_seg.semantic_seg.squeeze().cpu().
-                        numpy()),
+                        numpy()), # (200,200,16)
                 mask_camera=data_sample.mask_camera,
                 img_path=data_sample.img_path)
             # todo ------------------------#

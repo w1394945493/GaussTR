@@ -68,9 +68,9 @@ class BEVLoadMultiViewImageFromFiles(LoadMultiViewImageFromFiles):
             cam2ego.append(cam2ego_array)
 
         results['img_path'] = filename
-        results['cam2img'] = np.stack(cam2img, axis=0)
-        results['lidar2cam'] = np.stack(lidar2cam, axis=0)
-        results['cam2ego'] = np.stack(cam2ego, axis=0)
+        results['cam2img'] = np.stack(cam2img, axis=0)  # (v,4,4)
+        results['lidar2cam'] = np.stack(lidar2cam, axis=0) # (v,4,4)
+        results['cam2ego'] = np.stack(cam2ego, axis=0) # (v,4,4)
 
         results['ori_cam2img'] = copy.deepcopy(results['cam2img'])
 
@@ -106,7 +106,7 @@ class BEVLoadMultiViewImageFromFiles(LoadMultiViewImageFromFiles):
         results['filename'] = filename
         # unravel to list, see `DefaultFormatBundle` in formating.py
         # which will transpose each image separately and then stack into array
-        results['img'] = [img[..., i] for i in range(img.shape[-1])]
+        results['img'] = [img[..., i] for i in range(img.shape[-1])] # (H,W,3)
         results['img_shape'] = img.shape[:2]
         results['ori_shape'] = img.shape[:2]
         # Set initial values for default meta_keys

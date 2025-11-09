@@ -51,7 +51,7 @@ def main():
     # build the runner from config
     if 'runner_type' not in cfg:
         # build the default runner
-        runner = Runner.from_cfg(cfg) # 加载配置项，调用构造函数
+        runner = Runner.from_cfg(cfg) # 加载配置项，调用构造函数,定义model
     else:
         # build customized runner from the registry
         # if 'runner_type' is set in the cfg

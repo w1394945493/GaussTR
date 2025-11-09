@@ -105,7 +105,10 @@ class GaussTR(BaseModel):
                 data_samples[i].set_metainfo(
                     {'img_aug_mat': data_samples[i].img_aug_mat[:num_views]})
                 img_aug_mat.append(data_samples[i].img_aug_mat)
+            # todo depth
             depth.append(data_samples[i].depth)
+
+
             if hasattr(data_samples[i], 'feats'): # FeatUp有"feats"和"sem_seg"内容
                 feats.append(data_samples[i].feats)
             if hasattr(data_samples[i], 'sem_seg'):
@@ -162,12 +165,12 @@ class GaussTR(BaseModel):
             x = self.projection(x.permute(0, 2, 3, 1))[0]
             x = x.permute(0, 3, 1, 2)
         if hasattr(self, 'backbone') or hasattr(self, 'projection'):
-            data_samples['feats'] = x.reshape(bs, n, *x.shape[1:])
+            data_samples['feats'] = x.reshape(bs, n, *x.shape[1:]) # ((b v) c h w) -> (b v c h w)
         if n > data_samples['num_views']:
             x = x.reshape(bs, n, *x.shape[1:])
             x = x[:, :data_samples['num_views']].flatten(0, 1)
 
-        feats = self.neck(x) # list
+        feats = self.neck(x) # list # todo x: DINO vit提取的特征(无梯度)
 
         if hasattr(self, 'encoder'):
             encoder_inputs, decoder_inputs = self.pre_transformer(feats)
@@ -188,7 +191,7 @@ class GaussTR(BaseModel):
                 query[-1], reference_points[-1], mode=mode, **data_samples)
 
         losses = {}
-        for i, gauss_head in enumerate(self.gauss_heads):
+        for i, gauss_head in enumerate(self.gauss_heads): # 多层
             loss = gauss_head(
                 query[i], reference_points[i], mode=mode, **data_samples)
             for k, v in loss.items():

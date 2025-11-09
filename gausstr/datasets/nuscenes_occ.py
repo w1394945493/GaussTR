@@ -36,7 +36,7 @@ class NuScenesOccDataset(NuScenesDataset):
         self.load_adj_frame = load_adj_frame
         self.interval = interval
 
-    def get_data_info(self, index):
+    def get_data_info(self, index): # todo 重写 BaseDataset中的 get_data_info 方法
         """Get data info according to the given index.
 
         Args:
@@ -55,7 +55,7 @@ class NuScenesOccDataset(NuScenesDataset):
                     from lidar to different cameras.
                 - ann_info (dict): Annotation info.
         """
-        get_data_info = super(NuScenesOccDataset, self).get_data_info
+        get_data_info = super(NuScenesOccDataset, self).get_data_info # todo BaseDataset中的 get_data_info 方法
         input_dict = get_data_info(index)
 
         def get_curr_token(seq):
@@ -80,7 +80,7 @@ class NuScenesOccDataset(NuScenesDataset):
             seq.append(next)
             return next
 
-        if self.load_adj_frame:
+        if self.load_adj_frame: # todo false
             input_seq = deque([input_dict], maxlen=3)
             interval = random.randint(*self.interval) if isinstance(
                 self.interval, Iterable) else self.interval
@@ -93,6 +93,8 @@ class NuScenesOccDataset(NuScenesDataset):
             assert (len(input_seq) == 3 and input_seq[0]['scene_token'] ==
                     input_seq[1]['scene_token'] == input_seq[2]['scene_token'])
             input_dict = self.concat_adj_frames(*input_seq)
+        # todo ---------------------------#
+        # todo 增加了occ_gt的路径
         input_dict['occ_path'] = os.path.join(
             self.data_root,
             f"gts/{input_dict['scene_idx']}/{input_dict['token']}")

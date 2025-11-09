@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
 work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
-
+# from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 custom_hooks = [
     dict(type='DumpResultHook',
          interval=1,
@@ -22,7 +22,7 @@ model = dict(
     type='GaussTR',
     num_queries=300,
     data_preprocessor=dict(
-        type='Det3DDataPreprocessor', #? Det3DDataPreprocesser
+        type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
         mean=[123.675, 116.28, 103.53],
         std=[58.395, 57.12, 57.375]),
     backbone=dict(
@@ -71,9 +71,9 @@ model = dict(
             covariance_thresh=1.5e-2)))
 
 # Data
-dataset_type = 'NuScenesOccDataset'
+dataset_type = 'NuScenesOccDataset' # todo NuScenesOCCDataset
 # data_root = 'data/nuscenes/'
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini' # todo
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # todo
 data_prefix = dict(
     CAM_FRONT='samples/CAM_FRONT',
     CAM_FRONT_LEFT='samples/CAM_FRONT_LEFT',
@@ -85,28 +85,29 @@ input_modality = dict(use_camera=True, use_lidar=False)
 
 train_pipeline = [
     dict(
-        type='BEVLoadMultiViewImageFromFiles',
+        type='BEVLoadMultiViewImageFromFiles', # todo 读取多视角相机图像，相机参数矩阵 -> 组织数据格式 (自定义)
         to_float32=True,
         color_type='color',
         num_views=6),
     dict(
-        type='ImageAug3D',
+        type='ImageAug3D', # todo 对图像数据做仿射增强，同时处理相机参数矩阵，保持一致 (自定义)
         final_dim=input_size,
         resize_lim=[0.56, 0.56],
         is_train=True),
     dict(
-        type='LoadFeatMaps',
-        # data_root='data/nuscenes_metric3d', # todo
-        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d',
+        type='LoadFeatMaps', # todo 载入深度图 (自定义)
+        # data_root='data/nuscenes_metric3d',
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d', # todo 深度图
         key='depth',
         apply_aug=True),
     dict(
-        type='Pack3DDetInputs',
-        keys=['img'],
+        type='Pack3DDetInputs', # todo 把预处理的原始数据转成标注的数据集输入格式
+        keys=['img'], # todo 返回 'inputs': 网络输入
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
             'num_views', 'img_path', 'depth', 'feats'
-        ])
+        ] # todo 返回 'data_samples'
+        )
 ]
 test_pipeline = [
     dict(
@@ -119,7 +120,7 @@ test_pipeline = [
     dict(
         type='LoadFeatMaps',
         # data_root='data/nuscenes_metric3d', # todo
-        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d',
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d',
         key='depth',
         apply_aug=True),
     dict(
@@ -139,9 +140,12 @@ shared_dataset_cfg = dict(
     filter_empty_gt=False)
 
 train_dataloader = dict(
-    batch_size=2,
-    num_workers=4,
-    persistent_workers=True,
+    batch_size=1,
+    # num_workers=4,
+    # num_workers=1,
+    # persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
@@ -150,16 +154,19 @@ train_dataloader = dict(
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(
-    batch_size=4,
-    num_workers=4,
-    persistent_workers=True,
+    batch_size=1,
+    # num_workers=4,
+    # num_workers=1,
+    # persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     pin_memory=True,
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
         ann_file='nuscenes_mini_infos_val.pkl',
-        pipeline=test_pipeline, # todo 定义数据集
+        pipeline=test_pipeline, # todo 定义数据集处理流程
         **shared_dataset_cfg))
 test_dataloader = val_dataloader
 

@@ -3,6 +3,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
 work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
+from mmdet3d.datasets.transforms import Pack3DDetInputs
 custom_hooks = [
     dict(type='DumpResultHook',
          interval=1,
@@ -105,7 +106,8 @@ train_pipeline = [
         keys=['img'], # todo 返回 'inputs': 网络输入
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
-            'num_views', 'img_path', 'depth', 'feats'
+            'num_views', 'img_path', 'depth', 'feats',
+            # 'token', # ? 'token'
         ] # todo 返回 'data_samples'
         )
 ]
@@ -128,7 +130,8 @@ test_pipeline = [
         keys=['img', 'gt_semantic_seg'],
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
-            'num_views', 'img_path', 'depth', 'feats', 'mask_camera'
+            'num_views', 'img_path', 'depth', 'feats', 'mask_camera',
+            'token','sample_idx','scene_token','scene_idx', # ? 'token'
         ])
 ]
 

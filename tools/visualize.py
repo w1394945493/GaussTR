@@ -78,7 +78,7 @@ def plot(
 
     plt_plot = mlab.points3d(
         x, y, z,
-        # scalars,
+        scalars,
         scale_factor=voxel_size,
         mode='cube',
         opacity=1.0,
@@ -97,7 +97,7 @@ def plot(
 
 def main():
     args = parse_args()
-    files = glob(f'{args.path}*.pkl')
+    files = glob(f'{args.path}/*.pkl')
     save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test/visualizations'
     os.makedirs(save_dir,exist_ok=True)
 

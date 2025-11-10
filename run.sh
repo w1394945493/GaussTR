@@ -32,14 +32,15 @@ python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
 # todo 可视化
 python tools/visualize.py [PKL_PATH] [--save]
 
+export QT_QPA_PLATFORM=offscreen
 python tools/visualize.py \
-    /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test/outputs/ \
+    /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug/vis \
     --save
 
 # todo demo 推理 与 终端 PYTHONPATH=. mim test mmdet3d 命令运行结果不一致, 待寻找原因: 输入图像缺少归一化操作
 python /home/lianghao/wangyushen/Projects/GaussTR/demo.py \
     --py-config \
-    customs/gausstr_talk2dino.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py \
     --checkpoint \
     /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
     --vis_result \

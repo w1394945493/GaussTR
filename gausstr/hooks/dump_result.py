@@ -30,8 +30,14 @@ class DumpResultHook(Hook):
                 occ_gt=(data_sample.gt_pts_seg.semantic_seg.squeeze().cpu().
                         numpy()), # (200,200,16)
                 mask_camera=data_sample.mask_camera,
-                img_path=data_sample.img_path)
+                img_path=data_sample.img_path
+                )
+
+
             # todo ------------------------#
             # save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test/outputs'
-            with open(f'{self.save_dir}/{data_sample.sample_idx}.pkl', 'wb') as f:
+            # with open(f'{self.save_dir}/{data_sample.scene_idx}_{data_sample.scene_token}_{data_sample.sample_idx}_{data_sample.token}.pkl', 'wb') as f:
+            # with open(f'{self.save_dir}/{data_sample.scene_token}_{data_sample.sample_idx}_{data_sample.token}.pkl', 'wb') as f:
+            with open(f'{self.save_dir}/{data_sample.scene_token}_{data_sample.token}.pkl', 'wb') as f:
+
                 pickle.dump(output, f)

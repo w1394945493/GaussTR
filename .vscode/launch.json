@@ -37,7 +37,7 @@
                 "--vis_result",
             ],
             "console": "integratedTerminal",
-            // "justMyCode": false,
+            "justMyCode": false,
         },
         {
             "name": "run test",

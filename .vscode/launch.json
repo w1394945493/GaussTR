@@ -31,7 +31,7 @@
             "program": "/home/lianghao/wangyushen/Projects/GaussTR/demo.py",
             "args": [
                 "--py-config",
-                "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py",
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py",
                 "--checkpoint",
                 "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
                 // "--vis_result",

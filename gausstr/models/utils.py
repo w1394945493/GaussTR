@@ -201,21 +201,42 @@ def flatten_bsn_forward(func, *args, **kwargs):
     return outs
 
 
+
+# OCC3D_CATEGORIES = (
+#     ['barrier'], # 障碍物
+#     ['bicycle'], # 自行车
+#     ['bus'],
+#     ['car'],
+#     ['construction vehicle'],
+#     ['motorcycle'],
+#     ['person'],
+#     ['cone'],
+#     ['trailer'],
+#     ['truck'],
+#     ['road'],
+#     ['sidewalk'],
+#     ['terrain', 'grass'],
+#     ['building', 'wall', 'fence', 'pole', 'sign'],
+#     ['vegetation'],
+#     ['sky'],
+# )  # `sum(OCC3D_CATEGORIES, [])` if you need to flatten the list. #
+
 OCC3D_CATEGORIES = (
-    ['barrier'],
-    ['bicycle'],
-    ['bus'],
-    ['car'],
-    ['construction vehicle'],
-    ['motorcycle'],
-    ['person'],
-    ['cone'],
-    ['trailer'],
-    ['truck'],
-    ['road'],
-    ['sidewalk'],
-    ['terrain', 'grass'],
-    ['building', 'wall', 'fence', 'pole', 'sign'],
-    ['vegetation'],
-    ['sky'],
-)  # `sum(OCC3D_CATEGORIES, [])` if you need to flatten the list.
+    ['barrier'],  # 1-障碍物
+    ['bicycle'],  # 2-自行车
+    ['bus'],  # 3-公交车
+    ['car'],  # 4-汽车
+    ['construction vehicle'],  # 5-建筑工程车辆
+    ['motorcycle'],  # 6-摩托车
+    ['person'],  # 7-人
+    ['cone'],  # 8-锥形交通标志
+    ['trailer'],  # 9-拖车
+    ['truck'],  # 10-卡车
+    ['road'],  # 11-道路
+    ['sidewalk'],  # 12-人行道
+    ['terrain', 'grass'],  # 13-地形、草地
+    ['building', 'wall', 'fence', 'pole', 'sign'],  # 14-建筑物、墙、围栏、杆、标志
+    ['vegetation'],  # 15-植被
+    ['sky'],  # 16-天空
+)  # 共 16 大类
+

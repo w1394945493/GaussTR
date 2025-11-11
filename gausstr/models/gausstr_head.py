@@ -59,7 +59,8 @@ def prompt_denoising(logits, logit_scale=100, pd_threshold=0.1):
     probs[selected_cls] = 0
     return probs
 
-
+# todo -----------------------------#
+# todo 合并类别概率
 def merge_probs(probs, categories):
     merged_probs = []
     i = 0
@@ -67,7 +68,7 @@ def merge_probs(probs, categories):
         p = probs[..., i:i + len(cats)]
         i += len(cats)
         if len(cats) > 1:
-            p = p.max(-1, keepdim=True).values
+            p = p.max(-1, keepdim=True).values # todo 如果某个类别包含多个子类，则选择概率最大的子类来表示该类别概率
         merged_probs.append(p)
     return torch.cat(merged_probs, dim=-1)
 
@@ -171,8 +172,9 @@ class GaussTRHead(BaseModule):
                 probs = prompt_denoising(grid_feats)
             else:
                 probs = grid_feats.softmax(-1)
-
-            probs = merge_probs(probs, OCC3D_CATEGORIES) # (bs,h,w,16,16)
+            # todo -----------------------------------#
+            # todo merge_probs: 合并类别的概率：每个类别可能包含多个子类
+            probs = merge_probs(probs, OCC3D_CATEGORIES) # (b,x,y,z,n_txt_cls) (bs,x,y,z,n_cls)
             preds = probs.argmax(-1) # (bs,h,w,16)
             preds += (preds > 10) * 1 + 1  # skip two classes of "others"
             preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17

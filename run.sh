@@ -57,8 +57,3 @@ PYTHONPATH=. mim train mmdet3d configs/customs/gausstr_talk2dino.py \
 # todo 生成语义分割图
 python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_grounded_sam2.py
 
-
-
-
-echo "Downloading sam2.1_hiera_base_plus.pt checkpoint..."
-$CMD $sam2p1_hiera_b_plus_url || { echo "Failed to download checkpoint from $sam2p1_hiera_b_plus_url"; exit 1; }

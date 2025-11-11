@@ -111,10 +111,12 @@ class GaussTRV2Head(BaseModule):
         rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])
         rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
+        # todo ---------------------------------------#
+        # todo 推理
         if mode == 'predict':
             # todo -----------------------------------#
             # todo 占据预测 3.3 开放词汇占据预测
-            features = features @ self.text_proto_embeds # 查询特征与文本嵌入结合，帮助模型理解类别信息 (b,v,300,768) @ (768 21)
+            features = features @ self.text_proto_embeds # 查询特征与文本嵌入结合，帮助模型理解类别信息 (b,v,300,768) @ (768 21) 文本嵌入维度 21
             density, grid_feats = self.voxelizer(
                 means3d=means3d.flatten(1, 2),
                 opacities=opacities.flatten(1, 2),
@@ -182,12 +184,16 @@ class GaussTRV2Head(BaseModule):
             rendered.flatten(0, 1), tgt_feats, torch.ones_like(
                 tgt_feats[:, 0])) * 5
 
-        # --------------------#
+        # todo -------------------------------------#
+        # todo 分割损失监督(可选)
         if self.segment_head: # (optional) 分割损失
+            # todo ---------------------------------#
+            # todo 通过分割图进行监督
             losses['loss_ce'] = F.cross_entropy(
                 self.segment_head(rendered).mT,
-                sem_segs.flatten(0, 1).flatten(1).long(),
+                sem_segs.flatten(0, 1).flatten(1).long(), # 分割图: min：0 max：17
                 ignore_index=0)
+
         return losses
 
     def photometric_error(self, src_imgs, rec_imgs):

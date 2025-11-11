@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 import warnings
-# 忽略所有警告
 warnings.filterwarnings("ignore")
 
 # from torch.cuda.amp import autocast
@@ -46,6 +45,7 @@ warnings.filterwarnings("ignore")
 #     [222, 184, 135, 255],
 #     [0, 175, 0, 255],
 # ])
+
 COLORS = np.array(
     [
         [  0,   0,   0, 255],       # others               black 黑色
@@ -72,26 +72,48 @@ COLORS = np.array(
     ]
 )
 
+# OCC3D_CATEGORIES = (
+#     ['barrier', 'concrete barrier', 'metal barrier', 'water barrier'],
+#     ['bicycle', 'bicyclist'],
+#     ['bus'],
+#     ['car'],
+#     ['crane'],
+#     ['motorcycle', 'motorcyclist'],
+#     ['pedestrian', 'adult', 'child'],
+#     ['cone'],
+#     ['trailer'],
+#     ['truck'],
+#     ['road'],
+#     ['traffic island', 'rail track', 'lake', 'river'],
+#     ['sidewalk'],
+#     ['grass', 'rolling hill', 'soil', 'sand', 'gravel'],
+#     ['building', 'wall', 'guard rail', 'fence', 'pole', 'drainage',
+#      'hydrant', 'street sign', 'traffic light'],
+#     ['tree', 'bush'],
+#     ['sky', 'empty'],
+# )
 OCC3D_CATEGORIES = (
-    ['barrier', 'concrete barrier', 'metal barrier', 'water barrier'],
-    ['bicycle', 'bicyclist'],
-    ['bus'],
-    ['car'],
-    ['crane'],
-    ['motorcycle', 'motorcyclist'],
-    ['pedestrian', 'adult', 'child'],
-    ['cone'],
-    ['trailer'],
-    ['truck'],
-    ['road'],
-    ['traffic island', 'rail track', 'lake', 'river'],
-    ['sidewalk'],
-    ['grass', 'rolling hill', 'soil', 'sand', 'gravel'],
-    ['building', 'wall', 'guard rail', 'fence', 'pole', 'drainage',
-     'hydrant', 'street sign', 'traffic light'],
-    ['tree', 'bush'],
-    ['sky', 'empty'],
-)
+    ['barrier', 'concrete barrier', 'metal barrier', 'water barrier'],  # 1-障碍物（混凝土障碍物、金属障碍物、水障碍物）
+    ['bicycle', 'bicyclist'],  # 2-自行车与骑行者
+    ['bus'],  # 3-公交车
+    ['car'],  # 4-汽车
+    ['crane'],  # 5-起重机
+    ['motorcycle', 'motorcyclist'],  # 6-摩托车与骑行者
+    ['pedestrian', 'adult', 'child'],  # 7-行人（成人、儿童）
+    ['cone'],  # 8-路锥
+    ['trailer'],  # 9-拖车
+    ['truck'],  # 10-卡车
+    ['road'],  # 11-道路
+    ['traffic island', 'rail track', 'lake', 'river'],  # 12-交通岛、轨道、湖泊、河流
+    ['sidewalk'],  # 13-人行道
+    ['grass', 'rolling hill', 'soil', 'sand', 'gravel'],  # 14-草地、滚动的丘陵、土壤、沙子、碎石
+    ['building', 'wall', 'guard rail', 'fence', 'pole', 'drainage', 'hydrant', 'street sign', 'traffic light'],  # 15-建筑物、墙壁、护栏、栅栏、杆子、排水系统、水龙头、街道标志、交通灯
+    ['tree', 'bush'],  # 16-树木、灌木
+    ['sky', 'empty'],  # 17-天空、空旷
+)  # 共 17 大类
+
+
+
 CLASSES = sum(OCC3D_CATEGORIES, [])
 TEXT_PROMPT = '. '.join(CLASSES)
 INDEX_MAPPING = [
@@ -145,8 +167,6 @@ def main():
 
     sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=DEVICE)
 
-
-
     sam2_predictor = SAM2ImagePredictor(sam2_model)
 
     # build grounding dino model
@@ -172,7 +192,7 @@ def main():
             boxes, confidences, labels = predict(
                 model=grounding_model,
                 image=image,
-                caption=text,
+                caption=text, # todo 文本提示
                 box_threshold=BOX_THRESHOLD,
                 text_threshold=TEXT_THRESHOLD,
             )
@@ -186,7 +206,7 @@ def main():
             # FIXME: figure how does this influence the G-DINO model
             # torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
-            if torch.cuda.get_device_properties(0).major >= 8:
+            if torch.cuda.get_device_properties(0).major >= 8: # 判断GPU架构
                 # turn on tfloat32 for Ampere GPUs (https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices)
                 torch.backends.cuda.matmul.allow_tf32 = True
                 torch.backends.cudnn.allow_tf32 = True

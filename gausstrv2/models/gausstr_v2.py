@@ -119,10 +119,10 @@ class GaussTRV2(BaseModel):
             depth.append(data_samples[i].depth)
 
 
-            if hasattr(data_samples[i], 'feats'): # FeatUp有"feats"和"sem_seg"内容
+            if hasattr(data_samples[i], 'feats'): # todo 特征图
                 feats.append(data_samples[i].feats)
             if hasattr(data_samples[i], 'sem_seg'):
-                sem_segs.append(data_samples[i].sem_seg)
+                sem_segs.append(data_samples[i].sem_seg) # todo 分割图
 
         data_samples = dict(
             depth=depth,
@@ -212,11 +212,14 @@ class GaussTRV2(BaseModel):
 
         query = decoder_outputs['hidden_states'] # todo 各解码层的query和参考点坐标
         reference_points = decoder_outputs['references']
-
+        # todo ---------------------------------#
+        # todo 推理
         if mode == 'predict':
             return self.gauss_heads[-1](
                 query[-1], reference_points[-1], mode=mode, **data_samples)
 
+        # todo ---------------------------------#
+        # todo 训练：损失计算
         losses = {}
         for i, gauss_head in enumerate(self.gauss_heads): # 多层
             loss = gauss_head(

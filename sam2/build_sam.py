@@ -131,13 +131,13 @@ def build_sam2_video_predictor(
         ]
     hydra_overrides.extend(hydra_overrides_extra)
 
+
     cwd = os.getcwd()
     config_path = os.path.relpath(os.path.dirname(config_file), cwd)  # e.g. sam2/configs/sam2.1
     config_name = os.path.splitext(os.path.basename(config_file))[0]  # e.g. sam2.1_hiera_b+
     initialize(config_path=config_path, version_base=None)
     # Read config and init model
     cfg = compose(config_name=config_name, overrides=hydra_overrides)
-
 
 
     OmegaConf.resolve(cfg)

@@ -18,7 +18,7 @@ def splat_into_3d(grid_coords,
                                device=grid_coords.device)
     if features is not None:
         grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
-                                 device=grid_coords.device)
+                                 device=grid_coords.device) # (x,y,z,n_cls)
 
     for g in range(means3d.size(0)):
         sigma = torch.sqrt(torch.diag(covariances[g]))

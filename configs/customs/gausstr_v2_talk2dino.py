@@ -56,9 +56,9 @@ model = dict(
     gauss_head=dict(
         type='GaussTRV2Head',
         opacity_head=dict(
-            type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'),
+            type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'), #
         feature_head=dict(
-            type='MLP', input_dim=embed_dims, output_dim=feat_dims),
+            type='MLP', input_dim=embed_dims, output_dim=feat_dims), # todo
         scale_head=dict(
             type='MLP',
             input_dim=embed_dims,
@@ -66,8 +66,9 @@ model = dict(
             mode='sigmoid',
             range=(1, 16)),
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
+        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=26), # todo 分割头
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
-        text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth',
+        text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
         reduce_dims=reduce_dims,
         image_shape=input_size,
         patch_size=patch_size,
@@ -103,7 +104,6 @@ train_pipeline = [
         final_dim=input_size,
         resize_lim=resize_lim,
         is_train=True),
-
     dict(
         type='LoadFeatMaps', # todo 载入深度图 (自定义)
         # data_root='data/nuscenes_metric3d',
@@ -150,7 +150,8 @@ test_pipeline = [
         type='Pack3DDetInputs',
         keys=['img', 'gt_semantic_seg'], # img occ_gt
         meta_keys=[
-            'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
+            'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat',
+            'sample_idx',
             'num_views', 'img_path', 'depth', 'feats', 'mask_camera',
             # -------------------------------------------#
             'token','scene_token','scene_idx',

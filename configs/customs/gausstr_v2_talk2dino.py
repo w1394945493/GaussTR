@@ -107,7 +107,7 @@ train_pipeline = [
     dict(
         type='LoadFeatMaps', # todo 载入深度图 (自定义)
         # data_root='data/nuscenes_metric3d',
-        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d', # todo 深度图
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini', # todo 深度图
         key='depth',
         apply_aug=True),
      # todo -----------------#
@@ -115,7 +115,7 @@ train_pipeline = [
     dict(
         type='LoadFeatMaps',
         # data_root='data/nuscenes_grounded_sam2', # todo 分割数据集导入
-        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2',
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2/mini',
         key='sem_seg',
         apply_aug=True),
     dict(
@@ -143,7 +143,7 @@ test_pipeline = [
     dict(
         type='LoadFeatMaps',
         # data_root='data/nuscenes_metric3d', # todo
-        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d',
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini',
         key='depth',
         apply_aug=True),
     dict(

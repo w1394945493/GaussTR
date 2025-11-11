@@ -20,6 +20,12 @@ from grounding_dino.groundingdino.util.inference import load_image, load_model, 
 
 import numpy as np
 import matplotlib.pyplot as plt
+from PIL import Image
+
+import warnings
+# 忽略所有警告
+warnings.filterwarnings("ignore")
+
 # from torch.cuda.amp import autocast
 # COLORS = np.array([
 #     [0, 0, 0, 255],
@@ -42,29 +48,30 @@ import matplotlib.pyplot as plt
 # ])
 COLORS = np.array(
     [
-        [  0,   0,   0, 255],       # others
-        [255, 120,  50, 255],       # barrier              orange
-        [255, 192, 203, 255],       # bicycle              pink
-        [255, 255,   0, 255],       # bus                  yellow
-        [  0, 150, 245, 255],       # car                  blue
-        [  0, 255, 255, 255],       # construction_vehicle cyan
-        [255, 127,   0, 255],       # motorcycle           dark orange
-        [255,   0,   0, 255],       # pedestrian           red
-        [255, 240, 150, 255],       # traffic_cone         light yellow
-        [135,  60,   0, 255],       # trailer              brown
-        [160,  32, 240, 255],       # truck                purple
-        [255,   0, 255, 255],       # driveable_surface    dark pink
-        # [175,   0,  75, 255],       # other_flat           dark red
-        [139, 137, 137, 255],
-        [ 75,   0,  75, 255],       # sidewalk             dard purple
-        [150, 240,  80, 255],       # terrain              light green
-        [230, 230, 250, 255],       # manmade              white
-        [  0, 175,   0, 255],       # vegetation           green
-        # [  0, 255, 127, 255],       # ego car              dark cyan
-        # [255,  99,  71, 255],       # ego car
-        # [  0, 191, 255, 255]        # ego car
+        [  0,   0,   0, 255],       # others               black 黑色
+        [255, 120,  50, 255],       # barrier              orange 橙色
+        [255, 192, 203, 255],       # bicycle              pink 粉色
+        [255, 255,   0, 255],       # bus                  yellow 黄色
+        [  0, 150, 245, 255],       # car                  blue 蓝色
+        [  0, 255, 255, 255],       # construction_vehicle cyan 青色
+        [255, 127,   0, 255],       # motorcycle           dark orange 深橙色
+        [255,   0,   0, 255],       # pedestrian           red 红色
+        [255, 240, 150, 255],       # traffic_cone         light yellow 浅黄色
+        [135,  60,   0, 255],       # trailer              brown 棕色
+        [160,  32, 240, 255],       # truck                purple 紫色
+        [255,   0, 255, 255],       # driveable_surface    dark pink 深粉色
+        # [175,   0,  75, 255],     # other_flat           dark red 深红色
+        [139, 137, 137, 255],       # 无特定分类            gray 灰色
+        [ 75,   0,  75, 255],       # sidewalk             dark purple 深紫色
+        [150, 240,  80, 255],       # terrain              light green 浅绿色
+        [230, 230, 250, 255],       # manmade              white 白色
+        [  0, 175,   0, 255],       # vegetation           green 绿色
+        # [  0, 255, 127, 255],     # ego car              dark cyan 深青色
+        # [255,  99,  71, 255],     # ego car              red 红色
+        # [  0, 191, 255, 255]      # ego car              light blue 浅蓝色
     ]
-).astype(np.uint8)
+)
+
 OCC3D_CATEGORIES = (
     ['barrier', 'concrete barrier', 'metal barrier', 'water barrier'],
     ['bicycle', 'bicyclist'],
@@ -96,8 +103,8 @@ INDEX_MAPPING = [
 # OUTPUT_DIR = Path('nuscenes_grounded_sam2/')
 
 IMG_PATH = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini/samples/'
-OUTPUT_DIR = Path('/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2/')
-
+OUTPUT_DIR = Path('/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2/mini')
+VIS_DIR = Path('/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/sam2/seg_vis/mini')
 # SAM2_MODEL_CONFIG = 'configs/sam2.1/sam2.1_hiera_b+.yaml'
 # GROUNDING_DINO_CONFIG = 'grounding_dino/groundingdino/config/GroundingDINO_SwinB_cfg.py'
 
@@ -129,6 +136,7 @@ VIEW_DIRS = [
 def main():
     # create output directory
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    VIS_DIR.mkdir(parents=True,exist_ok=True)
 
     # build SAM2 image predictor
     sam2_checkpoint = SAM2_CHECKPOINT
@@ -152,7 +160,7 @@ def main():
     text = TEXT_PROMPT
 
     i_iter = 0
-    vis = True
+    vis = False
     # for view_dir in os.listdir(IMG_PATH):
     for view_dir in tqdm(VIEW_DIRS):
         for image_path in tqdm(os.listdir(osp.join(IMG_PATH, view_dir))): # image_path:图片名
@@ -204,7 +212,8 @@ def main():
                     results[masks[i].astype(bool)] = pred
 
             i_iter += 1
-            if vis and (i_iter % 10 == 0):
+            # if vis and (i_iter % 10 == 0):
+            if vis:
                 height, width = results.shape
                 color_image = np.zeros((height, width, 4), dtype=np.uint8)
 
@@ -215,7 +224,14 @@ def main():
                         if category_index < len(COLORS):  # 确保索引不超出颜色范围
                             color_image[i, j] = COLORS[category_index]
                 image_name = image_path.split('.')[0]
-                plt.imsave(f'{image_name}.png', color_image)
+                save_path = os.path.join(VIS_DIR,image_name)
+                plt.imsave(f'{save_path}_seg.png', color_image)
+                ori_image_path = os.path.join(IMG_PATH, view_dir, image_path)
+                ori_image = Image.open(ori_image_path)
+                ori_save_path = f'{save_path}.png'
+                ori_image.save(ori_save_path)
+
+
             np.save(osp.join(OUTPUT_DIR, image_path.split('.')[0]), results)
 
 

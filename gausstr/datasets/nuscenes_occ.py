@@ -95,7 +95,7 @@ class NuScenesOccDataset(NuScenesDataset):
                     input_seq[1]['scene_token'] == input_seq[2]['scene_token'])
             input_dict = self.concat_adj_frames(*input_seq)
         # todo ---------------------------#
-        # todo 增加了occ_gt的路径
+        # todo 增加了occ_gt的路径：在根目录下
         input_dict['occ_path'] = os.path.join(
             self.data_root,
             f"gts/{input_dict['scene_idx']}/{input_dict['token']}")

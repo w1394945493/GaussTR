@@ -7,6 +7,7 @@ from mmdet3d.datasets import NuScenesDataset
 from mmdet3d.registry import DATASETS
 
 
+
 @DATASETS.register_module()
 class NuScenesOccDataset(NuScenesDataset):
 
@@ -116,3 +117,65 @@ class NuScenesOccDataset(NuScenesDataset):
                 })
             curr['ego2global'].append(next['ego2global'])
         return curr
+
+if __name__=='__main__':
+    input_size = (504, 896) # 指定输入尺寸
+    test_pipeline = [
+        dict(
+            type='BEVLoadMultiViewImageFromFiles',
+            to_float32=True,
+            color_type='color',
+            num_views=6),
+        dict(type='LoadOccFromFile'),
+        dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
+        dict(
+            type='LoadFeatMaps',
+            # data_root='data/nuscenes_metric3d', # todo
+            data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d',
+            key='depth',
+            apply_aug=True),
+        dict(
+            type='Pack3DDetInputs',
+            keys=['img', 'gt_semantic_seg'],
+            meta_keys=[
+                'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
+                'num_views', 'img_path', 'depth', 'feats', 'mask_camera',
+                'token','sample_idx','scene_token','scene_idx', # ? 'token'
+            ])
+    ]
+
+    dataset_type = 'NuScenesOccDataset' # 数据集名：nuscenes
+    data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+    data_prefix = dict(
+        CAM_FRONT='samples/CAM_FRONT',
+        CAM_FRONT_LEFT='samples/CAM_FRONT_LEFT',
+        CAM_FRONT_RIGHT='samples/CAM_FRONT_RIGHT',
+        CAM_BACK='samples/CAM_BACK',
+        CAM_BACK_RIGHT='samples/CAM_BACK_RIGHT',
+        CAM_BACK_LEFT='samples/CAM_BACK_LEFT')
+    input_modality = dict(use_camera=True, use_lidar=False)
+
+    shared_dataset_cfg = dict(
+        type=dataset_type,
+        data_root=data_root,
+        modality=input_modality,
+        data_prefix=data_prefix,
+        filter_empty_gt=False)
+
+    dataset_dict = dict(
+        ann_file='nuscenes_mini_infos_train.pkl',
+        pipeline=test_pipeline,
+        **shared_dataset_cfg,
+    )
+
+    from transforms import *
+    from mmengine.registry import init_default_scope
+
+    init_default_scope('mmdet3d')
+    # nuscenes_occ = NuScenesDataset(**dataset_dict)
+    nuscenes_occ = DATASETS.build(dataset_dict)
+
+    for i in range(1):
+        data = nuscenes_occ[i]
+
+    a = 1

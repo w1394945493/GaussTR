@@ -36,9 +36,9 @@ class GaussTR(BaseModel):
             if backbone.type == 'TorchHubModel':
                 # self.backbone = torch.hub.load(backbone.repo_or_dir, # todo 'facebookresearch/dinov2'
                 #                             backbone.model_name)  # todo dinov2_vitb14_reg
-
                 from dinov2.models.vision_transformer import vit_base
                 self.backbone = vit_base(
+
                     img_size = 518,
                     patch_size = 14,
                     init_values = 1.0,

@@ -46,7 +46,7 @@ model = dict(
         # text_protos='ckpts/text_proto_embeds_clip.pth', # todo clip嵌入
         text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_clip.pth',
         reduce_dims=reduce_dims,
-        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=26),
+        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=26), # todo 分割头定义
         image_shape=input_size,
         patch_size=patch_size,
         voxelizer=dict(
@@ -79,13 +79,14 @@ train_pipeline = [
         resize_lim=[0.48, 0.48],
         is_train=True),
     dict(type='LoadFeatMaps',
-         data_root='data/nuscenes_metric3d', # todo 相对路径
+         data_root='data/nuscenes_metric3d', # todo 深度图数据导入
          key='depth',
          apply_aug=True),
-    dict(type='LoadFeatMaps', data_root='data/nuscenes_featup', key='feats'), # todo 相对路径
+    dict(type='LoadFeatMaps', data_root='data/nuscenes_featup', key='feats'), # todo 特征图数据导入
+    # todo -----------------#
     dict(
         type='LoadFeatMaps',
-        data_root='data/nuscenes_grounded_sam2', # todo 相对路径
+        data_root='data/nuscenes_grounded_sam2', # todo 分割数据集导入
         key='sem_seg',
         apply_aug=True),
     dict(

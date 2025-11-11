@@ -95,8 +95,9 @@ class GaussianVoxelizer(nn.Module):
                 mask &= ((cov_diag.min(1)[0] * 6) > self.covariance_thresh)
             gaussians = apply_to_items(lambda x: x[mask], gaussians)
 
+        # todo 将离散的3D高斯分布转换成体素网格上的连续概率密度场
         return splat_into_3d(
-            self.grid_coords,
+            self.grid_coords, # todo 网格坐标：(L W H 3)
             **gaussians,
             vol_range=self.vol_range,
             voxel_size=self.voxel_size)

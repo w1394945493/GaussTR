@@ -8,3 +8,5 @@ mmsegmentation
 openmim
 ninja
 gsplat
+
+supervision

@@ -186,9 +186,9 @@ class LoadOccFromFile(BaseTransform):
         occ_path = os.path.join(results['occ_path'], 'labels.npz')
         occ_labels = np.load(occ_path)
 
-        results['gt_semantic_seg'] = occ_labels['semantics']
-        results['mask_lidar'] = occ_labels['mask_lidar']
-        results['mask_camera'] = occ_labels['mask_camera']
+        results['gt_semantic_seg'] = occ_labels['semantics'] # (200,200,16)
+        results['mask_lidar'] = occ_labels['mask_lidar'] # (200,200,16)
+        results['mask_camera'] = occ_labels['mask_camera'] # (200,200,16) 掩码
         return results
 
 
@@ -213,7 +213,7 @@ class ImageAug3D(BaseTransform):
         H, W = results['ori_shape']
         fH, fW = self.final_dim
         if self.is_train:
-            resize = np.random.uniform(*self.resize_lim)
+            resize = np.random.uniform(*self.resize_lim) # 在给定范围内随机生成浮动数值
             resize_dims = (int(W * resize), int(H * resize))
             newW, newH = resize_dims
             crop_h = int(

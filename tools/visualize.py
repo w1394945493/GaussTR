@@ -11,27 +11,51 @@ from mayavi import mlab
 # from rich.progress import track
 from tqdm import tqdm
 
-COLORS = np.array([
-    [0, 0, 0, 255],
-    [112, 128, 144, 255],
-    [220, 20, 60, 255],
-    [255, 127, 80, 255],
-    [255, 158, 0, 255],
-    [233, 150, 70, 255],
-    [255, 61, 99, 255],
-    [0, 0, 230, 255],
-    [47, 79, 79, 255],
-    [255, 140, 0, 255],
-    [255, 98, 70, 255],
-    [0, 207, 191, 255],
-    [175, 0, 75, 255],
-    [75, 0, 75, 255],
-    [112, 180, 60, 255],
-    [222, 184, 135, 255],
-    [0, 175, 0, 255],
-])
+# COLORS = np.array([
+#     [0, 0, 0, 255],
+#     [112, 128, 144, 255],
+#     [220, 20, 60, 255],
+#     [255, 127, 80, 255],
+#     [255, 158, 0, 255],
+#     [233, 150, 70, 255],
+#     [255, 61, 99, 255],
+#     [0, 0, 230, 255],
+#     [47, 79, 79, 255],
+#     [255, 140, 0, 255],
+#     [255, 98, 70, 255],
+#     [0, 207, 191, 255],
+#     [175, 0, 75, 255],
+#     [75, 0, 75, 255],
+#     [112, 180, 60, 255],
+#     [222, 184, 135, 255],
+#     [0, 175, 0, 255],
+# ])
 
-
+COLORS = np.array(
+    [
+        [  0,   0,   0, 255],       # others
+        [255, 120,  50, 255],       # barrier              orange
+        [255, 192, 203, 255],       # bicycle              pink
+        [255, 255,   0, 255],       # bus                  yellow
+        [  0, 150, 245, 255],       # car                  blue
+        [  0, 255, 255, 255],       # construction_vehicle cyan
+        [255, 127,   0, 255],       # motorcycle           dark orange
+        [255,   0,   0, 255],       # pedestrian           red
+        [255, 240, 150, 255],       # traffic_cone         light yellow
+        [135,  60,   0, 255],       # trailer              brown
+        [160,  32, 240, 255],       # truck                purple
+        [255,   0, 255, 255],       # driveable_surface    dark pink
+        # [175,   0,  75, 255],       # other_flat           dark red
+        [139, 137, 137, 255],
+        [ 75,   0,  75, 255],       # sidewalk             dard purple
+        [150, 240,  80, 255],       # terrain              light green
+        [230, 230, 250, 255],       # manmade              white
+        [  0, 175,   0, 255],       # vegetation           green
+        # [  0, 255, 127, 255],       # ego car              dark cyan
+        # [255,  99,  71, 255],       # ego car
+        # [  0, 191, 255, 255]        # ego car
+    ]
+).astype(np.uint8)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('path')

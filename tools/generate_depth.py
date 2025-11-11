@@ -56,7 +56,8 @@ def test_loop(model, dataset_cfg, dataloader_cfg, save_dir):
             save_path = osp.join(save_dir, path.split('/')[-1].split('.')[0])
             np.save(save_path, depth)
 
-
+# todo ---------------------#
+# todo 用于生成深度图
 if __name__ == '__main__':
     # ann_files = [
     #     'nuscenes_infos_train.pkl', 'nuscenes_infos_val.pkl',

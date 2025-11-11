@@ -68,20 +68,20 @@ def generate_grid(grid_shape, value=None, offset=0, normalize=False):
     return torch.stack(grid, dim=-1)
 
 
-def cam2world(points, cam2img, cam2ego, img_aug_mat=None):
+def cam2world(points, cam2img, cam2ego, img_aug_mat=None): # points: (b,v,n,3) img_aug_mat: (b,v,4,4)
     if img_aug_mat is not None:
-        post_rots = img_aug_mat[..., :3, :3]
-        post_trans = img_aug_mat[..., :3, 3]
-        points = points - post_trans.unsqueeze(-2)
-        points = (torch.inverse(post_rots).unsqueeze(2)
+        post_rots = img_aug_mat[..., :3, :3] # (b,v,3,3)
+        post_trans = img_aug_mat[..., :3, 3] # (b,v,3)
+        points = points - post_trans.unsqueeze(-2) # (b v n 3) - (b v 1 3) 逐点减去对应的平移向量
+        points = (torch.inverse(post_rots).unsqueeze(2) # torch.inverse: 计算逆矩阵
                   @ points.unsqueeze(-1)).squeeze(-1)
 
-    cam2img = cam2img[..., :3, :3]
+    cam2img = cam2img[..., :3, :3] # 相机 -> 像素 (3 3)
     with autocast(enabled=False):
-        combine = cam2ego[..., :3, :3] @ torch.inverse(cam2img)
+        combine = cam2ego[..., :3, :3] @ torch.inverse(cam2img) # 像素 -> 相机 -> 自车
         points = points.float()
         points = torch.cat(
-            [points[..., :2] * points[..., 2:3], points[..., 2:3]], dim=-1)
+            [points[..., :2] * points[..., 2:3], points[..., 2:3]], dim=-1) # 去除相机内参的像素缩放影响
         points = combine.unsqueeze(2) @ points.unsqueeze(-1)
     points = points.squeeze(-1) + cam2ego[..., None, :3, 3]
     return points

@@ -19,6 +19,7 @@ from mmdet3d.registry import MODELS,METRICS,HOOKS
 from mmengine.runner.runner import Runner
 from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 from gausstr import *
+from gausstrv2 import *
 
 def main(args):
     cfg = Config.fromfile(args.py_config)
@@ -32,10 +33,10 @@ def main(args):
 
     test_dataloader = Runner.build_dataloader(cfg.test_dataloader)
 
-    if args.checkpoint:
-        ckpt = torch.load(args.checkpoint,map_location='cpu')
-        model.load_state_dict(ckpt['state_dict'],strict=True)
-        print(f"Loaded pretrained weights: {args.checkpoint}")
+    # if args.checkpoint:
+    #     ckpt = torch.load(args.checkpoint,map_location='cpu')
+    #     model.load_state_dict(ckpt['state_dict'],strict=True)
+    #     print(f"Loaded pretrained weights: {args.checkpoint}")
 
     test_evaluator=METRICS.build(cfg.test_evaluator)
 

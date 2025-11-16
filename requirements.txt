@@ -1,12 +1,20 @@
-torch
-torchvision
-mmcv
-mmdet
-mmdet3d
-mmpretrain
-mmsegmentation
+# torch
+# torchvision
+mmcv == 2.1.0
+mmdet == 3.3.0
+mmdet3d == 1.4.0
+mmengine == 0.10.7
+mmpretrain == 1.2.0
+mmsegmentation == 1.2.2
+
+ftfy
+regex
+
 openmim
 ninja
 gsplat
 
+xformers == 0.0.23 --index-url https://download.pytorch.org/whl/cu118
+numpy == 1.25.2
 supervision
+setproctitle

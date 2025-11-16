@@ -19,7 +19,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='MMDet3D test (and eval) a model')
     parser.add_argument('config', help='test config file path')
-    parser.add_argument('checkpoint', help='checkpoint file')
+    parser.add_argument('--checkpoint',default=None, help='checkpoint file')
     parser.add_argument(
         '--work-dir',
         help='the directory to save the file containing evaluation metrics')
@@ -46,7 +46,8 @@ def main():
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
 
-    cfg.load_from = args.checkpoint
+    if args.checkpoint:
+        cfg.load_from = args.checkpoint
 
     # build the runner from config
     if 'runner_type' not in cfg:

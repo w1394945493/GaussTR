@@ -57,3 +57,7 @@ PYTHONPATH=. mim train mmdet3d configs/customs/gausstr_talk2dino.py \
 # todo 生成语义分割图
 python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_grounded_sam2.py
 
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
+    --work-dir \
+    /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_debug

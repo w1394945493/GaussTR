@@ -106,7 +106,7 @@ class BEVLoadMultiViewImageFromFiles(LoadMultiViewImageFromFiles):
         results['filename'] = filename
         # unravel to list, see `DefaultFormatBundle` in formating.py
         # which will transpose each image separately and then stack into array
-        results['img'] = [img[..., i] for i in range(img.shape[-1])] # (H,W,3)
+        results['img'] = [img[..., i] for i in range(img.shape[-1])] # (H,W,3) 0-255
         results['img_shape'] = img.shape[:2]
         results['ori_shape'] = img.shape[:2]
         # Set initial values for default meta_keys
@@ -289,9 +289,9 @@ class ImageAug3D(BaseTransform):
             transform[:2, 3] = translation
             new_imgs.append(np.array(new_img).astype(np.float32))
             transforms.append(transform.numpy())
-        data['img'] = new_imgs
+        data['img'] = new_imgs # (H,W,3) 0-255
         # update the calibration matrices
-        data['img_aug_mat'] = transforms
+        data['img_aug_mat'] = transforms # todo 变换矩阵
         return data
 
 

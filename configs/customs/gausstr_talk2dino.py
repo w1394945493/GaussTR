@@ -3,7 +3,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
 work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
-from mmdet3d.datasets.transforms import Pack3DDetInputs
+# from mmdet3d.datasets.transforms import Pack3DDetInputs
 custom_hooks = [
     dict(type='DumpResultHook',
          interval=1,

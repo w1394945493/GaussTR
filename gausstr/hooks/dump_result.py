@@ -15,6 +15,7 @@ class DumpResultHook(Hook):
         self.interval = interval
         os.makedirs(save_dir,exist_ok=True)
         self.save_dir = save_dir
+        print(f"save vis result to {self.save_dir}")
 
 
     def after_test_iter(self,
@@ -22,6 +23,7 @@ class DumpResultHook(Hook):
                         batch_idx,
                         data_batch=None,
                         outputs=None):
+
 
         for i in range(outputs.size(0)):
             data_sample = data_batch['data_samples'][i]

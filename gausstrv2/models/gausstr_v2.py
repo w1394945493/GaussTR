@@ -184,7 +184,7 @@ class GaussTRV2(BaseModel):
                 x = self.backbone(inputs)[0]
         else:
             x = data_samples['feats'].flatten(0, 1)
-
+        # todo 区分 model和model.head的projection
         if hasattr(self, 'projection'):
             x = self.projection(x.permute(0, 2, 3, 1))[0]
             x = x.permute(0, 3, 1, 2)
@@ -212,6 +212,7 @@ class GaussTRV2(BaseModel):
 
         query = decoder_outputs['hidden_states'] # todo 各解码层的query和参考点坐标
         reference_points = decoder_outputs['references']
+
         # todo ---------------------------------#
         # todo 推理
         if mode == 'predict':
@@ -223,7 +224,7 @@ class GaussTRV2(BaseModel):
         losses = {}
         for i, gauss_head in enumerate(self.gauss_heads): # 多层
             loss = gauss_head(
-                query[i], reference_points[i], mode=mode, **data_samples)
+                query[i], reference_points[i], gt_imgs = inputs,mode=mode, **data_samples)
             for k, v in loss.items():
                 losses[f'{k}/{i}'] = v
         return losses

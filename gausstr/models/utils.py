@@ -237,6 +237,6 @@ OCC3D_CATEGORIES = (
     ['terrain', 'grass'],  # 13-地形、草地
     ['building', 'wall', 'fence', 'pole', 'sign'],  # 14-建筑物、墙、围栏、杆、标志
     ['vegetation'],  # 15-植被
-    ['sky'],  # 16-天空
+    ['sky'],  # 16-天空： 作为背景嘞
 )  # 共 16 大类
 

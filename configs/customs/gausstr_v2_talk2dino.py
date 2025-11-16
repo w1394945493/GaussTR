@@ -1,17 +1,17 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug/' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
 
 custom_hooks = [
-    dict(type='DumpResultHook',
+    dict(type='DumpResultHookV2',
          interval=1,
          save_dir = os.path.join(work_dir,'vis')
          ),
-]  #
+]  # 保存结果
 
 custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 
@@ -66,7 +66,9 @@ model = dict(
             mode='sigmoid',
             range=(1, 16)),
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
-        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=26), # todo 分割头
+        projection=dict(type='MLP', input_dim=feat_dims, output_dim=reduce_dims),
+        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=18), # todo 分割头
+        img_head=dict(type='MLP', input_dim=reduce_dims, output_dim=3),
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
         text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
         reduce_dims=reduce_dims,
@@ -109,7 +111,7 @@ train_pipeline = [
         # data_root='data/nuscenes_metric3d',
         data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini', # todo 深度图
         key='depth',
-        apply_aug=True),
+        apply_aug=True), # todo apply_aug = True: 进行了数据增强
      # todo -----------------#
      # todo 参考gausstr_feature.py
     dict(
@@ -139,7 +141,8 @@ test_pipeline = [
         color_type='color',
         num_views=6),
     dict(type='LoadOccFromFile'),
-    dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
+    # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
+    dict(type='ImageAug3D', final_dim=input_size, resize_lim=resize_lim), #!
     dict(
         type='LoadFeatMaps',
         # data_root='data/nuscenes_metric3d', # todo
@@ -191,14 +194,15 @@ val_dataloader = dict(
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
-        ann_file='nuscenes_mini_infos_val.pkl',
+        ann_file='nuscenes_mini_infos_val.pkl', # todo ann文件：.pkl
         pipeline=test_pipeline, # todo 定义数据集处理流程
         **shared_dataset_cfg))
 test_dataloader = val_dataloader
 
+# todo 指标评估器
 val_evaluator = dict(
-    type='OccMetric',
-    num_classes=18,
+    type='OccMetricV2',
+    num_classes=18, # todo 类别： 17(Occ3D) + 1(1：天空类)
     use_lidar_mask=False,
     use_image_mask=True)
 test_evaluator = val_evaluator

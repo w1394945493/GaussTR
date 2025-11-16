@@ -110,7 +110,7 @@ OCC3D_CATEGORIES = (
     ['building', 'wall', 'guard rail', 'fence', 'pole', 'drainage', 'hydrant', 'street sign', 'traffic light'],  # 15-建筑物、墙壁、护栏、栅栏、杆子、排水系统、水龙头、街道标志、交通灯
     ['tree', 'bush'],  # 16-树木、灌木
     ['sky', 'empty'],  # 17-天空、空旷
-)  # 共 17 大类
+)  # 共 17 大类：见 代码， 且类别id +1， 即从1开始，跳过 others，第12类对应other flats 也跳过
 
 
 
@@ -119,7 +119,7 @@ TEXT_PROMPT = '. '.join(CLASSES)
 INDEX_MAPPING = [
     outer_index for outer_index, inner_list in enumerate(OCC3D_CATEGORIES)
     for _ in inner_list
-]
+] # 生成一个与OCC3D_CATEGORIES中每个物体对应的类别索引
 
 # IMG_PATH = 'data/nuscenes/samples/'
 # OUTPUT_DIR = Path('nuscenes_grounded_sam2/')
@@ -219,7 +219,7 @@ def main():
                     multimask_output=False,
                 )
 
-                # convert the shape to (n, H, W)
+                # convert the shape to (n, H, W)5
                 if masks.ndim == 4:
                     masks = masks.squeeze(1)
 
@@ -228,10 +228,10 @@ def main():
                 for i in range(len(labels)):
                     if labels[i] not in CLASSES:
                         continue
-                    pred = INDEX_MAPPING[CLASSES.index(labels[i])] + 1
+                    pred = INDEX_MAPPING[CLASSES.index(labels[i])] + 1 # todo 所有类别ID + 1
                     results[masks[i].astype(bool)] = pred
 
-            i_iter += 1
+            # i_iter += 1
             # if vis and (i_iter % 10 == 0):
             if vis:
                 height, width = results.shape

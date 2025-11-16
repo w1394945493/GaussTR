@@ -190,7 +190,9 @@ class GaussTRHead(BaseModule):
         tgt_feats = tgt_feats @ v.to(tgt_feats)
         features = features @ v.to(features)
         features = features.float()
-        # gsplat 进行渲染
+        # todo ---------------------------#
+        # gsplat 光栅化
+
         rendered = rasterize_gaussians(
             means3d.flatten(1, 2), # (b,vx300,3)
             features.flatten(1, 2), # (b,vx300,128)
@@ -205,6 +207,8 @@ class GaussTRHead(BaseModule):
             far_plane=100,
             render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
             channel_chunk=32).flatten(0, 1) # ((b v) c h w)
+
+
         rendered_depth = rendered[:, -1] # todo ((b v) h w) 深度图
         rendered = rendered[:, :-1] #  ((b v) c h w) -> ((b v) c-1 h w)
         # todo ------------------------------#

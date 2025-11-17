@@ -163,3 +163,4 @@ data/
 work_dirs/
 # .vscode
 temp/
+outputs/

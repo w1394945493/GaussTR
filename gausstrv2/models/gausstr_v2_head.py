@@ -112,21 +112,22 @@ class GaussTRV2Head(BaseModule):
         covariances = flatten_bsn_forward(get_covariance, scales,
                                           cam2ego[..., None, :3, :3])
         # todo ------------------------------------#
-        # todo： 旋转计算
+        # todo： 旋转矩阵计算
         rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])
         rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
         # todo ---------------------------------------#
         # todo 推理
         if mode == 'predict':
-            # features = features @ self.text_proto_embeds # 文本嵌入：21 ： 14 + 2 + 5 有两大类包含多个小类
-            features = self.projection(features)
+            # todo 使用线性层进行预测
+            # features = self.projection(features)
+
 
             # todo ------------------------#
             # todo
             rendered = rasterize_gaussians(
                 means3d.flatten(1, 2), # (b,vx300,3)
-                features.flatten(1, 2), # (b,vx300,128) 颜色/特征
+                features.flatten(1, 2), # (b,vx300,dim) 颜色/特征
                 opacities.squeeze(-1).flatten(1, 2),
                 scales.flatten(1, 2),
                 rotations.flatten(1, 2),
@@ -143,18 +144,30 @@ class GaussTRV2Head(BaseModule):
             rendered = rendered[:, :-1]
 
             rendered = rearrange(rendered,'bsv c h w -> bsv h w c')
-            rendered_img = self.img_head(rendered)
-            rendered_img = rearrange(rendered_img,'bsv h w c -> bsv c h w')
-            rendered_seg = self.segment_head(rendered)
-            rendered_seg = rearrange(rendered_seg,'bsv h w c -> bsv c h w')
+            # rendered_img = self.img_head(rendered)
+            # rendered_img = rearrange(rendered_img,'bsv h w c -> bsv c h w')
+
+            # rendered_seg = self.segment_head(rendered)
+            # rendered_seg = rearrange(rendered_seg,'bsv h w c -> bsv c h w')
+            # rendered_seg = rearrange(rendered_seg,'bsv h w c -> bsv c h w')
+            
+            rendered_seg = rendered @ self.text_proto_embeds
+            rendered_seg = merge_probs(rendered_seg, OCC3D_CATEGORIES)
+            rendered_seg = rendered_seg.softmax(-1).argmax(-1)
+            rendered_seg += (rendered_seg > 10) * 1 + 1
 
             # todo --------------------------------#
-            # todo occ 预测
-            feat = self.segment_head(features)
+            # todo 使用线性层进行预测
+            # feat_probs = self.segment_head(features)
+
+            # todo 使用CLIP文本嵌入进行分类预测
+            feat_probs = features @ self.text_proto_embeds # 文本嵌入：21 ： 14 + 2 + 5 有两大类包含多个小类
+
+            # todo 体素化
             density, grid_feats = self.voxelizer(
                 means3d=means3d.flatten(1, 2),
                 opacities=opacities.flatten(1, 2),
-                features=feat.flatten(1, 2).softmax(-1),
+                features=feat_probs.flatten(1, 2).softmax(-1),
                 covariances=covariances.flatten(1, 2)) # 将离散的3D高斯分布转换为occ占据预测网格图
 
             if self.prompt_denoising:
@@ -163,14 +176,21 @@ class GaussTRV2Head(BaseModule):
                 probs = grid_feats.softmax(-1)
 
             # todo 已定义分类头数为18，无需再额外后处理
-            # probs = merge_probs(probs, OCC3D_CATEGORIES) # (bs,x,y,z,n_cls)
+            #? 使用线性层进行预测
+            # preds = probs.argmax(-1) # (bs,h,w,16)
+            # preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17（天空类)
+
+            #? 使用CLIP生成的文本嵌入进行预测
+            probs = merge_probs(probs, OCC3D_CATEGORIES) # (bs,x,y,z,n_cls)
             preds = probs.argmax(-1) # (bs,h,w,16)
-            # preds += (preds > 10) * 1 + 1  # skip two classes of "others" others:0 other flat: 12 跳过这两类目标
+            preds += (preds > 10) * 1 + 1  # skip two classes of "others" others:0 other flat: 12 跳过这两类目标
             preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17（天空类)
+
 
             outputs = [{
                 'occ_pred': preds, # (b,200,200,16)
-                'img_pred': rendered_img.reshape(bs, n, *rendered_img.shape[1:]), # (bsv,3 h w)
+                # 'img_pred': rendered_img.reshape(bs, n, *rendered_img.shape[1:]), # (bsv,3 h w)
+                'img_pred': None,
                 'depth_pred': rendered_depth.reshape(bs, n, *rendered_depth.shape[1:]), # (bsv h w)
                 'seg_pred': rendered_seg.reshape(bs, n, *rendered_seg.shape[1:]), # (bsv h w)
             }]
@@ -178,19 +198,23 @@ class GaussTRV2Head(BaseModule):
             # return preds
             return outputs
 
+        # todo ---------------------------------------#
+        # todo 训练：损失计算
+
         # todo feats: 视觉基础模型提取的特征图
         # tgt_feats = feats.flatten(-2).mT # todo .mT: 对矩阵转置，即交换最后两个维度
-        # if hasattr(self, 'projection'):
-        #     tgt_feats = self.projection(tgt_feats)[0]
+        # # if hasattr(self, 'projection'):
+        # #     tgt_feats = self.projection(tgt_feats)[0]
         # # 执行PCA(主成分分析)降维操作，对输入张量进行低秩近似，减少特征维度
         # u, s, v = torch.pca_lowrank(
         #     tgt_feats.flatten(0, 2).double(), q=self.reduce_dims, niter=4) # (b,v,(h w),c) -> v: (c,q) q：降维后的维度
         # tgt_feats = tgt_feats @ v.to(tgt_feats)
-        # features = features @ v.to(features)
+        # # todo features: 查询特征
+        # features = features @ v.to(features) # 768 -> 128
         # features = features.float()
 
         # 768 -> 3 + 128 (rgb + seg feat)
-        features = self.projection(features)
+        # features = self.projection(features)
 
         #---------------------------------------#
         # gsplat 进行渲染 推理occ占据预测：无需光栅化
@@ -230,39 +254,51 @@ class GaussTRV2Head(BaseModule):
         # todo 特征损失估计
         # Interpolating to high resolution for supervision can improve mIoU by 0.7
         # compared to average pooling to low resolution.
-        # bsn, c, h, w = rendered.shape
-        # tgt_feats = tgt_feats.mT.reshape(bsn, c, h // self.patch_size,
-        #                                  w // self.patch_size)
-        # tgt_feats = F.interpolate(
-        #     tgt_feats, scale_factor=self.patch_size, mode='bilinear')
-        # rendered = rendered.flatten(2).mT
-        # tgt_feats = tgt_feats.flatten(2).mT.flatten(0, 1)
+        bsn, c, h, w = rendered.shape
+        tgt_feats = feats.flatten(0,1).reshape(bsn, c, h // self.patch_size,
+                                         w // self.patch_size)
+        tgt_feats = F.interpolate(
+            tgt_feats, scale_factor=self.patch_size, mode='bilinear')
+        rendered_mT = rendered.flatten(2).mT
+        tgt_feats = tgt_feats.flatten(2).mT.flatten(0, 1)
+
         # # todo 通过高斯点积进行渲染监督：
-        # losses['loss_cosine'] = F.cosine_embedding_loss(
-        #     rendered.flatten(0, 1), tgt_feats, torch.ones_like(
-        #         tgt_feats[:, 0])) * 5
-        rendered = rendered.flatten(2).mT
+        losses['loss_cosine'] = F.cosine_embedding_loss(
+            rendered_mT.flatten(0, 1), tgt_feats, torch.ones_like(
+                tgt_feats[:, 0])) * 5
+
+        # rendered_mT = rendered.flatten(2).mT
         # todo img损失
-        rendered_img = self.img_head(rendered)
-        reg_loss = (rendered_img.mT - gt_imgs.flatten(2)) ** 2 #? 感觉直接将网络输入作为真值监督，可能不对
-        losses['loss_img'] = reg_loss.mean()
+        # rendered_img = self.img_head(rendered)
+        # reg_loss = (rendered_img.mT - gt_imgs.flatten(2)) ** 2 #? 感觉直接将网络输入作为真值监督，可能不对
+        # losses['loss_img'] = reg_loss.mean()
 
         # todo 分割图损失
-        rendered_seg = self.segment_head(rendered)
-        losses['loss_ce'] = F.cross_entropy(
-            rendered_seg.mT,
-            sem_segs.flatten(0, 1).flatten(1).long(), # 分割图: min：0 max：17
-            ignore_index=0)
+        # ? (1) 使用线性层进行预测
+        # rendered_seg = self.segment_head(rendered)
+        # losses['loss_ce'] = F.cross_entropy(
+        #     rendered_seg.mT,
+        #     sem_segs.flatten(0, 1).flatten(1).long(), # 分割图: min：0 max：17
+        #     ignore_index=0)
 
-        # todo -------------------------------------#
-        # todo 分割损失监督(可选)
-        # if self.segment_head: # (optional) 分割损失
-        #     # todo ---------------------------------#
-        #     # todo 通过分割图进行监督
-        #     losses['loss_ce'] = F.cross_entropy(
-        #         self.segment_head(rendered).mT,
-        #         sem_segs.flatten(0, 1).flatten(1).long(), # 分割图: min：0 max：17
-        #         ignore_index=0)
+        # ? (2) 使用CLIP生成的文本嵌入进行预测
+        rendered_seg = rendered_mT @ self.text_proto_embeds
+        probs = merge_probs(rendered_seg, OCC3D_CATEGORIES)
+        b_p, n_p, c_p = probs.shape
+        zeros = torch.zeros(b_p, n_p, 1, device=probs.device, dtype=probs.dtype)
+        probs = torch.cat([
+                            zeros,               # 0  忽略 others
+                            probs[:, :, :11],    # 1-11
+                            zeros,               # 12 忽略 others flat
+                            probs[:, :, 11:],    # 13-17
+                        ], dim=2)
+        target = sem_segs.flatten(0, 1).flatten(1).long()
+        target = torch.where(target == 12, torch.tensor(0, device=target.device), target)
+
+        losses['loss_ce'] = F.cross_entropy(
+            probs.mT,
+            target, # 分割图: min：0 max：17
+            ignore_index=0) # 忽略第0和12类
 
         return losses
 

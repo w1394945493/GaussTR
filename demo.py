@@ -3,7 +3,7 @@ from setproctitle import setproctitle
 setproctitle("wys")
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import argparse
 
 import sys
@@ -43,7 +43,8 @@ def main(args):
     if hasattr(test_dataloader.dataset, 'metainfo'):
         test_evaluator.dataset_meta = test_dataloader.dataset.metainfo
 
-    dump_result = HOOKS.build(cfg.custom_hooks[0])
+    if args.vis_result:
+        dump_result = HOOKS.build(cfg.custom_hooks[0])
 
     results = []
 

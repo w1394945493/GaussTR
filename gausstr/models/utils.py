@@ -222,6 +222,7 @@ def flatten_bsn_forward(func, *args, **kwargs):
 # )  # `sum(OCC3D_CATEGORIES, [])` if you need to flatten the list. #
 
 OCC3D_CATEGORIES = (
+    # ['others'],    # 0-ignore
     ['barrier'],  # 1-障碍物
     ['bicycle'],  # 2-自行车
     ['bus'],  # 3-公交车
@@ -233,10 +234,11 @@ OCC3D_CATEGORIES = (
     ['trailer'],  # 9-拖车
     ['truck'],  # 10-卡车
     ['road'],  # 11-道路
-    ['sidewalk'],  # 12-人行道
-    ['terrain', 'grass'],  # 13-地形、草地
-    ['building', 'wall', 'fence', 'pole', 'sign'],  # 14-建筑物、墙、围栏、杆、标志
-    ['vegetation'],  # 15-植被
-    ['sky'],  # 16-天空： 作为背景嘞
+    # ['other flat'], # 12-ignore
+    ['sidewalk'],  # 13-人行道
+    ['terrain', 'grass'],  # 14-地形、草地
+    ['building', 'wall', 'fence', 'pole', 'sign'],  # 15-建筑物、墙、围栏、杆、标志
+    ['vegetation'],  # 16-植被
+    ['sky'],  # 17-天空： 作为背景嘞
 )  # 共 16 大类
 

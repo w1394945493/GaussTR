@@ -67,17 +67,33 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 export CUDA_VISIBLE_DEVICES=4
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstr
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/baseline/train
+
+# todo 评估/可视化
+export CUDA_VISIBLE_DEVICES=4
+PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py \
+    -C /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/baseline/test
+
+python /home/lianghao/wangyushen/Projects/GaussTR/demo.py \
+    --py-config \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py \
+    --checkpoint \
+    /home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth \
 
 # todo GaussTRV2
 # todo 训练
 export CUDA_VISIBLE_DEVICES=5
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train
+
+
+
 # todo 评估/可视化
 export CUDA_VISIBLE_DEVICES=5
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
     -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2/epoch_24.pth \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/test

@@ -1,16 +1,17 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/baseline/test' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
 
 custom_imports = dict(imports=['gausstr'])
 
-# input_size = (504, 896)
-input_size = (252,448)
-resize_lim=[0.28, 0.28] #!
+input_size = (504, 896)
+resize_lim=[0.56, 0.56] #!
+# input_size = (252,448)
+# resize_lim=[0.28, 0.28] #!
 
 embed_dims = 256
 feat_dims = 768

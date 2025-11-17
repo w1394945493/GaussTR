@@ -80,6 +80,8 @@
                 "--checkpoint",
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2/epoch_24.pth",
                 // "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
@@ -92,7 +94,7 @@
             "args": [
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py",
                 "--work-dir",
-                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_debug",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

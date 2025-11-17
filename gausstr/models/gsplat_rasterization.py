@@ -36,12 +36,13 @@ def rasterize_gaussians(means3d,
                                       img_aug_mats[0, i, i].item() +
                                       img_aug_mats[0, i, 3].item())
 
+    # from gsplat import rasterization
     rendered_image = rasterization(
         means3d,
         rotations,
         scales,
         opacities,
-        colors, 
+        colors,
         viewmat,
         cam2imgs,
         width=image_size[1],

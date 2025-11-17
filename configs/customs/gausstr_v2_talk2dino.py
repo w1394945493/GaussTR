@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstrv2/test_debug2/' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis2' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -238,5 +238,6 @@ custom_hooks = [
          save_depth = True,
          save_sem_seg = True,
          save_img = False,
+        #  save_img = True,
          ),
 ]  # 保存结果

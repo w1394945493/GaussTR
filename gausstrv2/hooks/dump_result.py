@@ -122,7 +122,7 @@ class DumpResultHookV2(Hook):
             cols = n
             rows = 1
 
-        img_pred = img_pred*self.std.view(1,1,3,1,1).to(img_pred.device) + self.mean.view(1,1,3,1,1).to(img_pred.device)
+
 
         if self.save_occ:
             occ_pred  = outputs['occ_pred']   # (b, X, Y, Z)
@@ -179,7 +179,8 @@ class DumpResultHookV2(Hook):
             for i in range(b):
                 data_sample = data_batch['data_samples'][i] # todo 每个batch的数据都放在一个data_samples下
 
-                sem_seg_pred = seg_pred[i].argmax(dim=1)
+                # sem_seg_pred = seg_pred[i].argmax(dim=1)
+                sem_seg_pred = seg_pred[i]
                 seg_color = seg_to_color(sem_seg_pred, COLORS).clamp(0, 255) / 255.0
                 grid = torchvision.utils.make_grid(seg_color, nrow=cols, padding=2)
                 save_name = f"{data_sample.scene_token}_{data_sample.token}.png"
@@ -198,15 +199,16 @@ class DumpResultHookV2(Hook):
         if self.save_img:
 
             img_pred  = outputs['img_pred']   # (b, n, 3, H, W)
+            img_pred = img_pred*self.std.view(1,1,3,1,1).to(img_pred.device) + self.mean.view(1,1,3,1,1).to(img_pred.device)
 
             for i in range(b):
                 data_sample = data_batch['data_samples'][i]
                 imgs = img_pred[i].float() / 255.0  # 0~1 float，方便save_image
 
-                # 自动布局：偶数 → 3×2；奇数 → 1×n
+                # 布局：偶数 → 3×2；奇数 → 1×n
                 grid = torchvision.utils.make_grid(
                     imgs,
-                    nrow=cols,  # 自动来自你前面计算的 cols
+                    nrow=cols,
                     padding=2
                 )
                 save_name = f"{data_sample.scene_token}_{data_sample.token}.png"
@@ -219,7 +221,7 @@ class DumpResultHookV2(Hook):
                 imgs_gt = data_sample.img.clamp(0, 255) / 255.0
                 grid = torchvision.utils.make_grid(
                     imgs_gt,
-                    nrow=cols,  # 自动来自你前面计算的 cols
+                    nrow=cols,
                     padding=2
                 )
                 save_name = f"{data_sample.scene_token}_{data_sample.token}_gt.png"

@@ -61,8 +61,10 @@ class GaussTRV2(BaseModel):
                 model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
                 state_dict = torch.load(model_url, map_location="cpu")
                 self.backbone.load_state_dict(state_dict, strict=True)
+
                 print(cyan(f"load checkpoint from{model_url}."))
-                self.backbone.requires_grad_(False)
+                self.backbone.requires_grad_(False) # todo 冻结主干backbone
+
                 self.backbone.is_init = True  # otherwise it will be re-inited by mmengine
                 self.patch_size = self.backbone.patch_size
             else:
@@ -184,6 +186,7 @@ class GaussTRV2(BaseModel):
                 x = self.backbone(inputs)[0]
         else:
             x = data_samples['feats'].flatten(0, 1)
+
         # todo 区分 model和model.head的projection
         if hasattr(self, 'projection'):
             x = self.projection(x.permute(0, 2, 3, 1))[0]

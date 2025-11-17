@@ -61,3 +61,23 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
     --work-dir \
     /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_debug
+
+# todo 训练
+# todo baseline
+export CUDA_VISIBLE_DEVICES=4
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_talk2dino.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstr
+
+# todo GaussTRV2
+# todo 训练
+export CUDA_VISIBLE_DEVICES=5
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2
+# todo 评估/可视化
+export CUDA_VISIBLE_DEVICES=5
+PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2/epoch_24.pth \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2

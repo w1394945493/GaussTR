@@ -244,7 +244,7 @@ class GaussTRV2Head(BaseModule):
         rendered = rendered.flatten(2).mT
         # todo img损失
         rendered_img = self.img_head(rendered)
-        reg_loss = (rendered_img.mT - rearrange(gt_imgs.flatten(2), 'b c n -> b n c')) ** 2 #? 感觉直接将网络输入作为真值监督，可能不对
+        reg_loss = (rendered_img.mT - gt_imgs.flatten(2)) ** 2 #? 感觉直接将网络输入作为真值监督，可能不对
         losses['loss_img'] = reg_loss.mean()
 
         # todo 分割图损失

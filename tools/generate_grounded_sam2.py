@@ -125,8 +125,12 @@ INDEX_MAPPING = [
 # OUTPUT_DIR = Path('nuscenes_grounded_sam2/')
 
 IMG_PATH = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini/samples/'
+
+# todo 结果保存路径
 OUTPUT_DIR = Path('/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2/mini')
-VIS_DIR = Path('/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/sam2/seg_vis/mini')
+
+
+VIS_DIR = Path('/home/lianghao/wangyushen/data/wangyushen/Output/gausstrv2/sam2/seg_vis/mini')
 # SAM2_MODEL_CONFIG = 'configs/sam2.1/sam2.1_hiera_b+.yaml'
 # GROUNDING_DINO_CONFIG = 'grounding_dino/groundingdino/config/GroundingDINO_SwinB_cfg.py'
 
@@ -180,7 +184,8 @@ def main():
     text = TEXT_PROMPT
 
     i_iter = 0
-    vis = False
+    # vis = False
+    vis = True # todo 是否可视化分割图
     # for view_dir in os.listdir(IMG_PATH):
     for view_dir in tqdm(VIEW_DIRS):
         for image_path in tqdm(os.listdir(osp.join(IMG_PATH, view_dir))): # image_path:图片名
@@ -215,17 +220,17 @@ def main():
                 masks, scores, logits = sam2_predictor.predict(
                     point_coords=None,
                     point_labels=None,
-                    box=input_boxes,
+                    box=input_boxes, # todo (N,4)
                     multimask_output=False,
                 )
 
                 # convert the shape to (n, H, W)5
                 if masks.ndim == 4:
-                    masks = masks.squeeze(1)
+                    masks = masks.squeeze(1) # todo (N,H,W) N和input_boxes的数量一致
 
             results = np.zeros_like(masks[0])
             if input_boxes.shape[0] != 0:
-                for i in range(len(labels)):
+                for i in range(len(labels)): # todo 预测的labels
                     if labels[i] not in CLASSES:
                         continue
                     pred = INDEX_MAPPING[CLASSES.index(labels[i])] + 1 # todo 所有类别ID + 1
@@ -234,8 +239,8 @@ def main():
             # i_iter += 1
             # if vis and (i_iter % 10 == 0):
             if vis:
-                height, width = results.shape
-                color_image = np.zeros((height, width, 4), dtype=np.uint8)
+                height, width = results.shape # todo results (H,W) 每个位置的值是预测类别
+                color_image = np.zeros((height, width, 4), dtype=np.uint8) 
 
                 # 遍历每个像素，给它分配对应类别的颜色
                 for i in range(height):

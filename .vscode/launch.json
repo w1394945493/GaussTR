@@ -77,6 +77,8 @@
             "program": "/home/lianghao/wangyushen/Projects/GaussTR/test.py",
             "args": [
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py",
+                "--checkpoint",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/train_gausstrv2/epoch_24.pth",
                 // "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
             ],
             "console": "integratedTerminal",

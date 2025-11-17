@@ -1,17 +1,9 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug/' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstrv2/test_debug2/' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-
-
-custom_hooks = [
-    dict(type='DumpResultHookV2',
-         interval=1,
-         save_dir = os.path.join(work_dir,'vis')
-         ),
-]  # 保存结果
 
 custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 
@@ -128,7 +120,7 @@ train_pipeline = [
             'sample_idx',
             'num_views', 'img_path', 'depth', 'feats',
             #--------------------------------------------#
-            'sem_seg',
+            'sem_seg', # todo 2D分割图
             # -------------------------------------------#
             'token','scene_token','scene_idx',
         ] # todo 返回 'data_samples'
@@ -149,13 +141,24 @@ test_pipeline = [
         data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini',
         key='depth',
         apply_aug=True),
+     # todo -----------------#
+     # todo 参考gausstr_feature.py
+    dict(
+        type='LoadFeatMaps',
+        # data_root='data/nuscenes_grounded_sam2', # todo 分割数据集导入
+        data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2/mini',
+        key='sem_seg',
+        apply_aug=True),
+
     dict(
         type='Pack3DDetInputs',
-        keys=['img', 'gt_semantic_seg'], # img occ_gt
+        keys=['img', 'gt_semantic_seg'], # todo img：2D输入图 'gt_semantic_seg': 3D occ图
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat',
             'sample_idx',
             'num_views', 'img_path', 'depth', 'feats', 'mask_camera',
+            # -------------------------------------------#
+            'img','sem_seg',
             # -------------------------------------------#
             'token','scene_token','scene_idx',
         ])
@@ -183,7 +186,7 @@ train_dataloader = dict(
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(
-    batch_size=1,
+    batch_size=2,
     # num_workers=4,
     # num_workers=1,
     # persistent_workers=True,
@@ -213,6 +216,7 @@ optim_wrapper = dict(
     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
     clip_grad=dict(max_norm=35, norm_type=2))
 
+# train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
@@ -221,3 +225,18 @@ param_scheduler = [
     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
 ]
+
+default_hooks = dict(
+    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=2) # todo 每隔多少个epoch保存一次model
+)
+
+custom_hooks = [
+    dict(type='DumpResultHookV2',
+         interval=1,
+         save_dir = os.path.join(work_dir,'vis'),
+         save_occ = True,
+         save_depth = True,
+         save_sem_seg = True,
+         save_img = False,
+         ),
+]  # 保存结果

@@ -4,16 +4,14 @@ import os
 work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/test_debug' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-custom_hooks = [
-    dict(type='DumpResultHook',
-         interval=1,
-         save_dir = os.path.join(work_dir,'vis')
-         ),
-]  #
+
 
 custom_imports = dict(imports=['gausstr'])
 
-input_size = (504, 896)
+# input_size = (504, 896)
+input_size = (252,448)
+resize_lim=[0.28, 0.28] #!
+
 embed_dims = 256
 feat_dims = 768
 reduce_dims = 128
@@ -93,7 +91,8 @@ train_pipeline = [
     dict(
         type='ImageAug3D', # todo 对图像数据做仿射增强，同时处理相机参数矩阵，保持一致 (自定义)
         final_dim=input_size,
-        resize_lim=[0.56, 0.56],
+        # resize_lim=[0.56, 0.56],
+        resize_lim=resize_lim,
         is_train=True),
     dict(
         type='LoadFeatMaps', # todo 载入深度图 (自定义)
@@ -118,7 +117,10 @@ test_pipeline = [
         color_type='color',
         num_views=6),
     dict(type='LoadOccFromFile'),
-    dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
+    dict(type='ImageAug3D', final_dim=input_size,
+        #  resize_lim=[0.56, 0.56]
+        resize_lim=resize_lim,
+         ),
     dict(
         type='LoadFeatMaps',
         # data_root='data/nuscenes_metric3d', # todo
@@ -194,3 +196,14 @@ param_scheduler = [
     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
 ]
+
+default_hooks = dict(
+    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=2) # todo 每隔多少个epoch保存一次model
+)
+
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          interval=1,
+#          save_dir = os.path.join(work_dir,'vis')
+#          ),
+# ]  #

@@ -27,7 +27,7 @@ class MLP(nn.Module):
                  mode=None,
                  range=None):
         super().__init__()
-        hidden_dim = hidden_dim or input_dim * 4
+        hidden_dim = hidden_dim or input_dim * 4 # todo 若左边是None或False，则使用右边默认值
         output_dim = output_dim or input_dim
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
@@ -91,7 +91,7 @@ class GaussTRHead(BaseModule):
                  text_protos=None,
                  prompt_denoising=True):
         super().__init__()
-        self.opacity_head = MODELS.build(opacity_head)
+        self.opacity_head = MODELS.build(opacity_head) # todo 透明度预测
         self.feature_head = MODELS.build(feature_head)
         self.scale_head = MODELS.build(scale_head)
         self.regress_head = MODELS.build(regress_head)
@@ -126,6 +126,7 @@ class GaussTRHead(BaseModule):
                 sem_segs=None, # todo cam2img, cam2ego, feats, img_aug_mat, sem_segs: 标注和真值
                 mode='tensor',
                 **kwargs):
+
         bs, n = cam2img.shape[:2] # todo
         x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
 
@@ -133,6 +134,7 @@ class GaussTRHead(BaseModule):
         ref_pts = (
             deltas[..., :2] +
             inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # 参考点位置更新，参考点与x，y偏移量相加，得到新的参考点
+
         depth = depth.clamp(max=self.depth_limit)
         sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None],
                                            ref_pts.unsqueeze(2) * 2 - 1) # 根据参考点对深度图进行采样，得到每个参考点的信息
@@ -141,6 +143,7 @@ class GaussTRHead(BaseModule):
             ref_pts * torch.tensor(self.image_shape[::-1]).to(x),
             sample_depth * (1 + deltas[..., 2:3])
         ], -1) # 计算3D点 (b,v,300,3)
+
         # todo ------------------------------------#
         # todo： 位置计算：cam2img cam2ego
         means3d = cam2world(points, cam2img, cam2ego, img_aug_mat) # 将2D图像坐标转换为3D世界坐标

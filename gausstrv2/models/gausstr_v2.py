@@ -67,13 +67,24 @@ class GaussTRV2(BaseModel):
 
                 self.backbone.is_init = True  # otherwise it will be re-inited by mmengine
                 self.patch_size = self.backbone.patch_size
+
+                self.vit_type = 'vitb'
+                self.intermediate_layer_idx = {
+                    "vits": [2, 5, 8, 11],
+                    "vitb": [2, 5, 8, 11],
+                    "vitl": [4, 11, 17, 23],
+                }
+
             else:
                 self.backbone = MODELS.build(backbone)
             self.frozen_backbone = all(not param.requires_grad
                                        for param in self.backbone.parameters())
+
+
             if attn_type is not None:
                 assert backbone.out_indices == -2
             self.attn_type = attn_type
+
         if projection is not None:
             self.projection = MODELS.build(projection)
             if 'init_cfg' in projection and projection.init_cfg.type == 'Pretrained':
@@ -91,7 +102,7 @@ class GaussTRV2(BaseModel):
         self.query_embeds = nn.Embedding(
             num_queries, decoder.layer_cfg.self_attn_cfg.embed_dims)
         self.gauss_heads = ModuleList(
-            [MODELS.build(gauss_head) for _ in range(decoder.num_layers)])
+            [MODELS.build(gauss_head) for _ in range(decoder.num_layers)]) # todo num_layers:3
 
     def prepare_inputs(self, inputs_dict, data_samples):
         num_views = data_samples[0].num_views
@@ -149,7 +160,7 @@ class GaussTRV2(BaseModel):
     def forward(self, inputs, data_samples, mode='loss'):
         inputs, data_samples = self.prepare_inputs(inputs, data_samples)
         # bs, n = inputs.shape[:2]
-        bs, n, _, ori_h, ori_w = inputs.shape
+        bs, n, _, ori_h, ori_w = inputs.shape # (b,v,3,H,W)
 
         # todo ---------------------------------#
         # todo 使用预训练的VFM(DINOv2)进行多视图特征提取
@@ -157,7 +168,7 @@ class GaussTRV2(BaseModel):
             # 原代码：必须确保 input_size 为14的倍数
             # inputs = inputs.flatten(0, 1) # (b,v,3,h,w) -> ((b v) 3 h w)
 
-            # todo:
+            # todo: 对原图缩放一下，
             resize_h, resize_w = ori_h // self.patch_size * self.patch_size, ori_w // self.patch_size * self.patch_size
             inputs = rearrange(inputs,"b v c h w -> (b v) c h w")
             inputs = F.interpolate(inputs,(resize_h,resize_w),mode='bilinear',align_corners=True)
@@ -165,7 +176,7 @@ class GaussTRV2(BaseModel):
             if self.frozen_backbone:
                 if self.backbone.training:
                     self.backbone.eval()
-                with torch.no_grad():
+                with torch.no_grad(): # todo 提取单目视觉特征
                     if isinstance(self.backbone, BaseModule):
                         x = self.backbone(inputs)[0]
                         if self.attn_type is not None:
@@ -173,7 +184,7 @@ class GaussTRV2(BaseModel):
                     else:
 
                         x = self.backbone.forward_features(
-                            inputs)['x_norm_patchtokens']
+                            inputs)['x_norm_patchtokens'] # todo ((b v) n 768) n = HxW / (patch_size x patch_size)
 
                         # 原代码：必须确保 input_size 为14的倍数
                         # x = x.mT.reshape(bs * n, -1,
@@ -182,6 +193,7 @@ class GaussTRV2(BaseModel):
                         x = x.mT.reshape(bs * n, -1,
                                          resize_h // self.patch_size,
                                          resize_w // self.patch_size) # 转置 -> 重新整合为特征图
+
             else:
                 x = self.backbone(inputs)[0]
         else:
@@ -192,26 +204,33 @@ class GaussTRV2(BaseModel):
             x = self.projection(x.permute(0, 2, 3, 1))[0]
             x = x.permute(0, 3, 1, 2)
         if hasattr(self, 'backbone') or hasattr(self, 'projection'):
-            data_samples['feats'] = x.reshape(bs, n, *x.shape[1:]) # ((b v) c h w) -> (b v c h w)
+            data_samples['feats'] = x.reshape(bs, n, *x.shape[1:]) # todo ((b v) c h w) -> (b v c h w)
         if n > data_samples['num_views']:
             x = x.reshape(bs, n, *x.shape[1:])
             x = x[:, :data_samples['num_views']].flatten(0, 1)
 
         # todo ---------------------------------#
-        feats = self.neck(x) # list 4个尺度的特征图
+        feats = self.neck(x) # todo ViTDetFPN: 多尺度特征图提取
 
+
+
+
+
+
+        # 注：网络输入 (3 252 484) -> backbone -> (768 18 32) -> neck -> (256 72 128) (256 36 64) (256 18 32) (256 9 16)
         if hasattr(self, 'encoder'):
             encoder_inputs, decoder_inputs = self.pre_transformer(feats)
             feats = self.forward_encoder(**encoder_inputs)
         else:
-            decoder_inputs = self.pre_transformer(feats) # todo 处理多尺度特征，整合为Decoder所需形式
-            feats = flatten_multi_scale_feats(feats)[0] # todo 展平后的多尺度特征
+            decoder_inputs = self.pre_transformer(feats) # 处理多尺度特征: 做多尺度位置编码等预处理工作，记录各层特征图的索引
+            feats = flatten_multi_scale_feats(feats)[0] # 展平后的多尺度特征 (256 72 128) (256 36 64) (256 18 32) (256 9 16) -> (12240 256)
+
         # todo ---------------------------------#
         # todo Decoder:
-        decoder_inputs.update(self.pre_decoder(feats))
+        decoder_inputs.update(self.pre_decoder(feats)) # todo 准备解码器的输入：查询特征、参考点(随机生成0-1之间的张量 # 三维
         decoder_outputs = self.forward_decoder(
-            reg_branches=[h.regress_head for h in self.gauss_heads],
-            **decoder_inputs) # todo 预测得到query特征和参考点
+            reg_branches=[h.regress_head for h in self.gauss_heads], # todo 取 gauss_heads中的regress_head
+            **decoder_inputs) # todo 解码
 
         query = decoder_outputs['hidden_states'] # todo 各解码层的query和参考点坐标
         reference_points = decoder_outputs['references']
@@ -226,6 +245,7 @@ class GaussTRV2(BaseModel):
         # todo 训练：损失计算
         losses = {}
         for i, gauss_head in enumerate(self.gauss_heads): # 多层
+            # todo 对各层预测得到的查询进行高斯属性预测: 对query解码得到其余高斯属性,
             loss = gauss_head(
                 query[i], reference_points[i], gt_imgs = inputs,mode=mode, **data_samples)
             for k, v in loss.items():
@@ -343,7 +363,8 @@ class GaussTRV2(BaseModel):
     def pre_decoder(self, memory):
         bs, _, c = memory.shape
         query = self.query_embeds.weight.unsqueeze(0).expand(bs, -1, -1)
-        reference_points = torch.rand((bs, query.size(1), 2)).to(query)
+        reference_points = torch.rand((bs, query.size(1), 2)).to(query) # todo 生成随机的参考点 (二维)
+        # reference_points = torch.rand((bs, query.size(1), 3)).to(query) # todo 生成三维参考点
 
         decoder_inputs_dict = dict(
             query=query, memory=memory, reference_points=reference_points)

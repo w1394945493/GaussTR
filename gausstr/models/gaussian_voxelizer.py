@@ -55,8 +55,8 @@ class GaussianVoxelizer(nn.Module):
                  opacity_thresh=0,
                  covariance_thresh=0):
         super().__init__()
-        self.voxel_size = voxel_size
-        vol_range = torch.tensor(vol_range)
+        self.voxel_size = voxel_size # todo 0.4
+        vol_range = torch.tensor(vol_range) # todo [-40 -40 -1 40 40 5.4]
         self.register_buffer('vol_range', vol_range)
 
         self.grid_shape = ((vol_range[3:] - vol_range[:3]) /
@@ -95,7 +95,7 @@ class GaussianVoxelizer(nn.Module):
                 mask &= ((cov_diag.min(1)[0] * 6) > self.covariance_thresh)
             gaussians = apply_to_items(lambda x: x[mask], gaussians)
 
-        # todo 将离散的3D高斯分布转换成体素网格上的连续概率密度场
+        # todo 将离散的3D高斯分布转换成体素
         return splat_into_3d(
             self.grid_coords, # todo 网格坐标：(L W H 3)
             **gaussians,

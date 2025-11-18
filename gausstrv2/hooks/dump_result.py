@@ -68,6 +68,7 @@ class DumpResultHookV2(Hook):
     def __init__(self,
                 interval=1,
                 save_dir='output/vis',
+                save_vis = False,
                 save_occ=True,
                 save_depth=False,
                 save_sem_seg=False,
@@ -80,10 +81,13 @@ class DumpResultHookV2(Hook):
         self.mean = torch.tensor(mean)
         self.std = torch.tensor(std)
 
+        self.save_vis = save_vis
+
         self.save_occ = save_occ
         self.save_depth = save_depth
         self.save_sem_seg = save_sem_seg
         self.save_img = save_img
+
 
         os.makedirs(save_dir,exist_ok=True)
         self.save_dir = save_dir
@@ -110,6 +114,8 @@ class DumpResultHookV2(Hook):
                         batch_idx,
                         data_batch=None,
                         outputs=None):
+        if not self.save_vis:
+            return
 
         outputs = outputs[0]
 
@@ -178,6 +184,7 @@ class DumpResultHookV2(Hook):
 
             for i in range(b):
                 data_sample = data_batch['data_samples'][i] # todo 每个batch的数据都放在一个data_samples下
+
 
                 # sem_seg_pred = seg_pred[i].argmax(dim=1)
                 sem_seg_pred = seg_pred[i]

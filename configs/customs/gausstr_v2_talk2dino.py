@@ -1,11 +1,25 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis2' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis5' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
 custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
+
+# custom_hooks = [
+#     dict(type='DumpResultHookV2',
+#          interval=1,
+#          save_dir = os.path.join(work_dir,'vis'),
+#          save_vis = True,
+#         #  save_occ = True,
+#          save_occ = False,
+#          save_depth = True,
+#          save_sem_seg = True,
+#         #  save_img = False,
+#          save_img = True,
+#          ),
+# ]  # 保存结果
 
 # input_size = (504, 896) # todo 网络输入图像的大小 使用dinov2作为主干，则应为14的倍数
 # resize_lim=[0.56, 0.56] # todo 504/900 = 896/1600=0.56
@@ -35,32 +49,59 @@ model = dict(
         in_channels=feat_dims,
         out_channels=embed_dims,
         norm_cfg=dict(type='LN2d')), #? LN2d
+    # todo 解码器
     decoder=dict(
-        type='GaussTRDecoder',
-        num_layers=3,
+        type='GaussTRDecoderV2',
+        num_layers=3, # todo 3层解码层
         return_intermediate=True,
         layer_cfg=dict(
             self_attn_cfg=dict(
-                embed_dims=embed_dims, num_heads=8, dropout=0.0),
-            cross_attn_cfg=dict(embed_dims=embed_dims, num_levels=4),
+                embed_dims=embed_dims,
+                num_heads=8,
+                dropout=0.0),
+            cross_attn_cfg=dict(
+                embed_dims=embed_dims,
+                num_levels=4),
             ffn_cfg=dict(embed_dims=embed_dims, feedforward_channels=2048)),
         post_norm_cfg=None),
     gauss_head=dict(
         type='GaussTRV2Head',
+        # todo 注：以下检测头MLP，隐藏层hidden_dim默认是input_dim * 4
         opacity_head=dict(
-            type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'), #
+            type='MLP',
+            input_dim=embed_dims,
+            # hidden_dim= embed_dims * 2,
+            output_dim=1, mode='sigmoid'), # todo 透明度
         feature_head=dict(
-            type='MLP', input_dim=embed_dims, output_dim=feat_dims), # todo
+            type='MLP',
+            input_dim=embed_dims,
+            # hidden_dim= embed_dims * 2,
+            output_dim=feat_dims), # todo 特征
         scale_head=dict(
             type='MLP',
             input_dim=embed_dims,
+            # hidden_dim= embed_dims * 2,
             output_dim=3,
             mode='sigmoid',
-            range=(1, 16)),
-        regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
-        projection=dict(type='MLP', input_dim=feat_dims, output_dim=reduce_dims),
-        segment_head=dict(type='MLP', input_dim=reduce_dims, output_dim=18), # todo 分割头
-        img_head=dict(type='MLP', input_dim=reduce_dims, output_dim=3),
+            range=(1, 16)), # todo 尺度
+        regress_head=dict(type='MLP',
+                          input_dim=embed_dims,
+                        #   hidden_dim= embed_dims * 2,
+                          output_dim=3), # todo 参考点
+        projection=dict(type='MLP',
+                        input_dim=feat_dims,
+                        # hidden_dim= feat_dims * 2,
+                        output_dim=reduce_dims),
+
+        segment_head=dict(type='MLP',
+                          input_dim=embed_dims,
+                        #   hidden_dim= embed_dims * 2,
+                          output_dim=18), # todo 分割头
+        rgb_head=dict(type='MLP',
+                      input_dim=embed_dims,
+                    #   hidden_dim= embed_dims * 2,
+                      output_dim=3), # todo 新增加的 rgb预测头
+
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
         text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
         reduce_dims=reduce_dims,
@@ -68,14 +109,16 @@ model = dict(
         patch_size=patch_size,
         voxelizer=dict(
             type='GaussianVoxelizer',
+            # todo OCC3D中的感知空间范围
             vol_range=[-40, -40, -1, 40, 40, 5.4],
+
             voxel_size=0.4,
             filter_gaussians=True,
             opacity_thresh=0.6,
             covariance_thresh=1.5e-2)))
 
 # Data
-dataset_type = 'NuScenesOccDataset' # todo NuScenesOCCDataset
+dataset_type = 'NuScenesOccDataset' # todo NuScenesOCCDatasetV2
 # data_root = 'data/nuscenes/'
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # todo
 data_prefix = dict(
@@ -169,6 +212,9 @@ shared_dataset_cfg = dict(
     data_root=data_root,
     modality=input_modality,
     data_prefix=data_prefix,
+    # load_adj_frame = True, # TODO
+    load_adj_frame = False,
+    interval = 1,
     filter_empty_gt=False)
 
 train_dataloader = dict(
@@ -227,17 +273,7 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=2) # todo 每隔多少个epoch保存一次model
+     # todo
+    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 
-custom_hooks = [
-    dict(type='DumpResultHookV2',
-         interval=1,
-         save_dir = os.path.join(work_dir,'vis'),
-         save_occ = True,
-         save_depth = True,
-         save_sem_seg = True,
-         save_img = False,
-        #  save_img = True,
-         ),
-]  # 保存结果

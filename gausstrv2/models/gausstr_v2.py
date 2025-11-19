@@ -6,7 +6,7 @@ import torch.nn as nn
 from mmengine.model import BaseModel, BaseModule, ModuleList
 from mmdet3d.registry import MODELS
 
-from einops import rearrange
+from einops import rearrange,repeat
 import torch.nn.functional as F
 
 import os
@@ -14,8 +14,9 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from gausstr.models.utils import flatten_multi_scale_feats
 
-
-
+from gausstrv2.models.encoder import mv_feature_add_position,prepare_feat_proj_data_lists
+from gausstrv2.models.encoder import warp_with_pose_depth_candidates
+from gausstrv2.models.encoder.costvolume.ldm_unet.unet import UNetModel
 
 from colorama import Fore
 def cyan(text: str) -> str:
@@ -36,11 +37,18 @@ class GaussTRV2(BaseModel):
                  gauss_head,
                  backbone=None,
                  projection=None,
+
+                 depth_head=None,
+                 cost_head=None,
+                 transformer=None,
+
                  encoder=None,
                  pos_embed=None,
                  attn_type=None,
                  **kwargs):
         super().__init__(**kwargs)
+
+        # todo backbone
         if backbone is not None:
             # todo ------------------#
             if backbone.type == 'TorchHubModel':
@@ -103,6 +111,109 @@ class GaussTRV2(BaseModel):
             num_queries, decoder.layer_cfg.self_attn_cfg.embed_dims)
         self.gauss_heads = ModuleList(
             [MODELS.build(gauss_head) for _ in range(decoder.num_layers)]) # todo num_layers:3
+
+        # todo -----------------------------------#
+        # todo 像素高斯预测
+        if depth_head is not None:
+            self.depth_head = MODELS.build(depth_head)
+        if cost_head is not None:
+            self.cost_head = MODELS.build(cost_head)
+        if transformer is not None:
+            self.transformer = MODELS.build(transformer)
+
+        num_depth_candidates = 128
+        feature_channels = 64
+        costvolume_unet_attn_res = (4,)
+        costvolume_unet_channel_mult = (1,1,1)
+        costvolume_unet_feat_dim = 128
+        num_views = 6 # num cams
+        depth_unet_feat_dim = 32
+
+        depth_unet_attn_res = [16]
+        depth_unet_channel_mult = [1, 1, 1, 1, 1]
+
+        gaussian_raw_channels = 84
+        gaussians_per_pixel = 1
+
+
+        self.regressor_feat_dim=costvolume_unet_feat_dim
+        # Cost volume refinement
+        input_channels = num_depth_candidates + feature_channels * 2
+        channels = self.regressor_feat_dim
+        self.corr_refine_net = nn.Sequential(
+            nn.Conv2d(input_channels, channels, 3, 1, 1),
+            nn.GroupNorm(8, channels),
+            nn.GELU(),
+            UNetModel(
+                image_size=None,
+                in_channels=channels,
+                model_channels=channels,
+                out_channels=channels,
+                num_res_blocks=1,
+                attention_resolutions=costvolume_unet_attn_res,
+                channel_mult=costvolume_unet_channel_mult,
+                num_head_channels=32,
+                dims=2,
+                postnorm=True,
+                num_frames=num_views,
+                use_cross_view_self_attn=True,
+            ),
+            nn.Conv2d(channels, num_depth_candidates, 3, 1, 1))
+        self.regressor_residual = nn.Conv2d(input_channels, num_depth_candidates, 1, 1, 0)
+
+        # Depth estimation: project features to get softmax based coarse depth
+        self.depth_head_lowres = nn.Sequential(
+            nn.Conv2d(num_depth_candidates, num_depth_candidates * 2, 3, 1, 1),
+            nn.GELU(),
+            nn.Conv2d(num_depth_candidates * 2, num_depth_candidates, 3, 1, 1),
+        )
+        # # CNN-based feature upsampler
+        self.proj_feature_mv = nn.Conv2d(feature_channels, depth_unet_feat_dim, 1, 1)
+        self.proj_feature_mono = nn.Conv2d(feature_channels, depth_unet_feat_dim, 1, 1)
+
+        # Depth refinement: 2D U-Net
+        input_channels = depth_unet_feat_dim*2 + 3 + 1 + 1 + 1
+        channels = depth_unet_feat_dim
+        self.refine_unet = nn.Sequential(
+            nn.Conv2d(input_channels, channels, 3, 1, 1),
+            nn.GroupNorm(4, channels),
+            nn.GELU(),
+            UNetModel(
+                image_size=None,
+                in_channels=channels,
+                model_channels=channels,
+                out_channels=channels,
+                num_res_blocks=1,
+                attention_resolutions=depth_unet_attn_res,
+                channel_mult=depth_unet_channel_mult,
+                num_head_channels=32,
+                dims=2,
+                postnorm=True,
+                num_frames=num_views,
+                use_cross_view_self_attn=True,
+            ),
+        )
+
+        # Gaussians prediction: covariance, color
+        gau_in = 3 + depth_unet_feat_dim + 2 * depth_unet_feat_dim
+        self.to_gaussians = nn.Sequential(
+            nn.Conv2d(gau_in, gaussian_raw_channels * 2, 3, 1, 1),
+            nn.GELU(),
+            nn.Conv2d(
+                gaussian_raw_channels * 2, gaussian_raw_channels, 3, 1, 1
+            ),
+        )
+
+        # Gaussians prediction: centers, opacity
+        in_channels = 1 + depth_unet_feat_dim + 1 + 1
+        channels = depth_unet_feat_dim
+        self.to_disparity = nn.Sequential(
+            nn.Conv2d(in_channels, channels * 2, 3, 1, 1),
+            nn.GELU(),
+            nn.Conv2d(channels * 2, gaussians_per_pixel * 2, 3, 1, 1),
+        )
+
+
 
     def prepare_inputs(self, inputs_dict, data_samples):
         num_views = data_samples[0].num_views
@@ -170,32 +281,32 @@ class GaussTRV2(BaseModel):
 
             # todo: 对原图缩放一下，
             resize_h, resize_w = ori_h // self.patch_size * self.patch_size, ori_w // self.patch_size * self.patch_size
-            inputs = rearrange(inputs,"b v c h w -> (b v) c h w")
-            inputs = F.interpolate(inputs,(resize_h,resize_w),mode='bilinear',align_corners=True)
+            concat = rearrange(inputs,"b v c h w -> (b v) c h w")
+            concat = F.interpolate(concat,(resize_h,resize_w),mode='bilinear',align_corners=True)
 
             if self.frozen_backbone:
                 if self.backbone.training:
                     self.backbone.eval()
                 with torch.no_grad(): # todo 提取单目视觉特征
                     if isinstance(self.backbone, BaseModule):
-                        x = self.backbone(inputs)[0]
+                        x = self.backbone(concat)[0]
                         if self.attn_type is not None:
                             x = self.custom_attn(x, self.attn_type)
                     else:
 
                         x = self.backbone.forward_features(
-                            inputs)['x_norm_patchtokens'] # todo ((b v) n 768) n = HxW / (patch_size x patch_size)
+                            concat)['x_norm_patchtokens'] # todo ((b v) n 768) n = HxW / (patch_size x patch_size)
 
                         # 原代码：必须确保 input_size 为14的倍数
                         # x = x.mT.reshape(bs * n, -1,
-                        #                  inputs.shape[-2] // self.patch_size,
-                        #                  inputs.shape[-1] // self.patch_size) # 转置 -> 重新整合为特征图
+                        #                  concat.shape[-2] // self.patch_size,
+                        #                  concat.shape[-1] // self.patch_size) # 转置 -> 重新整合为特征图
                         x = x.mT.reshape(bs * n, -1,
                                          resize_h // self.patch_size,
                                          resize_w // self.patch_size) # 转置 -> 重新整合为特征图
 
             else:
-                x = self.backbone(inputs)[0]
+                x = self.backbone(concat)[0]
         else:
             x = data_samples['feats'].flatten(0, 1)
 
@@ -209,13 +320,156 @@ class GaussTRV2(BaseModel):
             x = x.reshape(bs, n, *x.shape[1:])
             x = x[:, :data_samples['num_views']].flatten(0, 1)
 
+
+
         # todo ---------------------------------#
+        # todo MonoSplat 像素高斯预测
+
+        input_h, input_w = concat.shape[-2:] # 网络输入尺寸
+        inter_h, inter_w = 64,64
+
+        near = 0.5
+        near = torch.full((bs,n),near).to(x.device)
+        far = 100.
+        far = torch.full((bs,n),far).to(x.device)
+        num_depth_candidates = 128
+        gaussians_per_pixel = 1
+
+        cam2img = data_samples['cam2img'][...,:3,:3] # (b v 4 4) -> (b v 3 3)
+        extrinsics = data_samples['cam2ego']
+        img_aug_mat = data_samples['img_aug_mat'] # TODO 只缩放，未做其他
+
+        s_x, s_y = img_aug_mat[:, :, 0, 0], img_aug_mat[:, :, 1, 1]
+
+        s_x = s_x * inter_w / input_w
+        s_y = s_y * inter_h / input_h
+        intrinsics = cam2img.clone() # TODO 相机内参
+        intrinsics[:, :, 0, 0] *= s_x
+        intrinsics[:, :, 1, 1] *= s_y
+        intrinsics[:, :, 0, 2] *= s_x
+        intrinsics[:, :, 1, 2] *= s_y
+
+        num_reference_views = 1
+
+        cam_origins = extrinsics[:,:,:3,-1]
+        distance_matrix = torch.cdist(cam_origins, cam_origins, p=2)
+        _, idx = torch.topk(distance_matrix, num_reference_views + 1, largest=False, dim=2)
+
+        # 输出中间层特征
+        features = self.backbone.get_intermediate_layers(concat,
+                                                         self.intermediate_layer_idx[self.vit_type],
+                                                         return_class_token=True) # 4 ([bv n h_dim]) n = 252 / 14 x 448  / 14 = 18 x 32 = 576
+        features_mono, disps_rel = self.depth_head(features,
+                                                   patch_h=resize_h // self.patch_size,
+                                                   patch_w=resize_w // self.patch_size)  # (bv c h1 w1) (bv 1 h1 w1) h1 = 18 x 8 = 144  w1 = 32 x 8 = 256
+
+        features_mv = self.cost_head(features,
+                                     patch_h=resize_h // self.patch_size,
+                                     patch_w=resize_w // self.patch_size) # (bv c h1 w1) h1 = 18 x 8 = 144  w1 = 32 x 8 = 256
+
+
+        features_mv = F.interpolate(features_mv, (inter_w, inter_h), mode="bilinear", align_corners=True) #
+
+        features_mv = mv_feature_add_position(features_mv, 2, feature_channels=64)
+        features_mv_list = list(torch.unbind(rearrange(features_mv, "(b v) c h w -> b v c h w", b=bs, v=n), dim=1))
+        features_mv_list = self.transformer(
+            features_mv_list,
+            attn_num_splits=2,
+            nn_matrix=idx,
+        )
+        features_mv = rearrange(torch.stack(features_mv_list, dim=1), "b v c h w -> (b v) c h w")
+
+        features_mv_warped, intr_warped, poses_warped = (
+            prepare_feat_proj_data_lists(
+                rearrange(features_mv, "(b v) c h w -> b v c h w", v=n, b=bs),
+                intrinsics, # (b v 3 3)
+                extrinsics, # (b v 4 4)
+                num_reference_views=num_reference_views,
+                idx=idx)
+        )
+
+        min_disp = rearrange(1.0 / far.clone().detach(), "b v -> (b v) ()")
+        max_disp = rearrange(1.0 / near.clone().detach(), "b v -> (b v) ()")
+        disp_range_norm = torch.linspace(0.0, 1.0, num_depth_candidates).to(min_disp.device)
+        disp_candi_curr = (min_disp + disp_range_norm.unsqueeze(0) * (max_disp - min_disp)).type_as(features_mv)
+        disp_candi_curr = repeat(disp_candi_curr, "bv d -> bv d fh fw", fh=features_mv.shape[-2], fw=features_mv.shape[-1])
+        raw_correlation_in = []
+        for i in range(num_reference_views):
+            # 根据采样深度和相机位姿，将特征反投影到三维空间，再投影回2D图像，将邻近视图对齐到参考视图
+            features_mv_warped_i = warp_with_pose_depth_candidates(
+                features_mv_warped[:, i, :, :, :],
+                intr_warped[:, i, :, :],
+                poses_warped[:, i, :, :],
+                1 / disp_candi_curr,
+                warp_padding_mode="zeros"
+            )
+            raw_correlation_in_i = (features_mv.unsqueeze(2) * features_mv_warped_i).sum(1) / (features_mv.shape[1]**0.5)
+            raw_correlation_in.append(raw_correlation_in_i)
+
+        raw_correlation_in = torch.mean(torch.stack(raw_correlation_in, dim=1), dim=1)
+        # refine cost volume and get depths
+        features_mono_tmp = F.interpolate(features_mono, (64, 64), mode="bilinear", align_corners=True)
+        raw_correlation_in = torch.cat((raw_correlation_in, features_mv, features_mono_tmp), dim=1)
+        raw_correlation = self.corr_refine_net(raw_correlation_in) # ((b v) c h w)
+        raw_correlation = raw_correlation + self.regressor_residual(raw_correlation_in)
+        pdf = F.softmax(self.depth_head_lowres(raw_correlation), dim=1)
+        disps_metric = (disp_candi_curr * pdf).sum(dim=1, keepdim=True)
+        pdf_max = torch.max(pdf, dim=1, keepdim=True)[0]
+        pdf_max = F.interpolate(pdf_max, (ori_h, ori_w), mode="bilinear", align_corners=True)
+        disps_metric_fullres = F.interpolate(disps_metric, (ori_h, ori_w), mode="bilinear", align_corners=True)
+
+        # feature refinement
+        features_mv_in_fullres = F.interpolate(features_mv, (ori_h, ori_w), mode="bilinear", align_corners=True)
+        features_mv_in_fullres = self.proj_feature_mv(features_mv_in_fullres)
+        features_mono_in_fullres = F.interpolate(features_mono, (ori_h, ori_w), mode="bilinear", align_corners=True) # todo 通过双线性插值对单目特征进行上采样
+        features_mono_in_fullres = self.proj_feature_mono(features_mono_in_fullres)
+        disps_rel_fullres = F.interpolate(disps_rel, (ori_h, ori_w), mode="bilinear", align_corners=True)
+
+        images_reorder = rearrange(inputs, "b v c h w -> (b v) c h w")
+        refine_out = self.refine_unet(
+            torch.cat((features_mv_in_fullres, features_mono_in_fullres, images_reorder, \
+                disps_metric_fullres, disps_rel_fullres, pdf_max),
+                      dim=1)
+            )
+        raw_gaussians_in = [refine_out, features_mv_in_fullres, features_mono_in_fullres, images_reorder]
+        raw_gaussians_in = torch.cat(raw_gaussians_in, dim=1)
+        raw_gaussians = self.to_gaussians(raw_gaussians_in)
+
+        # delta fine depth and density
+        disparity_in = [refine_out, disps_metric_fullres, disps_rel_fullres, pdf_max]
+        disparity_in = torch.cat(disparity_in, dim=1)
+        delta_disps_density = self.to_disparity(disparity_in)
+        delta_disps, raw_densities = delta_disps_density.split(gaussians_per_pixel, dim=1)
+
+        # outputs
+        fine_disps = (disps_metric_fullres + delta_disps).clamp(
+            1.0 / rearrange(far, "b v -> (b v) () () ()"),
+            1.0 / rearrange(near, "b v -> (b v) () () ()"),
+        )
+        depths = 1.0 / fine_disps
+        depths = repeat(
+            depths,
+            "(b v) dpt h w -> b v (h w) srf dpt",
+            b=bs,
+            v=n,
+            srf=1,
+        )
+
+        densities = repeat(
+            F.sigmoid(raw_densities),
+            "(b v) dpt h w -> b v (h w) srf dpt",
+            b=bs,
+            v=n,
+            srf=1,
+        )
+
+        raw_gaussians = rearrange(raw_gaussians, "(b v) c h w -> b v (h w) c", v=n, b=bs)
+
+
+        # todo ---------------------------------#
+        # todo 查询高斯预测
+        # todo Neck
         feats = self.neck(x) # todo ViTDetFPN: 多尺度特征图提取
-
-
-
-
-
 
         # 注：网络输入 (3 252 484) -> backbone -> (768 18 32) -> neck -> (256 72 128) (256 36 64) (256 18 32) (256 9 16)
         if hasattr(self, 'encoder'):
@@ -225,9 +479,12 @@ class GaussTRV2(BaseModel):
             decoder_inputs = self.pre_transformer(feats) # 处理多尺度特征: 做多尺度位置编码等预处理工作，记录各层特征图的索引
             feats = flatten_multi_scale_feats(feats)[0] # 展平后的多尺度特征 (256 72 128) (256 36 64) (256 18 32) (256 9 16) -> (12240 256)
 
+
+
+
         # todo ---------------------------------#
-        # todo Decoder:
-        decoder_inputs.update(self.pre_decoder(feats)) # todo 准备解码器的输入：查询特征、参考点(随机生成0-1之间的张量 # 三维
+        # todo 解码器
+        decoder_inputs.update(self.pre_decoder(feats)) # todo 准备解码器的输入：查询特征、参考点(随机生成0-1之间的张量 # 二维/三维
         decoder_outputs = self.forward_decoder(
             reg_branches=[h.regress_head for h in self.gauss_heads], # todo 取 gauss_heads中的regress_head
             **decoder_inputs) # todo 解码
@@ -239,7 +496,7 @@ class GaussTRV2(BaseModel):
         # todo 推理
         if mode == 'predict':
             return self.gauss_heads[-1](
-                query[-1], reference_points[-1], mode=mode, **data_samples)
+                query[-1], reference_points[-1],gt_imgs = inputs, mode=mode, **data_samples)
 
         # todo ---------------------------------#
         # todo 训练：损失计算

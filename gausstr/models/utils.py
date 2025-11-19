@@ -74,7 +74,7 @@ def cam2world(points, cam2img, cam2ego, img_aug_mat=None): # points: (b,v,n,3) i
         post_trans = img_aug_mat[..., :3, 3] # (b,v,3)
         points = points - post_trans.unsqueeze(-2) # (b v n 3) - (b v 1 3) 逐点减去对应的平移向量
         points = (torch.inverse(post_rots).unsqueeze(2) # torch.inverse: 计算逆矩阵
-                  @ points.unsqueeze(-1)).squeeze(-1)
+                  @ points.unsqueeze(-1)).squeeze(-1) # 图像增强的逆 x 参考点
 
     cam2img = cam2img[..., :3, :3] # 相机 -> 像素 (3 3)
     with autocast(enabled=False):

@@ -68,7 +68,7 @@
                 // "pytorch",
             ],
             "console": "integratedTerminal",
-            "justMyCode": false,
+            // "justMyCode": false,
         },
         {
             "name": "run test gausstr v2",
@@ -97,7 +97,7 @@
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
             ],
             "console": "integratedTerminal",
-            "justMyCode": false,
+            // "justMyCode": false,
         },
         {
             "name": "dubug generate sam2",

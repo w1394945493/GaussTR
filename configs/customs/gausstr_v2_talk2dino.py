@@ -1,31 +1,34 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis5' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis6' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
 custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 
-# custom_hooks = [
-#     dict(type='DumpResultHookV2',
-#          interval=1,
-#          save_dir = os.path.join(work_dir,'vis'),
-#          save_vis = True,
-#         #  save_occ = True,
-#          save_occ = False,
-#          save_depth = True,
-#          save_sem_seg = True,
-#         #  save_img = False,
-#          save_img = True,
-#          ),
-# ]  # 保存结果
+custom_hooks = [
+    dict(type='DumpResultHookV2',
+         interval=1,
+         save_dir = os.path.join(work_dir,'vis'),
+         save_vis = True,
+         save_occ = True,
+        #  save_occ = False,
+         save_depth = True,
+         save_sem_seg = True,
+        #  save_img = False,
+         save_img = True,
+         ),
+]  # 保存结果
 
 # input_size = (504, 896) # todo 网络输入图像的大小 使用dinov2作为主干，则应为14的倍数
 # resize_lim=[0.56, 0.56] # todo 504/900 = 896/1600=0.56
 
-input_size = (252,448)
-resize_lim=[0.28, 0.28] #!
+
+
+
+input_size = (256,448)
+resize_lim=[0.284, 0.28] #!
 
 embed_dims = 256
 feat_dims = 768 #! vit-base的尺寸
@@ -40,6 +43,7 @@ model = dict(
         type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
         mean=[123.675, 116.28, 103.53],
         std=[58.395, 57.12, 57.375]),
+    # todo backbone 主干网络
     backbone=dict(
         type='TorchHubModel',
         repo_or_dir='facebookresearch/dinov2', # todo
@@ -49,6 +53,34 @@ model = dict(
         in_channels=feat_dims,
         out_channels=embed_dims,
         norm_cfg=dict(type='LN2d')), #? LN2d
+
+    # todo 像素高斯预测模块
+    depth_head = dict(
+        type='DPTHead',
+        in_channels=768,
+        features=64,
+        use_bn=False,
+        # out_channels=[48, 96, 192, 384],
+        out_channels=[96, 192, 384,768],
+        use_clstoken=False,
+    ),
+    cost_head = dict(
+        type='CostHead',
+        in_channels=768,
+        features=64,
+        use_bn=False,
+        # out_channels=[48, 96, 192, 384],
+        out_channels=[96, 192, 384, 768],
+        use_clstoken=False,
+    ),
+    transformer = dict(
+        type='MultiViewFeatureTransformer',
+        num_layers=3,
+        d_model=64,
+        nhead=1,
+        ffn_dim_expansion=4,
+    ),
+
     # todo 解码器
     decoder=dict(
         type='GaussTRDecoderV2',
@@ -105,7 +137,7 @@ model = dict(
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
         text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
         reduce_dims=reduce_dims,
-        image_shape=input_size,
+        image_shape=input_size, # todo 输入图像尺寸
         patch_size=patch_size,
         voxelizer=dict(
             type='GaussianVoxelizer',
@@ -137,10 +169,12 @@ train_pipeline = [
         color_type='color',
         num_views=6),
     dict(
-        type='ImageAug3D', # todo 对图像数据做仿射增强，同时处理相机参数矩阵，保持一致 (自定义)
+        type='ImageAug3D', # todo 对图像数据进行缩放
         final_dim=input_size,
         resize_lim=resize_lim,
-        is_train=True),
+        # is_train=True # todo 训练时，先只做缩放，其他均不考虑
+
+        ),
     dict(
         type='LoadFeatMaps', # todo 载入深度图 (自定义)
         # data_root='data/nuscenes_metric3d',
@@ -177,7 +211,11 @@ test_pipeline = [
         num_views=6),
     dict(type='LoadOccFromFile'),
     # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
-    dict(type='ImageAug3D', final_dim=input_size, resize_lim=resize_lim), #!
+    dict(type='ImageAug3D',
+         final_dim=input_size,
+         resize_lim=resize_lim
+
+         ),
     dict(
         type='LoadFeatMaps',
         # data_root='data/nuscenes_metric3d', # todo
@@ -218,7 +256,7 @@ shared_dataset_cfg = dict(
     filter_empty_gt=False)
 
 train_dataloader = dict(
-    batch_size=1,
+    batch_size=2,
     # num_workers=4,
     # num_workers=1,
     # persistent_workers=True,
@@ -258,7 +296,8 @@ test_evaluator = val_evaluator
 
 # Optimizer
 optim_wrapper = dict(
-    type='AmpOptimWrapper',
+    # type='AmpOptimWrapper',
+    type='OptimWrapper',   # 避免混合精度(AMP)
     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
     clip_grad=dict(max_norm=35, norm_type=2))
 

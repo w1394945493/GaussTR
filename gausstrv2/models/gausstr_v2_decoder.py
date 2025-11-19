@@ -178,10 +178,11 @@ class GaussTRDecoderV2(DetrTransformerDecoder):
             # todo ---------------------------------#
             # todo 回归分支：更新参考点
             if reg_branches is not None:
-                if reference_points.shape[-1] == 2:
-                    tmp_reg_preds = reg_branches[lid](query)[..., :2] # todo reg_branchs: 参考点偏移量预测结果，取前两维，只做二维预测
-                elif reference_points.shape[-1] == 3:
+                if reference_points.shape[-1] == 3:
                     tmp_reg_preds = reg_branches[lid](query) # todo 做三维预测
+                else:
+                    assert reference_points.shape[-1] == 2 # todo 二维
+                    tmp_reg_preds = reg_branches[lid](query)[..., :2] # todo reg_branchs: 参考点偏移量预测结果，取前两维，只做二维预测
 
                 new_reference_points = tmp_reg_preds + inverse_sigmoid(
                     reference_points) # todo 参考点在0-1的有限空间，网络预测结果是无界的偏移量，先将参考点inverse_sigmoid, 再和预测量相加

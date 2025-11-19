@@ -55,7 +55,7 @@ class GaussTRV2Head(BaseModule):
 
 
         self.reduce_dims = reduce_dims
-        self.image_shape = image_shape
+        self.image_shape = image_shape # todo 网络输入尺寸
         self.patch_size = patch_size
         self.depth_limit = depth_limit
         self.prompt_denoising = prompt_denoising # todo True
@@ -74,13 +74,13 @@ class GaussTRV2Head(BaseModule):
     def forward(self,
                 x, # todo 查询特征
                 ref_pts, # todo 参考点
-                depth, # todo 真实深度图
+                depth, # todo 真实深度图 (b v h w)
                 cam2img,
                 cam2ego,
                 feats=None,
-                img_aug_mat=None,
-                gt_imgs=None, # todo inputs: 网络输入(rgb)
-                sem_segs=None, # todo cam2img, cam2ego, feats, img_aug_mat, sem_segs: 标注和真值
+                img_aug_mat=None, # todo (b v 4 4)
+                gt_imgs=None, # todo inputs: 网络输入(rgb) ((b v) c h w)
+                sem_segs=None, # todo cam2img, cam2ego, feats, img_aug_mat, sem_segs: 标注和真值 (b v h w)
                 mode='tensor',
                 **kwargs):
         bs, n = cam2img.shape[:2] # todo: n: 视角数
@@ -92,23 +92,7 @@ class GaussTRV2Head(BaseModule):
         # 偏移量计算
         deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整
 
-        if ref_pts.shape[-1] == 2:
-            ref_pts = (
-                deltas[..., :2] +
-                inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # 参考点位置更新，参考点与x，y偏移量相加，得到新的参考点(在图像上的二维位置)
-
-            # -----------------------------------------------------#
-            #  GaussTR：根据二维参考点的位置，从真实的深度图(mmetric 3D预测结果) 采样深度信息
-            sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None],
-                                               ref_pts[...,:2].unsqueeze(2) * 2 - 1) # 根据参考点对深度图进行采样，得到每个参考点的信息
-            sample_depth = sample_depth[:, :, 0, 0, :, None]
-
-            points = torch.cat([
-                ref_pts * torch.tensor(self.image_shape[::-1]).to(x),
-                sample_depth * (1 + deltas[..., 2:3])
-            ], -1) # 计算3D点 (b,v,300,3)
-
-        elif ref_pts.shape[-1] == 3:
+        if ref_pts.shape[-1] == 3:
             # todo ------------------------------------------------------#
             # todo 参考点：三维 x y h + 预测的偏移量
             ref_pts = (deltas + inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # todo 增加了batch维度
@@ -119,6 +103,24 @@ class GaussTRV2Head(BaseModule):
             ],-1)
 
             sample_depth = ref_pts[...,2,None] * self.depth_limit
+        else:
+            assert ref_pts.shape[-1] == 2 # todo 二维
+
+            ref_pts = (
+                deltas[..., :2] +
+                inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # 参考点位置更新，参考点与x，y偏移量相加，得到新的参考点(在图像上的二维位置)
+
+            # -----------------------------------------------------#
+            #  todo 根据二维参考点的位置，直接从metric 3D预测的深度图中 采样深度信息
+            sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None], # flatten_bsn_forward: 用于处理(bs n ...)的张量数据
+                                               ref_pts[...,:2].unsqueeze(2) * 2 - 1) # 根据参考点对深度图进行采样，得到每个参考点的信息
+            sample_depth = sample_depth[:, :, 0, 0, :, None]
+            # 预测点 像素坐标系下
+            points = torch.cat([
+                ref_pts * torch.tensor(self.image_shape[::-1]).to(x), # todo self.image_shape: 网络输入尺寸
+                sample_depth * (1 + deltas[..., 2:3])
+            ], -1) # 计算3D点 (b,v,300,3)
+
 
 
         # todo ------------------------------------#
@@ -130,11 +132,7 @@ class GaussTRV2Head(BaseModule):
         # features = self.feature_head(x).float() # (b,v,300,768)
 
         # todo ------------------------------------#
-        # rgb_features = self.rgb_head(x).float()
-        sample_rgb = flatten_bsn_forward(F.grid_sample, gt_imgs[None],ref_pts[...,:2].unsqueeze(2) * 2 - 1)
-        sample_rgb = sample_rgb[:,:,:,0,:]
-        rgb_features = rearrange(sample_rgb,'b v c n -> b v n c')
-
+        rgb_features = self.rgb_head(x).float()
         seg_features = self.segment_head(x).float()
 
 
@@ -252,6 +250,7 @@ class GaussTRV2Head(BaseModule):
         # gsplat 进行渲染 推理occ占据预测：无需光栅化
         features = torch.cat([rgb_features,seg_features],dim=-1)
 
+
         rendered = rasterize_gaussians(
             means3d.flatten(1, 2), # (b,vx300,3)
             features.flatten(1, 2), # (b,vx300,128) 颜色/特征
@@ -308,6 +307,7 @@ class GaussTRV2Head(BaseModule):
             }]
             # return preds
             return outputs
+
         # todo ---------------------------------------#
         # todo 训练：损失计算
 
@@ -339,7 +339,8 @@ class GaussTRV2Head(BaseModule):
         # rendered_mT = rendered.flatten(2).mT
         # todo img损失 参考omni-scene工作
         # rendered_img = self.img_head(rendered)
-        reg_loss = (rendered_rgb - gt_imgs) ** 2
+        rgb_target = gt_imgs.flatten(0,1)
+        reg_loss = (rendered_rgb - rgb_target) ** 2
         losses['loss_img'] = reg_loss.mean() # todo mae损失
         # ? LPIPS损失计算: 待做
 

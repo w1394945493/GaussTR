@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis6' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis9' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -27,8 +27,8 @@ custom_hooks = [
 
 
 
-input_size = (256,448)
-resize_lim=[0.284, 0.28] #!
+input_size = (252,448)
+resize_lim=[0.28, 0.28] #!
 
 embed_dims = 256
 feat_dims = 768 #! vit-base的尺寸
@@ -256,7 +256,7 @@ shared_dataset_cfg = dict(
     filter_empty_gt=False)
 
 train_dataloader = dict(
-    batch_size=2,
+    batch_size=1,
     # num_workers=4,
     # num_workers=1,
     # persistent_workers=True,
@@ -281,7 +281,8 @@ val_dataloader = dict(
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
-        ann_file='nuscenes_mini_infos_val.pkl', # todo ann文件：.pkl
+        # ann_file='nuscenes_mini_infos_val.pkl', # todo ann文件：.pkl
+        ann_file='nuscenes_mini_infos_train.pkl',
         pipeline=test_pipeline, # todo 定义数据集处理流程
         **shared_dataset_cfg))
 test_dataloader = val_dataloader
@@ -293,6 +294,8 @@ val_evaluator = dict(
     use_lidar_mask=False,
     use_image_mask=True)
 test_evaluator = val_evaluator
+
+
 
 # Optimizer
 optim_wrapper = dict(

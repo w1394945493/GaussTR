@@ -25,6 +25,8 @@ def rasterize_gaussians(means3d,
 
     if cam2imgs.shape[-2:] == (4, 4):
         cam2imgs = cam2imgs[:, :3, :3]
+
+    # todo -------------------------------------#
     if img_aug_mats is not None:
         cam2imgs = cam2imgs.clone()
         cam2imgs[:, :2, :2] *= img_aug_mats[:, :2, :2]

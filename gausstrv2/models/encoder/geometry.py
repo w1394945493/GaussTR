@@ -19,3 +19,4 @@ def coords_grid(b, h, w, homogeneous=False, device=None):
         grid = grid.to(device)
 
     return grid
+

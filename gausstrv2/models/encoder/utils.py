@@ -212,8 +212,8 @@ def prepare_feat_proj_data_lists(features, intrinsics, extrinsics, num_reference
     if intrinsics is not None: # 内参
         # extract warp intrinsics
         intr_curr = intrinsics[:, :, :3, :3].clone().detach()  # [b, v, 3, 3]
-        # intr_curr[:, :, 0, :] *= float(w) # TODO 在外面完成内参
-        # intr_curr[:, :, 1, :] *= float(h)
+        intr_curr[:, :, 0, :] *= float(w) # TODO 在外面完成内参
+        intr_curr[:, :, 1, :] *= float(h)
         idx_to_warp = repeat(idx, "b v m -> b v m fh fw", fh=3, fw=3) # [b, v, m, 1, 1]
         intr_curr = repeat(intr_curr, "b v fh fw -> b v m fh fw", m=num_reference_views)  # [b, v, m, 3, 3]
         intr_warp = intr_curr.gather(1, idx_to_warp)  # [b, v, m, 3, 3]

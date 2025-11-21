@@ -16,7 +16,15 @@ from gausstr.models.utils import flatten_multi_scale_feats
 
 from gausstrv2.models.encoder import mv_feature_add_position,prepare_feat_proj_data_lists
 from gausstrv2.models.encoder import warp_with_pose_depth_candidates
-from gausstrv2.models.encoder.costvolume.ldm_unet.unet import UNetModel
+from gausstrv2.models.encoder import UNetModel
+from gausstrv2.geometry import sample_image_grid,get_world_rays
+from gausstrv2.models.encoder.common.gaussians import build_covariance
+from gausstrv2.misc.sh_rotation import rotate_sh
+from gausstrv2.models.types import Gaussians
+
+
+torch.autograd.set_detect_anomaly(True)
+
 
 from colorama import Fore
 def cyan(text: str) -> str:
@@ -116,6 +124,8 @@ class GaussTRV2(BaseModel):
         # todo 像素高斯预测
         if depth_head is not None:
             self.depth_head = MODELS.build(depth_head)
+            for param in self.depth_head.parameters(): #! 不冻结似乎会导致报错
+                param.requires_grad = False
         if cost_head is not None:
             self.cost_head = MODELS.build(cost_head)
         if transformer is not None:
@@ -132,7 +142,9 @@ class GaussTRV2(BaseModel):
         depth_unet_attn_res = [16]
         depth_unet_channel_mult = [1, 1, 1, 1, 1]
 
-        gaussian_raw_channels = 84
+        # gaussian_raw_channels = 84 # 2+3+4+3x25
+        gaussian_raw_channels = 12 # 2+3+4+3
+
         gaussians_per_pixel = 1
 
 
@@ -167,6 +179,7 @@ class GaussTRV2(BaseModel):
             nn.GELU(),
             nn.Conv2d(num_depth_candidates * 2, num_depth_candidates, 3, 1, 1),
         )
+
         # # CNN-based feature upsampler
         self.proj_feature_mv = nn.Conv2d(feature_channels, depth_unet_feat_dim, 1, 1)
         self.proj_feature_mono = nn.Conv2d(feature_channels, depth_unet_feat_dim, 1, 1)
@@ -203,6 +216,16 @@ class GaussTRV2(BaseModel):
                 gaussian_raw_channels * 2, gaussian_raw_channels, 3, 1, 1
             ),
         )
+
+        num_classes = 18
+        self.to_gaussians_semantic = nn.Sequential(
+            nn.Conv2d(gau_in, num_classes   * 2, 3, 1, 1),
+            nn.GELU(),
+            nn.Conv2d(
+                num_classes * 2, num_classes, 3, 1, 1
+            ),
+        )
+
 
         # Gaussians prediction: centers, opacity
         in_channels = 1 + depth_unet_feat_dim + 1 + 1
@@ -323,9 +346,17 @@ class GaussTRV2(BaseModel):
 
 
         # todo ---------------------------------#
-        # todo MonoSplat 像素高斯预测
+        # todo MonoSplat start 像素高斯预测
+        device = inputs.device
 
-        input_h, input_w = concat.shape[-2:] # 网络输入尺寸
+        # 将输入再缩放到更小的尺寸,以减少计算开销
+        h, w = 112,192 # 图像尺寸
+        inputs_resize = F.interpolate(rearrange(inputs,"b v c h w -> (b v) c h w"),size=(h,w), mode='bilinear', align_corners=False)
+        inputs_resize = rearrange(inputs_resize,"(b v) c h w -> b v c h w",b=bs)
+        concat = rearrange(inputs_resize,"b v c h w -> (b v) c h w")
+        resize_h, resize_w = h // self.patch_size * self.patch_size, w // self.patch_size * self.patch_size
+        concat = F.interpolate(concat,(resize_h,resize_w),mode='bilinear',align_corners=True)
+
         inter_h, inter_w = 64,64
 
         near = 0.5
@@ -334,15 +365,21 @@ class GaussTRV2(BaseModel):
         far = torch.full((bs,n),far).to(x.device)
         num_depth_candidates = 128
         gaussians_per_pixel = 1
+        num_surfaces = 1
+        opacity_multiplier = 1
+        gaussians_per_pixel = 1
+        gpp = gaussians_per_pixel
+        # d_sh = 25
+        scale_min = 0.5
+        scale_max = 15.0
 
         cam2img = data_samples['cam2img'][...,:3,:3] # (b v 4 4) -> (b v 3 3)
         extrinsics = data_samples['cam2ego']
-        img_aug_mat = data_samples['img_aug_mat'] # TODO 只缩放，未做其他
 
-        s_x, s_y = img_aug_mat[:, :, 0, 0], img_aug_mat[:, :, 1, 1]
+        # 900 -> 252 1600 -> 448
+        s_x, s_y = 1/1600, 1/900
 
-        s_x = s_x * inter_w / input_w
-        s_y = s_y * inter_h / input_h
+
         intrinsics = cam2img.clone() # TODO 相机内参
         intrinsics[:, :, 0, 0] *= s_x
         intrinsics[:, :, 1, 1] *= s_y
@@ -379,6 +416,7 @@ class GaussTRV2(BaseModel):
         )
         features_mv = rearrange(torch.stack(features_mv_list, dim=1), "b v c h w -> (b v) c h w")
 
+        # todo intr_warped, poses_warped
         features_mv_warped, intr_warped, poses_warped = (
             prepare_feat_proj_data_lists(
                 rearrange(features_mv, "(b v) c h w -> b v c h w", v=n, b=bs),
@@ -407,6 +445,7 @@ class GaussTRV2(BaseModel):
             raw_correlation_in.append(raw_correlation_in_i)
 
         raw_correlation_in = torch.mean(torch.stack(raw_correlation_in, dim=1), dim=1)
+
         # refine cost volume and get depths
         features_mono_tmp = F.interpolate(features_mono, (64, 64), mode="bilinear", align_corners=True)
         raw_correlation_in = torch.cat((raw_correlation_in, features_mv, features_mono_tmp), dim=1)
@@ -415,25 +454,28 @@ class GaussTRV2(BaseModel):
         pdf = F.softmax(self.depth_head_lowres(raw_correlation), dim=1)
         disps_metric = (disp_candi_curr * pdf).sum(dim=1, keepdim=True)
         pdf_max = torch.max(pdf, dim=1, keepdim=True)[0]
-        pdf_max = F.interpolate(pdf_max, (ori_h, ori_w), mode="bilinear", align_corners=True)
-        disps_metric_fullres = F.interpolate(disps_metric, (ori_h, ori_w), mode="bilinear", align_corners=True)
+        pdf_max = F.interpolate(pdf_max, (h, w), mode="bilinear", align_corners=True)
+        disps_metric_fullres = F.interpolate(disps_metric, (h, w), mode="bilinear", align_corners=True)
 
         # feature refinement
-        features_mv_in_fullres = F.interpolate(features_mv, (ori_h, ori_w), mode="bilinear", align_corners=True)
+        features_mv_in_fullres = F.interpolate(features_mv, (h, w), mode="bilinear", align_corners=True)
         features_mv_in_fullres = self.proj_feature_mv(features_mv_in_fullres)
-        features_mono_in_fullres = F.interpolate(features_mono, (ori_h, ori_w), mode="bilinear", align_corners=True) # todo 通过双线性插值对单目特征进行上采样
+        features_mono_in_fullres = F.interpolate(features_mono, (h, w), mode="bilinear", align_corners=True) # todo 通过双线性插值对单目特征进行上采样
         features_mono_in_fullres = self.proj_feature_mono(features_mono_in_fullres)
-        disps_rel_fullres = F.interpolate(disps_rel, (ori_h, ori_w), mode="bilinear", align_corners=True)
+        disps_rel_fullres = F.interpolate(disps_rel, (h, w), mode="bilinear", align_corners=True)
 
-        images_reorder = rearrange(inputs, "b v c h w -> (b v) c h w")
+        images_reorder = rearrange(inputs_resize, "b v c h w -> (b v) c h w")
         refine_out = self.refine_unet(
             torch.cat((features_mv_in_fullres, features_mono_in_fullres, images_reorder, \
                 disps_metric_fullres, disps_rel_fullres, pdf_max),
                       dim=1)
             )
+        # gaussians head
         raw_gaussians_in = [refine_out, features_mv_in_fullres, features_mono_in_fullres, images_reorder]
         raw_gaussians_in = torch.cat(raw_gaussians_in, dim=1)
         raw_gaussians = self.to_gaussians(raw_gaussians_in)
+
+        gaussians_semantic = self.to_gaussians_semantic(raw_gaussians_in)
 
         # delta fine depth and density
         disparity_in = [refine_out, disps_metric_fullres, disps_rel_fullres, pdf_max]
@@ -453,7 +495,7 @@ class GaussTRV2(BaseModel):
             b=bs,
             v=n,
             srf=1,
-        )
+        ) # (b v (h w) 1 1)
 
         densities = repeat(
             F.sigmoid(raw_densities),
@@ -461,42 +503,120 @@ class GaussTRV2(BaseModel):
             b=bs,
             v=n,
             srf=1,
+        ) # 透明(b v (h w) 1 1)
+
+        raw_gaussians = rearrange(raw_gaussians, "(b v) c h w -> b v (h w) c", v=n, b=bs) # (b v (h w) 84)
+
+        # Convert the features and depths into Gaussians.
+        xy_ray, _ = sample_image_grid((h, w), device)
+        xy_ray = rearrange(xy_ray, "h w xy -> (h w) () xy")
+        gaussians = rearrange(
+            raw_gaussians,
+            "... (srf c) -> ... srf c",
+            srf=num_surfaces,
+        )
+        offset_xy = gaussians[..., :2].sigmoid()
+        pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
+        xy_ray = xy_ray + (offset_xy - 0.5) * pixel_size
+
+
+        # 解析得到最后的gaussian属性
+        # todo intrinsics extrinsics
+        extrinsics = rearrange(extrinsics, "b v i j -> b v () () () i j")
+        intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化内参
+
+        coordinates = rearrange(xy_ray, "b v r srf xy -> b v r srf () xy")
+        gaussians = rearrange(gaussians[..., 2:], "b v r srf c -> b v r srf () c")
+        opacities = densities / gpp
+
+        # scales, rotations, sh = gaussians.split((3, 4, 3 * d_sh), dim=-1)
+        scales, rotations, rgbs = gaussians.split((3, 4, 3), dim=-1)
+        scales = scale_min + (scale_max - scale_min) * scales.sigmoid()
+        pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
+
+        # Normalize the quaternion features to yield a valid quaternion.
+        rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + 1e-8)
+        rotations = rotations.broadcast_to((*scales.shape[:-1],4)) # rotations
+
+        # Apply sigmoid to get valid colors.
+        # sh_mask = torch.ones((d_sh,), dtype=torch.float32).to(device) # d_sh: 25
+        # sh_degree = 4
+        # for degree in range(1, sh_degree + 1):
+        #     sh_mask[degree**2 : (degree + 1) ** 2] = 0.1 * 0.25**degree
+
+        # todo c2w_rotations
+        c2w_rotations = extrinsics[..., :3, :3]
+
+        # sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)
+        # sh = sh.broadcast_to((*opacities.shape, 3, d_sh)) * sh_mask
+        # harmonics = rotate_sh(sh, c2w_rotations[..., None, :, :]) # 谐函数
+
+        # Create world-space covariance matrices.
+        covariances = build_covariance(scales, rotations)
+        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # RSS_TR_T
+
+        # Compute Gaussian means.
+        origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
+        means = origins + directions * depths[..., None]
+
+        pixel_gaussians = Gaussians(
+            rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",),
+            rearrange(covariances,"b v r srf spp i j -> b (v r srf spp) i j",),
+            rearrange(scales,"b v r srf spp c -> b (v r srf spp) c",),
+            rearrange(rotations,"b v r srf spp c -> b (v r srf spp) c",),
+            rearrange(rgbs,"b v r srf spp rgb -> b (v r srf spp) rgb",),
+            rearrange(gaussians_semantic, '(b v) c h w -> b (v h w) c',b=bs),
+            # rearrange(harmonics,"b v r srf spp c d_sh -> b (v r srf spp) c d_sh",),
+            rearrange(opacity_multiplier * opacities,"b v r srf spp -> b (v r srf spp)",),
         )
 
-        raw_gaussians = rearrange(raw_gaussians, "(b v) c h w -> b v (h w) c", v=n, b=bs)
+        # todo MonoSplat end
+        # todo --------------------------------------#
+        use_query_gaussians = False
+        if use_query_gaussians:
+            # todo ---------------------------------#
+            # todo 查询高斯预测
+            # todo Neck
+            feats = self.neck(x) # todo ViTDetFPN: 多尺度特征图提取
+
+            # 注：网络输入 (3 252 484) -> backbone -> (768 18 32) -> neck -> (256 72 128) (256 36 64) (256 18 32) (256 9 16)
+            if hasattr(self, 'encoder'):
+                encoder_inputs, decoder_inputs = self.pre_transformer(feats)
+                feats = self.forward_encoder(**encoder_inputs)
+            else:
+                decoder_inputs = self.pre_transformer(feats) # 处理多尺度特征: 做多尺度位置编码等预处理工作，记录各层特征图的索引
+                feats = flatten_multi_scale_feats(feats)[0] # 展平后的多尺度特征 (256 72 128) (256 36 64) (256 18 32) (256 9 16) -> (12240 256)
 
 
-        # todo ---------------------------------#
-        # todo 查询高斯预测
-        # todo Neck
-        feats = self.neck(x) # todo ViTDetFPN: 多尺度特征图提取
 
-        # 注：网络输入 (3 252 484) -> backbone -> (768 18 32) -> neck -> (256 72 128) (256 36 64) (256 18 32) (256 9 16)
-        if hasattr(self, 'encoder'):
-            encoder_inputs, decoder_inputs = self.pre_transformer(feats)
-            feats = self.forward_encoder(**encoder_inputs)
+
+            # todo ---------------------------------#
+            # todo 解码器
+            decoder_inputs.update(self.pre_decoder(feats)) # todo 准备解码器的输入：查询特征、参考点(随机生成0-1之间的张量 # 二维/三维
+            decoder_outputs = self.forward_decoder(
+                reg_branches=[h.regress_head for h in self.gauss_heads], # todo 取 gauss_heads中的regress_head
+                **decoder_inputs) # todo 解码
+
+            query = decoder_outputs['hidden_states'] # todo 各解码层的query和参考点坐标
+            reference_points = decoder_outputs['references']
         else:
-            decoder_inputs = self.pre_transformer(feats) # 处理多尺度特征: 做多尺度位置编码等预处理工作，记录各层特征图的索引
-            feats = flatten_multi_scale_feats(feats)[0] # 展平后的多尺度特征 (256 72 128) (256 36 64) (256 18 32) (256 9 16) -> (12240 256)
+            query = []
+            reference_points = []
+            for i in range(len(self.gauss_heads)):
+                query.append(None)
+                reference_points.append(None)
 
 
-
-
-        # todo ---------------------------------#
-        # todo 解码器
-        decoder_inputs.update(self.pre_decoder(feats)) # todo 准备解码器的输入：查询特征、参考点(随机生成0-1之间的张量 # 二维/三维
-        decoder_outputs = self.forward_decoder(
-            reg_branches=[h.regress_head for h in self.gauss_heads], # todo 取 gauss_heads中的regress_head
-            **decoder_inputs) # todo 解码
-
-        query = decoder_outputs['hidden_states'] # todo 各解码层的query和参考点坐标
-        reference_points = decoder_outputs['references']
 
         # todo ---------------------------------#
         # todo 推理
         if mode == 'predict':
             return self.gauss_heads[-1](
-                query[-1], reference_points[-1],gt_imgs = inputs, mode=mode, **data_samples)
+                query[-1], reference_points[-1],
+                gt_imgs = inputs,
+                pixel_gaussians = pixel_gaussians,
+                mode=mode,
+                **data_samples)
 
         # todo ---------------------------------#
         # todo 训练：损失计算
@@ -504,9 +624,14 @@ class GaussTRV2(BaseModel):
         for i, gauss_head in enumerate(self.gauss_heads): # 多层
             # todo 对各层预测得到的查询进行高斯属性预测: 对query解码得到其余高斯属性,
             loss = gauss_head(
-                query[i], reference_points[i], gt_imgs = inputs,mode=mode, **data_samples)
+                query[i], reference_points[i],
+                gt_imgs = inputs,
+                pixel_gaussians = pixel_gaussians,
+                mode=mode,
+                **data_samples)
             for k, v in loss.items():
                 losses[f'{k}/{i}'] = v
+
         return losses
 
     def custom_attn(self, x, attn_type):

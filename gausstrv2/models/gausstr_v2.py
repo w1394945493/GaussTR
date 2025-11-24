@@ -50,6 +50,9 @@ class GaussTRV2(BaseModel):
                  cost_head=None,
                  transformer=None,
 
+                 near = 0.5,
+                 far = 51.2,
+
                  encoder=None,
                  pos_embed=None,
                  attn_type=None,
@@ -130,6 +133,9 @@ class GaussTRV2(BaseModel):
             self.cost_head = MODELS.build(cost_head)
         if transformer is not None:
             self.transformer = MODELS.build(transformer)
+
+        self.near = near
+        self.far = far
 
         num_depth_candidates = 128
         feature_channels = 64
@@ -359,10 +365,12 @@ class GaussTRV2(BaseModel):
 
         inter_h, inter_w = 64,64
 
-        near = 0.5
+        near = self.near
         near = torch.full((bs,n),near).to(x.device)
-        far = 100.
+        far = self.far
         far = torch.full((bs,n),far).to(x.device)
+
+
         num_depth_candidates = 128
         gaussians_per_pixel = 1
         num_surfaces = 1
@@ -426,19 +434,21 @@ class GaussTRV2(BaseModel):
                 idx=idx)
         )
 
+        # todo 将深度范围[near, far]映射到视差范围[1/far, 1/near], 确保在视差范围内均匀采样
         min_disp = rearrange(1.0 / far.clone().detach(), "b v -> (b v) ()") # far: 100.0
         max_disp = rearrange(1.0 / near.clone().detach(), "b v -> (b v) ()") # near: 0.5
         disp_range_norm = torch.linspace(0.0, 1.0, num_depth_candidates).to(min_disp.device) # num_depth_candidates: 128
         disp_candi_curr = (min_disp + disp_range_norm.unsqueeze(0) * (max_disp - min_disp)).type_as(features_mv)
         disp_candi_curr = repeat(disp_candi_curr, "bv d -> bv d fh fw", fh=features_mv.shape[-2], fw=features_mv.shape[-1])
+
+        # todo 构建多视角代价体
         raw_correlation_in = []
         for i in range(num_reference_views):
-            # 根据采样深度和相机位姿，将特征反投影到三维空间，再投影回2D图像，将邻近视图对齐到参考视图
             features_mv_warped_i = warp_with_pose_depth_candidates(
                 features_mv_warped[:, i, :, :, :],
                 intr_warped[:, i, :, :],
                 poses_warped[:, i, :, :],
-                1 / disp_candi_curr,
+                1 / disp_candi_curr, # disp：候选视差 -> 1 / disp: 候选深度
                 warp_padding_mode="zeros"
             )
             raw_correlation_in_i = (features_mv.unsqueeze(2) * features_mv_warped_i).sum(1) / (features_mv.shape[1]**0.5)
@@ -503,7 +513,7 @@ class GaussTRV2(BaseModel):
             b=bs,
             v=n,
             srf=1,
-        ) # 透明(b v (h w) 1 1)
+        ) # 密度/透明度 (b v (h w) 1 1)
 
         raw_gaussians = rearrange(raw_gaussians, "(b v) c h w -> b v (h w) c", v=n, b=bs) # (b v (h w) 84)
 
@@ -553,7 +563,7 @@ class GaussTRV2(BaseModel):
 
         # Create world-space covariance matrices.
         covariances = build_covariance(scales, rotations)
-        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # RSS_TR_T
+        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # 自车坐标系下的协方差矩阵
 
         # Compute Gaussian means.
         origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)

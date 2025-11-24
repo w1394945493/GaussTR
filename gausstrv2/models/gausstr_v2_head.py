@@ -36,9 +36,15 @@ class GaussTRV2Head(BaseModule):
                  image_shape,
                  patch_size,
                  voxelizer,
+
                  segment_head=None,
                  rgb_head=None,
                  loss_lpips=None,
+                 loss_depth=None,
+
+                 near = 0.5,
+                 far = 51.2,
+
                  depth_limit=51.2,
                  projection=None,
                  text_protos=None,
@@ -49,18 +55,24 @@ class GaussTRV2Head(BaseModule):
         self.scale_head = MODELS.build(scale_head)
         self.regress_head = MODELS.build(regress_head)
 
+        # todo 增加的模块
         self.segment_head = MODELS.build(
             segment_head) if segment_head else None
         self.rgb_head = MODELS.build(
             rgb_head) if rgb_head else None
         self.loss_lpips = MODELS.build(
             loss_lpips) if loss_lpips else None
+        self.loss_depth = MODELS.build(
+            loss_depth) if loss_depth else None
 
+        self.near = near
+        self.far = far
 
         self.reduce_dims = reduce_dims
         self.image_shape = image_shape # todo 网络输入尺寸
         self.patch_size = patch_size
         self.depth_limit = depth_limit
+
         self.prompt_denoising = prompt_denoising # todo True
 
         if projection is not None:
@@ -243,8 +255,6 @@ class GaussTRV2Head(BaseModule):
         # todo ---------------------------------------#
         # todo 推理
         if mode == 'predict':
-
-
             # todo 体素化
             density, grid_feats = self.voxelizer(
                 # means3d=means3d.flatten(1, 2),  # (b,v,300,3) -> flatten: (b,vx300,3)
@@ -295,18 +305,33 @@ class GaussTRV2Head(BaseModule):
         # depth = torch.where(depth < self.depth_limit, depth,
         #                     1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
 
-        depth =  depth.clamp(max=self.depth_limit).flatten(0,1)
-        # todo 深度估计损失 MonoSplat中，没有计算深度损失
-        losses['loss_depth'] = self.depth_loss(rendered_depth, depth) # todo 深度图计算损失
-        losses['mae_depth'] = self.depth_loss(
-            rendered_depth, depth, criterion='l1')
+        depth = depth.clamp(max=self.depth_limit)
+        depth = depth.flatten(0,1)
+        # todo 深度估计损失 在MonoSplat工作中，没有对深度估计的结果做监督
+        losses['loss_silog_l1_depth'] = self.depth_loss(rendered_depth, depth) # Silog损失
+        # losses['mae_depth'] = self.depth_loss(
+        #     rendered_depth, depth, criterion='l1') # todo 11.24 感觉这个损失的计算重复了
 
+        # todo wys 11.24 尝试引入一下MonoSplat设计的depth预测损失
+        if self.loss_depth:
+            near = self.near
+            near = torch.full((bs,n),near).to(depth.device)
+            far = self.far
+            far = torch.full((bs,n),far).to(depth.device)
+
+            losses['loss_depth'] = self.loss_depth.forward(
+                rearrange(rendered_depth,'(bs v) h w -> bs v h w',bs=bs),
+                gt_imgs,
+                near=near,
+                far=far,)
+
+        # todo MSE损失计算
         rgb_target = gt_imgs.flatten(0,1)
         reg_loss = (rendered_rgb - rgb_target) ** 2
         losses['loss_mae'] = reg_loss.mean() # todo mae损失
-        # ? LPIPS损失计算: wys 11.24
+        # todo LPIPS损失计算: wys 11.24
         if self.loss_lpips:
-            losses['loss_lpips'] = self.loss_lpips.forward(rgb_target,rendered_rgb)
+            losses['loss_lpips'] = self.loss_lpips(rgb_target,rendered_rgb)
 
 
         # todo 语义预测损失计算

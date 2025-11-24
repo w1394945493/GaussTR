@@ -156,7 +156,7 @@ class GaussTRHead(BaseModule):
         scales = self.scale_head(x) * self.scale_transform(
             sample_depth, cam2img[..., 0, 0]).clamp(1e-6)
         covariances = flatten_bsn_forward(get_covariance, scales,
-                                          cam2ego[..., None, :3, :3])
+                                          cam2ego[..., None, :3, :3]) # RS(RS)^T：协方差计算
         # todo ------------------------------------#
         # todo： 旋转计算
         rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])

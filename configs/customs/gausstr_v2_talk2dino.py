@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis10' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis11' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -24,16 +24,20 @@ custom_hooks = [
 # input_size = (504, 896) # todo 网络输入图像的大小 使用dinov2作为主干，则应为14的倍数
 # resize_lim=[0.56, 0.56] # todo 504/900 = 896/1600=0.56
 
+# input_size = (252,448)
+# resize_lim=[0.28, 0.28]
 
-
-
-input_size = (252,448)
-resize_lim=[0.28, 0.28] #!
+input_size = (112,192)
+resize_lim=[0.1244, 0.12] #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
 
 embed_dims = 256
 feat_dims = 768 #! vit-base的尺寸
 reduce_dims = 128
 patch_size = 14
+
+near = 0.5
+far = 51.2
+# far = 100.
 
 model = dict(
     # type='GaussTR',
@@ -80,6 +84,9 @@ model = dict(
         nhead=1,
         ffn_dim_expansion=4,
     ),
+
+    near = near,
+    far = far,
 
     # todo 解码器
     decoder=dict(
@@ -138,7 +145,15 @@ model = dict(
             type='LossLpips',
             weight = 0.05,
         ),
-        depth_limit=100.,
+        loss_depth = dict(
+            type = "LossDepth",
+            weight = 0.25,
+        ),
+        near = near,
+        far = far,
+        # depth_limit=51.2, # GaussTR：51.2
+        depth_limit=far,
+
 
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
         text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
@@ -273,6 +288,7 @@ train_dataloader = dict(
     dataset=dict(
         # ann_file='nuscenes_infos_train.pkl',
         ann_file='nuscenes_mini_infos_train.pkl',
+        # ann_file='nuscenes_mini_infos_val.pkl',
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(

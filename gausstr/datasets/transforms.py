@@ -212,10 +212,17 @@ class ImageAug3D(BaseTransform):
     def sample_augmentation(self, results):
         H, W = results['ori_shape']
         fH, fW = self.final_dim
+
+        resize = [fW/W, fH/H]
+        resize_dims = (fW, fH)
+        newW, newH = resize_dims
+
         if self.is_train:
-            resize = np.random.uniform(*self.resize_lim) # 在给定范围内随机生成浮动数值
-            resize_dims = (int(W * resize), int(H * resize))
-            newW, newH = resize_dims
+            # resize = np.random.uniform(*self.resize_lim) # 在给定范围内随机生成浮动数值
+            # resize_dims = (int(W * resize), int(H * resize))
+            # newW, newH = resize_dims
+
+
             crop_h = int(
                 (1 - np.random.uniform(*self.bot_pct_lim)) * newH) - fH
             crop_w = int(np.random.uniform(0, max(0, newW - fW)))
@@ -225,9 +232,11 @@ class ImageAug3D(BaseTransform):
                 flip = True
             rotate = np.random.uniform(*self.rot_lim)
         else:
-            resize = np.mean(self.resize_lim)
-            resize_dims = (int(W * resize), int(H * resize))
-            newW, newH = resize_dims
+            # resize = np.mean(self.resize_lim)
+            # resize_dims = (int(W * resize), int(H * resize))
+            # newW, newH = resize_dims
+
+
             crop_h = int((1 - np.mean(self.bot_pct_lim)) * newH) - fH
             crop_w = int(max(0, newW - fW) / 2)
             crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
@@ -246,7 +255,8 @@ class ImageAug3D(BaseTransform):
         img = img.rotate(rotate)
 
         # post-homography transformation
-        rotation *= resize
+        # rotation *= resize
+        rotation = resize @ rotation
         translation -= torch.Tensor(crop[:2])
         if flip:
             A = torch.Tensor([[-1, 0], [0, 1]])
@@ -274,6 +284,9 @@ class ImageAug3D(BaseTransform):
                 data)
             post_rot = torch.eye(2)
             post_tran = torch.zeros(2)
+
+            # todo
+            resize =  torch.diag(torch.tensor(resize, dtype=post_rot.dtype, device=post_rot.device))
             new_img, rotation, translation = self.img_transform(
                 img,
                 post_rot,
@@ -289,6 +302,7 @@ class ImageAug3D(BaseTransform):
             transform[:2, 3] = translation
             new_imgs.append(np.array(new_img).astype(np.float32))
             transforms.append(transform.numpy())
+
         data['img'] = new_imgs # (H,W,3) 0-255
         # update the calibration matrices
         data['img_aug_mat'] = transforms # todo 变换矩阵

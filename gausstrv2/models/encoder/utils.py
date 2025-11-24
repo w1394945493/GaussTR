@@ -192,10 +192,10 @@ def prepare_feat_proj_data_lists(features, intrinsics, extrinsics, num_reference
         # extract warp poses
         idx_to_warp = repeat(idx, "b v m -> b v m fw fh", fw=4, fh=4) # [b, v, m, 1, 1]
         extrinsics_cur = repeat(extrinsics.clone().detach(), "b v fh fw -> b v m fh fw", m=num_reference_views)  # [b, v, 4, 4]
-        poses_others = extrinsics_cur.gather(1, idx_to_warp)  # [b, v, m, 4, 4]
-        poses_others_inv = torch.linalg.inv(poses_others)  # [b, v, m, 4, 4]
+        poses_others = extrinsics_cur.gather(1, idx_to_warp)  # [b, v, m, 4, 4]     # 按照 idx 取出对应参考视角的外参 [b, v, m, 4, 4]
+        poses_others_inv = torch.linalg.inv(poses_others)  # [b, v, m, 4, 4]    # 计算这些外参的逆矩阵，变成参考视角→世界的变换
         poses_cur = extrinsics.clone().detach().unsqueeze(2)  # [b, v, 1, 4, 4]
-        poses_warp = poses_others_inv @ poses_cur  # [b, v, m, 4, 4]
+        poses_warp = poses_others_inv @ poses_cur  # [b, v, m, 4, 4]    # 计算参考视角到当前视角的相对变换 [b, v, m, 4, 4]
         poses_warp = rearrange(poses_warp, "b v m ... -> (b v) m ...")  # [bxv, m, 4, 4]
     else:
         poses_warp = None
@@ -212,8 +212,8 @@ def prepare_feat_proj_data_lists(features, intrinsics, extrinsics, num_reference
     if intrinsics is not None: # 内参
         # extract warp intrinsics
         intr_curr = intrinsics[:, :, :3, :3].clone().detach()  # [b, v, 3, 3]
-        intr_curr[:, :, 0, :] *= float(w) # TODO 在外面完成内参
-        intr_curr[:, :, 1, :] *= float(h)
+        intr_curr[:, :, 0, :] *= float(w)  # 乘以特征图宽度，缩放内参的第一行（fx, cx）
+        intr_curr[:, :, 1, :] *= float(h) # 乘以特征图高度，缩放内参的第二行（fy, cy） 根据特征图大小调整内参，确保内参和特征图尺寸对应。
         idx_to_warp = repeat(idx, "b v m -> b v m fh fw", fh=3, fw=3) # [b, v, m, 1, 1]
         intr_curr = repeat(intr_curr, "b v fh fw -> b v m fh fw", m=num_reference_views)  # [b, v, m, 3, 3]
         intr_warp = intr_curr.gather(1, idx_to_warp)  # [b, v, m, 3, 3]
@@ -226,9 +226,9 @@ def prepare_feat_proj_data_lists(features, intrinsics, extrinsics, num_reference
 
 def warp_with_pose_depth_candidates(
     feature1,
-    intrinsics,
-    pose,
-    depth,
+    intrinsics, # 内参
+    pose,  # 外参
+    depth, # 候选深度
     clamp_min_depth=1e-3,
     warp_padding_mode="zeros",
 ):
@@ -243,22 +243,22 @@ def warp_with_pose_depth_candidates(
     assert pose.size(1) == pose.size(2) == 4
     assert depth.dim() == 4
 
-    b, d, h, w = depth.size()
+    b, d, h, w = depth.size() # d: 候选深度数量
     c = feature1.size(1)
 
     with torch.no_grad():
-        # pixel coordinates
+        # pixel coordinates # todo 准备像素网格
         grid = coords_grid(
             b, h, w, homogeneous=True, device=depth.device
-        )  # [B, 3, H, W]
+        )  # [B, 3, H, W] 构建每个像素的齐次坐标
         # back project to 3D and transform viewpoint
-        points = torch.inverse(intrinsics).bmm(grid.view(b, 3, -1))  # [B, 3, H*W]
+        points = torch.inverse(intrinsics).bmm(grid.view(b, 3, -1))  # [B, 3, H*W]  将像素反投影到相机坐标系
         points = torch.bmm(pose[:, :3, :3], points).unsqueeze(2).repeat(
             1, 1, d, 1
         ) * depth.view(
             b, 1, d, h * w
-        )  # [B, 3, D, H*W]
-        points = points + pose[:, :3, -1:].unsqueeze(-1)  # [B, 3, D, H*W]
+        )  # [B, 3, D, H*W] 把点按旋转矩阵旋转，从
+        points = points + pose[:, :3, -1:].unsqueeze(-1)  # [B, 3, D, H*W] # 加上相机平移量
         # reproject to 2D image plane
         points = torch.bmm(intrinsics, points.view(b, 3, -1)).view(
             b, 3, d, h * w

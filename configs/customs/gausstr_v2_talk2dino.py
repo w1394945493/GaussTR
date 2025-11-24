@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis9' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis10' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -133,6 +133,12 @@ model = dict(
                       input_dim=embed_dims,
                     #   hidden_dim= embed_dims * 2,
                       output_dim=3), # todo 新增加的 rgb预测头
+        # todo wys 11.24 loss lpips
+        loss_lpips=dict(
+            type='LossLpips',
+            weight = 0.05,
+        ),
+        depth_limit=100.,
 
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
         text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
@@ -281,8 +287,8 @@ val_dataloader = dict(
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
-        # ann_file='nuscenes_mini_infos_val.pkl', # todo ann文件：.pkl
-        ann_file='nuscenes_mini_infos_train.pkl',
+        ann_file='nuscenes_mini_infos_val.pkl', # todo ann文件：.pkl
+        # ann_file='nuscenes_mini_infos_train.pkl',
         pipeline=test_pipeline, # todo 定义数据集处理流程
         **shared_dataset_cfg))
 test_dataloader = val_dataloader

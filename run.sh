@@ -84,16 +84,16 @@ python /home/lianghao/wangyushen/Projects/GaussTR/demo.py \
 
 # todo GaussTRV2
 # todo 训练
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=0
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train6
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train7
 
 
 
 # todo 评估/可视化
 export CUDA_VISIBLE_DEVICES=5
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train5/epoch_24.pth \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train7/epoch_24.pth \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/test

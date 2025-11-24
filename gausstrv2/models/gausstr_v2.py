@@ -426,9 +426,9 @@ class GaussTRV2(BaseModel):
                 idx=idx)
         )
 
-        min_disp = rearrange(1.0 / far.clone().detach(), "b v -> (b v) ()")
-        max_disp = rearrange(1.0 / near.clone().detach(), "b v -> (b v) ()")
-        disp_range_norm = torch.linspace(0.0, 1.0, num_depth_candidates).to(min_disp.device)
+        min_disp = rearrange(1.0 / far.clone().detach(), "b v -> (b v) ()") # far: 100.0
+        max_disp = rearrange(1.0 / near.clone().detach(), "b v -> (b v) ()") # near: 0.5
+        disp_range_norm = torch.linspace(0.0, 1.0, num_depth_candidates).to(min_disp.device) # num_depth_candidates: 128
         disp_candi_curr = (min_disp + disp_range_norm.unsqueeze(0) * (max_disp - min_disp)).type_as(features_mv)
         disp_candi_curr = repeat(disp_candi_curr, "bv d -> bv d fh fw", fh=features_mv.shape[-2], fw=features_mv.shape[-1])
         raw_correlation_in = []

@@ -38,6 +38,7 @@ class GaussTRV2Head(BaseModule):
                  voxelizer,
                  segment_head=None,
                  rgb_head=None,
+                 loss_lpips=None,
                  depth_limit=51.2,
                  projection=None,
                  text_protos=None,
@@ -52,6 +53,8 @@ class GaussTRV2Head(BaseModule):
             segment_head) if segment_head else None
         self.rgb_head = MODELS.build(
             rgb_head) if rgb_head else None
+        self.loss_lpips = MODELS.build(
+            loss_lpips) if loss_lpips else None
 
 
         self.reduce_dims = reduce_dims
@@ -86,12 +89,11 @@ class GaussTRV2Head(BaseModule):
                 **kwargs):
 
         bs, n = cam2img.shape[:2] # todo: n: 视角数
+        # depth = depth.clamp(max=self.depth_limit) # depth_limit: 51.2
+
         if x is not None:
             assert ref_pts is not None
             x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
-
-            depth = depth.clamp(max=self.depth_limit) # depth_limit: 51.2
-
             # ----------------------------------------------------#
             # 偏移量计算
             deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整
@@ -289,24 +291,28 @@ class GaussTRV2Head(BaseModule):
         # todo 训练：损失计算
 
         losses = {}
-        depth = torch.where(depth < self.depth_limit, depth,
-                            1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
+        # GaussTR原代码：把depth中大于等于depth_limit的深度值全部替换成1e-3
+        # depth = torch.where(depth < self.depth_limit, depth,
+        #                     1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
 
-        # todo 深度估计损失
+        depth =  depth.clamp(max=self.depth_limit).flatten(0,1)
+        # todo 深度估计损失 MonoSplat中，没有计算深度损失
         losses['loss_depth'] = self.depth_loss(rendered_depth, depth) # todo 深度图计算损失
         losses['mae_depth'] = self.depth_loss(
             rendered_depth, depth, criterion='l1')
 
         rgb_target = gt_imgs.flatten(0,1)
         reg_loss = (rendered_rgb - rgb_target) ** 2
-        losses['loss_img'] = reg_loss.mean() # todo mae损失
-        # ? LPIPS损失计算: 待做
+        losses['loss_mae'] = reg_loss.mean() # todo mae损失
+        # ? LPIPS损失计算: wys 11.24
+        if self.loss_lpips:
+            losses['loss_lpips'] = self.loss_lpips.forward(rgb_target,rendered_rgb)
 
 
+        # todo 语义预测损失计算
         probs = rendered_seg.flatten(2).mT
         target = sem_segs.flatten(0, 1).flatten(1).long()
         target = torch.where(target == 12, torch.tensor(0, device=target.device), target)
-
         losses['loss_ce'] = F.cross_entropy(
             probs.mT,
             target, # 分割图: min：0 max：17

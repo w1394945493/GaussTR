@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis11' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis13' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -167,8 +167,12 @@ model = dict(
 
             voxel_size=0.4,
             filter_gaussians=True,
-            opacity_thresh=0.6,
-            covariance_thresh=1.5e-2)))
+            # filter_gaussians = False, # todo 是否对高斯点进行过滤
+            opacity_thresh=0.1, # 过滤透明度过低的高斯点
+            # covariance_thresh=1.5e-2
+            covariance_thresh=1.5e-2
+
+            )))
 
 # Data
 dataset_type = 'NuScenesOccDataset' # todo NuScenesOCCDatasetV2

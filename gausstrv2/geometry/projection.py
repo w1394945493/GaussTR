@@ -79,10 +79,10 @@ def unproject(
     """Unproject 2D camera coordinates with the given Z values."""
 
     # Apply the inverse intrinsics to the coordinates.
-    coordinates = homogenize_points(coordinates)
+    coordinates = homogenize_points(coordinates) # 将坐标变成齐次坐标
     ray_directions = einsum(
         intrinsics.inverse(), coordinates, "... i j, ... j -> ... i"
-    )
+    ) # 将像素坐标变换到相机坐标
 
     # Apply the supplied depth values.
     return ray_directions * z[..., None]
@@ -105,11 +105,11 @@ def get_world_rays(
     directions = directions / directions[..., -1:]
 
     # Transform ray directions to world coordinates.
-    directions = homogenize_vectors(directions)
-    directions = transform_cam2world(directions, extrinsics)[..., :-1]
+    directions = homogenize_vectors(directions) # 变为齐次坐标
+    directions = transform_cam2world(directions, extrinsics)[..., :-1] # 使用外参把方向变换到世界坐标系
 
     # Tile the ray origins to have the same shape as the ray directions.
-    origins = extrinsics[..., :-1, -1].broadcast_to(directions.shape)
+    origins = extrinsics[..., :-1, -1].broadcast_to(directions.shape) # 使用外参的平移部分作为原始坐标
 
     return origins, directions
 

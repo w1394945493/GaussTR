@@ -252,13 +252,16 @@ def warp_with_pose_depth_candidates(
             b, h, w, homogeneous=True, device=depth.device
         )  # [B, 3, H, W] 构建每个像素的齐次坐标
         # back project to 3D and transform viewpoint
-        points = torch.inverse(intrinsics).bmm(grid.view(b, 3, -1))  # [B, 3, H*W]  将像素反投影到相机坐标系
+        # todo 将像素反投影到相机坐标系
+        points = torch.inverse(intrinsics).bmm(grid.view(b, 3, -1))  # [B, 3, H*W]
+        # todo 把点绕旋转矩阵旋转,从当前视角坐标系转换到参考视角坐标系, 对每个候选深度乘以射线方向向量,得到该深度下的三维点坐标
         points = torch.bmm(pose[:, :3, :3], points).unsqueeze(2).repeat(
             1, 1, d, 1
         ) * depth.view(
             b, 1, d, h * w
-        )  # [B, 3, D, H*W] 把点按旋转矩阵旋转，从
+        )  # [B, 3, D, H*W]
         points = points + pose[:, :3, -1:].unsqueeze(-1)  # [B, 3, D, H*W] # 加上相机平移量
+        # todo 将3D点投影回像素平面
         # reproject to 2D image plane
         points = torch.bmm(intrinsics, points.view(b, 3, -1)).view(
             b, 3, d, h * w

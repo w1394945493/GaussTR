@@ -130,15 +130,15 @@ class GaussTRHead(BaseModule):
         bs, n = cam2img.shape[:2] # todo
         x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
 
-        deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整
+        deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整: x,y, 
         ref_pts = (
             deltas[..., :2] +
             inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # 参考点位置更新，参考点与x，y偏移量相加，得到新的参考点
 
         depth = depth.clamp(max=self.depth_limit)
-        sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None],
-                                           ref_pts.unsqueeze(2) * 2 - 1) # 根据参考点对深度图进行采样，得到每个参考点的信息
-        sample_depth = sample_depth[:, :, 0, 0, :, None]
+        sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None], # depth: (b v 1 h w)
+                                           ref_pts.unsqueeze(2) * 2 - 1) # (b v 1 n 2) 根据参考点对深度图进行采样，得到每个参考点的信息
+        sample_depth = sample_depth[:, :, 0, 0, :, None] # (b v 1 1 n) -> (b v n 1)
         points = torch.cat([
             ref_pts * torch.tensor(self.image_shape[::-1]).to(x),
             sample_depth * (1 + deltas[..., 2:3])

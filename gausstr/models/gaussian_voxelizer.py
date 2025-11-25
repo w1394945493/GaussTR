@@ -85,6 +85,15 @@ class GaussianVoxelizer(nn.Module):
             covariances=covariances,
             **kwargs)
 
+        '''
+        import numpy as np
+        # 保存为 numpy
+        np.save("means3d_query.npy", means3d.cpu().numpy())
+        np.save("vol_range.npy", self.vol_range.cpu().numpy())
+
+        print("保存完毕: means3d.npy, vol_range.npy")
+        '''
+        # todo 对高斯点进行过滤
         if self.filter_gaussians:
             mask = opacities.squeeze(1) > self.opacity_thresh
             for i in range(3):

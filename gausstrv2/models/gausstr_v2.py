@@ -22,6 +22,7 @@ from gausstrv2.models.encoder.common.gaussians import build_covariance
 from gausstrv2.misc.sh_rotation import rotate_sh
 from gausstrv2.models.types import Gaussians
 
+from gausstr.models.utils import cam2world
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -129,6 +130,8 @@ class GaussTRV2(BaseModel):
             self.depth_head = MODELS.build(depth_head)
             for param in self.depth_head.parameters(): #! 不冻结似乎会导致报错
                 param.requires_grad = False
+
+
         if cost_head is not None:
             self.cost_head = MODELS.build(cost_head)
         if transformer is not None:
@@ -149,7 +152,9 @@ class GaussTRV2(BaseModel):
         depth_unet_channel_mult = [1, 1, 1, 1, 1]
 
         # gaussian_raw_channels = 84 # 2+3+4+3x25
-        gaussian_raw_channels = 12 # 2+3+4+3
+        # gaussian_raw_channels = 12 # 2+3+4+3
+        #??? 增加了一个delats的预测量
+        gaussian_raw_channels = 13 # 2+1+3+4+3=13
 
         gaussians_per_pixel = 1
 
@@ -381,14 +386,17 @@ class GaussTRV2(BaseModel):
         scale_min = 0.5
         scale_max = 15.0
 
-        cam2img = data_samples['cam2img'][...,:3,:3] # (b v 4 4) -> (b v 3 3)
+        cam2img = data_samples['cam2img'] # (b v 4 4) -> (b v 3 3)
+        cam2ego = data_samples['cam2ego']
+        img_aug_mat = data_samples['img_aug_mat']
+
         extrinsics = data_samples['cam2ego']
 
         # 900 -> 252 1600 -> 448
         s_x, s_y = 1/1600, 1/900
 
 
-        intrinsics = cam2img.clone() # TODO 相机内参
+        intrinsics = cam2img[...,:3,:3].clone() # TODO 相机内参
         intrinsics[:, :, 0, 0] *= s_x
         intrinsics[:, :, 1, 1] *= s_y
         intrinsics[:, :, 0, 2] *= s_x
@@ -431,7 +439,7 @@ class GaussTRV2(BaseModel):
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)
                 num_reference_views=num_reference_views,
-                idx=idx)
+                idx=idx) # idx
         )
 
         # todo 将深度范围[near, far]映射到视差范围[1/far, 1/near], 确保在视差范围内均匀采样
@@ -494,11 +502,12 @@ class GaussTRV2(BaseModel):
         delta_disps, raw_densities = delta_disps_density.split(gaussians_per_pixel, dim=1)
 
         # outputs
+        # todo 深度
         fine_disps = (disps_metric_fullres + delta_disps).clamp(
             1.0 / rearrange(far, "b v -> (b v) () () ()"),
             1.0 / rearrange(near, "b v -> (b v) () () ()"),
-        )
-        depths = 1.0 / fine_disps
+        ) # 原始视差+细化的偏移量，将预测视差限制在此[1/far,1/near]范围内
+        depths = 1.0 / fine_disps # 将视差转换成深度
         depths = repeat(
             depths,
             "(b v) dpt h w -> b v (h w) srf dpt",
@@ -506,7 +515,7 @@ class GaussTRV2(BaseModel):
             v=n,
             srf=1,
         ) # (b v (h w) 1 1)
-
+        # todo 透明度
         densities = repeat(
             F.sigmoid(raw_densities),
             "(b v) dpt h w -> b v (h w) srf dpt",
@@ -524,19 +533,29 @@ class GaussTRV2(BaseModel):
             raw_gaussians,
             "... (srf c) -> ... srf c",
             srf=num_surfaces,
-        )
+        ) # c = 12 = 2(offset_xy) + 3(scales) + 4(rotations) + 3(rgbs)
         offset_xy = gaussians[..., :2].sigmoid()
+
+        #??----------------------------------------?
+        #??????? delats：一个细化深度的参数
+        delats = gaussians[...,3]
+
         pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
-        xy_ray = xy_ray + (offset_xy - 0.5) * pixel_size
+        xy_ray = xy_ray + (offset_xy - 0.5) * pixel_size # 归一化的图像坐标
 
 
         # 解析得到最后的gaussian属性
         # todo intrinsics extrinsics
         extrinsics = rearrange(extrinsics, "b v i j -> b v () () () i j")
-        intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化内参
+        intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
 
-        coordinates = rearrange(xy_ray, "b v r srf xy -> b v r srf () xy")
-        gaussians = rearrange(gaussians[..., 2:], "b v r srf c -> b v r srf () c")
+        coordinates = rearrange(xy_ray, "b v r srf xy -> b v r srf () xy") # 归一化的像素坐标
+
+        #?? 增加了一个delats 的预测量
+        # gaussians = rearrange(gaussians[..., 2:], "b v r srf c -> b v r srf () c")
+        gaussians = rearrange(gaussians[..., 3:], "b v r srf c -> b v r srf () c")
+
+
         opacities = densities / gpp
 
         # scales, rotations, sh = gaussians.split((3, 4, 3 * d_sh), dim=-1)
@@ -565,10 +584,47 @@ class GaussTRV2(BaseModel):
         covariances = build_covariance(scales, rotations)
         covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # 自车坐标系下的协方差矩阵
 
+        # todo 计算高斯点的均值/位置:
         # Compute Gaussian means.
-        origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
-        means = origins + directions * depths[..., None]
+        # todo 注释的原代码：...
+        # origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
+        # means = origins + directions * depths[..., None] # 初始位置 + 方向 x 预测深度
 
+        # ??---------------------------------------------------?
+        # ?????? 参照GaussTR，根据xy_ray，采样得到深度信息
+        depth = data_samples['depth']
+        depth = depth.clamp(max=self.gauss_heads[0].depth_limit)
+        depth = rearrange(depth,"bs v h w -> (bs v) 1 h w")
+        ref_pts = rearrange(xy_ray,"bs v n 1 k -> (bs v) n 1 k") # k=2 (x,y)
+        sample_depth = F.grid_sample(depth,ref_pts)
+        sample_depth = rearrange(sample_depth,"(bs v) c n 1 -> bs v (n 1) c",bs=bs)
+        ref_pts = rearrange(ref_pts,"(bs v) n 1 k -> bs v (n 1) k",bs=bs)
+        points = torch.cat([
+            ref_pts * torch.tensor(self.gauss_heads[0].image_shape[::-1]).to(ref_pts), # image_shape: (h,w) -> [::-1] -> (w,h)
+            sample_depth * (1 + delats)
+        ],-1)
+
+        means = cam2world(points,cam2img,cam2ego,img_aug_mat)[...,None,None,:] # (b v r xyz) -> (b v rsrf spp xyz)
+
+        '''
+        # todo debug：直接使用 像素坐标+深度值 作为高斯点在像素坐标系下的坐标，投影回三维空间中，来查看大部分是否落在OCC感知空间内
+        xy_ray_gt, _ = sample_image_grid((h,w),device) # todo sample_image_grid: 生成一个给定形状的网格坐标，包括：归一化的浮点坐标(范围0-1)；整数像素索引：表示真实像素的行列号
+        xy_ray_gt = rearrange(xy_ray_gt, "h w xy -> (h w) () xy")[None,None,...]
+        xy_ray_gt = xy_ray_gt.expand(bs,n,-1,-1,-1)
+        depth = data_samples['depth']
+        depth = rearrange(depth,"bs v h w -> (bs v) 1 h w")
+        ref_pts_gt = rearrange(xy_ray_gt,"bs v n 1 k -> (bs v) n 1 k") # k=2 (x,y)
+        sample_depth = F.grid_sample(depth,ref_pts_gt)
+        sample_depth = rearrange(sample_depth,"(bs v) c n 1 -> bs v (n 1) c",bs=bs)
+        ref_pts_gt = rearrange(ref_pts_gt,"(bs v) n 1 k -> bs v (n 1) k",bs=bs)
+        points_gt = torch.cat([
+            ref_pts_gt * torch.tensor(self.gauss_heads[0].image_shape[::-1]).to(ref_pts_gt), # image_shape: (h,w) -> [::-1] -> (w,h)
+            sample_depth
+        ],-1)
+        means_gt = cam2world(points_gt,cam2img,cam2ego,img_aug_mat)
+        means_gt = rearrange(means_gt,"bs v r xyz -> bs (v r) xyz")[0] # 取一个batch
+        np.save("means3d_gt.npy", means_gt.cpu().numpy())
+        '''
         pixel_gaussians = Gaussians(
             rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",),
             rearrange(covariances,"b v r srf spp i j -> b (v r srf spp) i j",),
@@ -580,8 +636,11 @@ class GaussTRV2(BaseModel):
             rearrange(opacity_multiplier * opacities,"b v r srf spp -> b (v r srf spp)",),
         )
 
+
         # todo MonoSplat end
         # todo --------------------------------------#
+
+
         use_query_gaussians = False
         if use_query_gaussians:
             # todo ---------------------------------#

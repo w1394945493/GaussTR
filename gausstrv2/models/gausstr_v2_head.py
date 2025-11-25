@@ -156,8 +156,9 @@ class GaussTRV2Head(BaseModule):
 
             # todo ------------------------------------#
             # todo： 协方差计算：
+            # todo 尺度
             scales = self.scale_head(x) * self.scale_transform(
-                sample_depth, cam2img[..., 0, 0]).clamp(1e-6)
+                sample_depth, cam2img[..., 0, 0]).clamp(1e-6) # todo 3x3 的尺度
             covariances = flatten_bsn_forward(get_covariance, scales,
                                             cam2ego[..., None, :3, :3])
 
@@ -337,12 +338,17 @@ class GaussTRV2Head(BaseModule):
         # todo 语义预测损失计算
         probs = rendered_seg.flatten(2).mT
         target = sem_segs.flatten(0, 1).flatten(1).long()
-        target = torch.where(target == 12, torch.tensor(0, device=target.device), target)
+
+        # todo 忽略 0-others 和 12-othersflat 类别
+        # target = torch.where(target == 12, torch.tensor(0, device=target.device), target)
+        # losses['loss_ce'] = F.cross_entropy(
+        #     probs.mT,
+        #     target, # 分割图: min：0 max：17
+        #     ignore_index=0) # 忽略第0和12类
+
         losses['loss_ce'] = F.cross_entropy(
             probs.mT,
-            target, # 分割图: min：0 max：17
-            ignore_index=0) # 忽略第0和12类
-
+            target)
         return losses
 
     def photometric_error(self, src_imgs, rec_imgs):

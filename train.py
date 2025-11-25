@@ -4,7 +4,7 @@ from setproctitle import setproctitle
 setproctitle("wys")
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 # os.environ['RANK'] = '0'
 import argparse
 
@@ -16,10 +16,8 @@ from mmengine.config import Config
 from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
 
-# from gausstr import *
-# from gausstrv2 import *
-
-
+from gausstr import *
+from gausstrv2 import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a 3D detector')

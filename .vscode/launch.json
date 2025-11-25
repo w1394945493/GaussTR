@@ -80,7 +80,7 @@
             "args": [
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_v2_talk2dino.py",
                 "--checkpoint",
-                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train8/debug/epoch_7.pth",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train9/epoch_24.pth",
                 // "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
                 "--work-dir",
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",

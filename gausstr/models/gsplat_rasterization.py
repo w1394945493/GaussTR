@@ -45,9 +45,9 @@ def rasterize_gaussians(means3d,
         scales,
         opacities,
         colors,
-        viewmat,
+        viewmat, # viewmat: world2cam变换矩阵
         cam2imgs,
         width=image_size[1],
         height=image_size[0],
-        **kwargs)[0]
+        **kwargs)[0] # 
     return rendered_image.permute(0, 3, 1, 2)

@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis13' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis14' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -162,8 +162,7 @@ model = dict(
         patch_size=patch_size,
         voxelizer=dict(
             type='GaussianVoxelizer',
-            # todo OCC3D中的感知空间范围
-            vol_range=[-40, -40, -1, 40, 40, 5.4],
+            vol_range=[-40, -40, -1, 40, 40, 5.4], # todo OCC3D中的感知空间范围
 
             voxel_size=0.4,
             filter_gaussians=True,
@@ -291,8 +290,8 @@ train_dataloader = dict(
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
         # ann_file='nuscenes_infos_train.pkl',
-        ann_file='nuscenes_mini_infos_train.pkl',
-        # ann_file='nuscenes_mini_infos_val.pkl',
+        # ann_file='nuscenes_mini_infos_train.pkl',
+        ann_file='nuscenes_mini_infos_val.pkl',
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(

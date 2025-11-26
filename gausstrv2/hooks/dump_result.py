@@ -130,7 +130,7 @@ class DumpResultHookV2(Hook):
 
 
 
-        if self.save_occ:
+        if self.save_occ and outputs['occ_pred'] is not None:
             occ_pred  = outputs['occ_pred']   # (b, X, Y, Z)
             # ---------------------- 1) 保存占用预测 ----------------------
             for i in range(b):
@@ -150,7 +150,7 @@ class DumpResultHookV2(Hook):
 
 
         # -------- 3) 保存 depth_pred --------
-        if self.save_depth:
+        if self.save_depth and outputs['depth_pred'] is not None:
 
             depth_pred = outputs['depth_pred'] # (b,n, H, W)
 
@@ -178,7 +178,7 @@ class DumpResultHookV2(Hook):
                 torchvision.utils.save_image(grid, save_path)
 
         # -------- 3) 保存 sem_seg --------
-        if self.save_sem_seg:
+        if self.save_sem_seg and outputs['seg_pred'] is not None:
 
             seg_pred  = outputs['seg_pred']   # (b,n, C, H, W)
 
@@ -203,7 +203,7 @@ class DumpResultHookV2(Hook):
 
 
         # -------- 2) 保存 img_pred --------
-        if self.save_img:
+        if self.save_img and outputs['img_pred'] is not None:
 
             img_pred  = outputs['img_pred']   # (b, n, 3, H, W)
             img_pred = img_pred*self.std.view(1,1,3,1,1).to(img_pred.device) + self.mean.view(1,1,3,1,1).to(img_pred.device)

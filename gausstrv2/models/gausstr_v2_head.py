@@ -22,7 +22,7 @@ from gausstr.models.utils import (OCC3D_CATEGORIES, cam2world, flatten_bsn_forwa
                     get_covariance, rotmat_to_quat)
 from gausstr.models.gausstr_head import prompt_denoising,merge_probs
 
-
+from gausstrv2.models.cuda_splatting import render_cuda
 
 @MODELS.register_module()
 class GaussTRV2Head(BaseModule):
@@ -101,7 +101,7 @@ class GaussTRV2Head(BaseModule):
                 **kwargs):
 
         bs, n = cam2img.shape[:2] # todo: n: 视角数
-        # depth = depth.clamp(max=self.depth_limit) # depth_limit: 51.2
+        depth = depth.clamp(max=self.depth_limit) # depth_limit: 51.2
 
         if x is not None:
             assert ref_pts is not None
@@ -164,7 +164,7 @@ class GaussTRV2Head(BaseModule):
 
             # todo ------------------------------------#
             # todo： 旋转矩阵计算
-            rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])
+            rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3]) # 3x3 -> 四元数
             rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
             features = torch.cat([rgb_features,seg_features],dim=-1)
@@ -187,6 +187,7 @@ class GaussTRV2Head(BaseModule):
                 means3d.flatten(1, 2),
                 pixel_gaussians.means,
             ],dim = 1)
+            # todo
             features = torch.cat([
                 features.flatten(1, 2),
                 torch.cat(
@@ -195,6 +196,7 @@ class GaussTRV2Head(BaseModule):
                         pixel_gaussians.semantic,
                     ],dim = -1),
                 ],dim=1)
+
             opacities = torch.cat([
                 opacities.flatten(1, 2),
                 pixel_gaussians.opacities.unsqueeze(-1),
@@ -229,6 +231,10 @@ class GaussTRV2Head(BaseModule):
             raise ValueError('pixel_gaussians and query both None!')
 
 
+        # todo ----------------------------------------#
+        # todo 光栅化
+
+
         rendered = rasterize_gaussians(
             # means3d.flatten(1, 2), # (b,vx300,3)
             # features.flatten(1, 2), # (b,vx300,h_dim) 颜色/特征
@@ -244,14 +250,18 @@ class GaussTRV2Head(BaseModule):
             cam2ego,
             img_aug_mats=img_aug_mat,
             image_size=(900, 1600), # 原图像尺寸
+
             near_plane=0.1,
             far_plane=100,
+
+
+
             render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
             channel_chunk=32).flatten(0, 1) # (b v c h w) ((b v) c h w)
 
         rendered_depth = rendered[:, -1] # todo ((b v) h w) 深度图
         rendered_rgb = rendered[:, :3] #  ((b v) c h w) -> ((b v) c-1 h w)
-        rendered_seg = rendered[:,3:-1]
+        # rendered_seg = rendered[:,3:-1]
 
         # todo ---------------------------------------#
         # todo 推理
@@ -291,9 +301,11 @@ class GaussTRV2Head(BaseModule):
                 # 'seg_pred': rendered_seg.reshape(bs, n, *rendered_seg.shape[1:]), # (bsv h w)
                 # 'seg_pred': None,
                 'seg_pred':seg_pred,
+
                 # 'img_pred': rendered_img.reshape(bs, n, *rendered_img.shape[1:]), # (bsv,3 h w)
                 # 'img_pred': None,
                 'img_pred': img_pred,
+
             }]
             # return preds
             return outputs
@@ -303,28 +315,29 @@ class GaussTRV2Head(BaseModule):
 
         losses = {}
         # GaussTR原代码：把depth中大于等于depth_limit的深度值全部替换成1e-3
-        # depth = torch.where(depth < self.depth_limit, depth,
-        #                     1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
+        depth = torch.where(depth < self.depth_limit, depth,
+                            1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
+        # depth = depth.clamp(max=self.depth_limit)
+        # depth = depth.flatten(0,1)
 
-        depth = depth.clamp(max=self.depth_limit)
-        depth = depth.flatten(0,1)
         # todo 深度估计损失 在MonoSplat工作中，没有对深度估计的结果做监督
-        losses['loss_silog_l1_depth'] = self.depth_loss(rendered_depth, depth) # Silog损失
+        losses['loss_depth'] = self.depth_loss(rendered_depth, depth) # Silog损失
+
         # losses['mae_depth'] = self.depth_loss(
         #     rendered_depth, depth, criterion='l1') # todo 11.24 感觉这个损失的计算重复了
 
         # todo wys 11.24 尝试引入一下MonoSplat设计的depth预测损失
-        if self.loss_depth:
-            near = self.near
-            near = torch.full((bs,n),near).to(depth.device)
-            far = self.far
-            far = torch.full((bs,n),far).to(depth.device)
+        # if self.loss_depth:
+        #     near = self.near
+        #     near = torch.full((bs,n),near).to(depth.device)
+        #     far = self.far
+        #     far = torch.full((bs,n),far).to(depth.device)
+        #     losses['loss_depth'] = self.loss_depth.forward(
+        #         rearrange(rendered_depth,'(bs v) h w -> bs v h w',bs=bs),
+        #         gt_imgs,
+        #         near=near,
+        #         far=far,)
 
-            losses['loss_depth'] = self.loss_depth.forward(
-                rearrange(rendered_depth,'(bs v) h w -> bs v h w',bs=bs),
-                gt_imgs,
-                near=near,
-                far=far,)
 
         # todo MSE损失计算
         rgb_target = gt_imgs.flatten(0,1)
@@ -349,6 +362,7 @@ class GaussTRV2Head(BaseModule):
         losses['loss_ce'] = F.cross_entropy(
             probs.mT,
             target)
+
         return losses
 
     def photometric_error(self, src_imgs, rec_imgs):

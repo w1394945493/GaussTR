@@ -16,8 +16,9 @@ from mmengine.config import Config
 from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
 
-from gausstr import *
-from gausstrv2 import *
+from mmdet3d.utils import replace_ceph_backend
+
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a 3D detector')
@@ -45,6 +46,7 @@ def parse_args():
 def main():
     args = parse_args()
     # load config
+    print(f"load config from {args.config}")
     cfg = Config.fromfile(args.config)
 
     cfg.launcher = args.launcher # todo 当设置不为none时，启动多进程

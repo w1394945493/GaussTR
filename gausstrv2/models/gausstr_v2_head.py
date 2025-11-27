@@ -22,7 +22,7 @@ from gausstr.models.utils import (OCC3D_CATEGORIES, cam2world, flatten_bsn_forwa
                     get_covariance, rotmat_to_quat)
 from gausstr.models.gausstr_head import prompt_denoising,merge_probs
 
-from gausstrv2.models.cuda_splatting import render_cuda
+
 
 @MODELS.register_module()
 class GaussTRV2Head(BaseModule):

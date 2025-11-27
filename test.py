@@ -15,6 +15,7 @@ from mmengine.runner import Runner
 
 from mmdet3d.utils import replace_ceph_backend
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description='MMDet3D test (and eval) a model')

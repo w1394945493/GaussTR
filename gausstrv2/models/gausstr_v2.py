@@ -22,7 +22,7 @@ from gausstrv2.models.encoder.common.gaussians import build_covariance
 from gausstrv2.misc.sh_rotation import rotate_sh
 from gausstrv2.models.types import Gaussians
 
-from gausstr.models.utils import cam2world
+# from gausstr.models.utils import cam2world
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -414,7 +414,6 @@ class GaussTRV2(BaseModel):
             gaussians_per_pixel = 1
             num_surfaces = 1
             opacity_multiplier = 1
-            gaussians_per_pixel = 1
             gpp = gaussians_per_pixel
             # d_sh = 25
             scale_min = 0.5

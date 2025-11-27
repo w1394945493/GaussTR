@@ -4,7 +4,7 @@ from gsplat import rasterization
 from .utils import unbatched_forward
 
 
-@unbatched_forward # 去掉了batch维度
+@unbatched_forward 
 def rasterize_gaussians(means3d,
                         colors, # 颜色
                         opacities,
@@ -49,5 +49,5 @@ def rasterize_gaussians(means3d,
         cam2imgs,
         width=image_size[1],
         height=image_size[0],
-        **kwargs)[0] # 
+        **kwargs)[0] #
     return rendered_image.permute(0, 3, 1, 2)

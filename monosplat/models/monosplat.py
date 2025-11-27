@@ -476,5 +476,5 @@ class MonoSplat(BaseModel):
             rearrange(opacity_multiplier * opacities,"b v r srf spp -> b (v r srf spp)",),
         )
 
-        return  self.decoder(pixel_gaussians, inputs,image_shape=(h,w),near=near, far=far, mode=mode,**data_samples)
+        return  self.decoder(pixel_gaussians, inputs, image_shape=(h,w),near=near, far=far, mode=mode,**data_samples)
 

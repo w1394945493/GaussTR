@@ -103,7 +103,7 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
 # 评估
 export CUDA_VISIBLE_DEVICES=4
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/monosplat_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/mono_splat/nuscenes/train_2_112x200/checkpoints/epoch_0-step_100000.ckpt \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/train/epoch_9.pth \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/test
 

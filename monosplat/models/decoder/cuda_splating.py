@@ -84,7 +84,6 @@ def render_cuda(
     full_projection = view_matrix @ projection_matrix
 
     images = []
-    alphas = []
     depths = []
     for i in range(bsn):
         # Set up a tensor for the gradients of the screen-space means.
@@ -121,6 +120,5 @@ def render_cuda(
         )
         images.append(image)
         depths.append(depth)
-        alphas.append(alpha)
 
-    return torch.stack(images,dim=0), torch.stack(depths,dim=0), torch.stack(alphas,dim=0)
+    return torch.stack(images,dim=0), torch.stack(depths,dim=0)

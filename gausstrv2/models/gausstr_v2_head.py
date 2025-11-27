@@ -249,7 +249,7 @@ class GaussTRV2Head(BaseModule):
             cam2img,
             cam2ego,
             img_aug_mats=img_aug_mat,
-            image_size=(900, 1600), # 原图像尺寸
+            image_shape=(900, 1600),
 
             near_plane=0.1,
             far_plane=100,

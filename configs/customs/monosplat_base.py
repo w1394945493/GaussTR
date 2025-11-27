@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis2' # todo
 
 
 custom_imports = dict(imports=['gausstr','monosplat'])
@@ -25,6 +25,7 @@ vit_type = 'vits'
 model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vits14_pretrain.pth'
 in_channels = 384
 out_channels = [48, 96, 192, 384]
+renderer_type = 'gsplat_rasterization'
 
 # save vis
 custom_hooks = [
@@ -35,6 +36,7 @@ custom_hooks = [
          mean = mean,
          std = std,
          save_img = True,
+         save_depth = True,
          ),
 ]
 
@@ -78,6 +80,7 @@ model = dict(
             type='LossLpips',
             weight = 0.05,
         ),
+        renderer_type = renderer_type,
     ),
     near = near,
     far = far,

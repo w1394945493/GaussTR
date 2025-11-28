@@ -4,7 +4,7 @@ from setproctitle import setproctitle
 setproctitle("wys")
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 # os.environ['RANK'] = '0'
 import argparse
 
@@ -18,6 +18,8 @@ from mmengine.runner import Runner
 
 from mmdet3d.utils import replace_ceph_backend
 
+import torch
+torch.autograd.set_detect_anomaly(True)
 
 
 def parse_args():

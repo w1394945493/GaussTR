@@ -52,8 +52,10 @@ class MonoSplat(BaseModel):
                 depth_unet_feat_dim = 32,
                 depth_unet_attn_res = [16],
                 depth_unet_channel_mult = [1, 1, 1, 1, 1],
+
                 gaussian_raw_channels = 84,
                 d_sh = 25,
+
                 gaussians_per_pixel = 1,
                 patch_size = 14,
 
@@ -107,8 +109,8 @@ class MonoSplat(BaseModel):
         self.backbone.requires_grad_(False)
 
         self.depth_head = MODELS.build(depth_head)
-        for param in self.depth_head.parameters():
-            param.requires_grad = False
+        # for param in self.depth_head.parameters():
+        #     param.requires_grad = False
 
         self.cost_head = MODELS.build(cost_head)
         self.transformer = MODELS.build(transformer)
@@ -224,6 +226,8 @@ class MonoSplat(BaseModel):
         feats = []
         sem_segs = []
 
+        rgb_gts = [] # 真实图像
+
         for i in range(len(data_samples)):
             data_samples[i].set_metainfo(
                 {'cam2img': data_samples[i].cam2img[:num_views]})
@@ -252,6 +256,9 @@ class MonoSplat(BaseModel):
             if hasattr(data_samples[i], 'sem_seg'):
                 sem_segs.append(data_samples[i].sem_seg)
 
+            if hasattr(data_samples[i], 'img'):
+                rgb_gts.append(data_samples[i].img) # 真实图像
+
         data_samples = dict(
             depth=depth,
             cam2img=cam2img,
@@ -259,10 +266,14 @@ class MonoSplat(BaseModel):
             num_views=num_views,
             ego2global=ego2global,
             img_aug_mat=img_aug_mat if img_aug_mat else None)
+
         if feats:
             data_samples['feats'] = feats
         if sem_segs:
             data_samples['sem_segs'] = sem_segs
+        if rgb_gts:
+            data_samples['rgb_gts'] = rgb_gts # 真实图像
+
         for k, v in data_samples.items():
             if isinstance(v, torch.Tensor) or not isinstance(v, Iterable):
                 continue
@@ -275,6 +286,8 @@ class MonoSplat(BaseModel):
 
     def forward(self, inputs, data_samples, mode='loss'):
         inputs, data_samples = self.prepare_inputs(inputs, data_samples)
+
+
         bs, n, _, h, w = inputs.shape
         device = inputs.device
 
@@ -362,7 +375,7 @@ class MonoSplat(BaseModel):
         raw_correlation_in = torch.mean(torch.stack(raw_correlation_in, dim=1), dim=1)
 
         # refine cost volume and get depths
-        features_mono_tmp = F.interpolate(features_mono, (64, 64), mode="bilinear", align_corners=True)
+        features_mono_tmp = F.interpolate(features_mono, (inter_w, inter_h), mode="bilinear", align_corners=True)
         raw_correlation_in = torch.cat((raw_correlation_in, features_mv, features_mono_tmp), dim=1)
         raw_correlation = self.corr_refine_net(raw_correlation_in) # ((b v) c h w)
         raw_correlation = raw_correlation + self.regressor_residual(raw_correlation_in)
@@ -439,7 +452,8 @@ class MonoSplat(BaseModel):
 
         opacities = densities / gpp
 
-        scales, rotations, sh = gaussians.split((3, 4, 3 * d_sh), dim=-1)
+        scales, rotations, sh = gaussians.split((3, 4, 3 * d_sh if d_sh is not None else 3), dim=-1)
+
         scales = scale_min + (scale_max - scale_min) * scales.sigmoid()
         pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
 
@@ -447,17 +461,19 @@ class MonoSplat(BaseModel):
         rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + 1e-8)
         rotations = rotations.broadcast_to((*scales.shape[:-1],4)) # rotations
 
-        # Apply sigmoid to get valid colors.
-        sh_mask = torch.ones((d_sh,), dtype=torch.float32).to(device) # d_sh: 25
-        sh_degree = 4
-        for degree in range(1, sh_degree + 1):
-            sh_mask[degree**2 : (degree + 1) ** 2] = 0.1 * 0.25**degree
-
         c2w_rotations = extrinsics[..., :3, :3]
 
-        sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)
-        sh = sh.broadcast_to((*opacities.shape, 3, d_sh)) * sh_mask
-        harmonics = rotate_sh(sh, c2w_rotations[..., None, :, :]) # 谐函数
+        harmonics = sh
+        if d_sh is not None:
+            # Apply sigmoid to get valid colors.
+            sh_mask = torch.ones((d_sh,), dtype=torch.float32).to(device) # d_sh: 25
+            sh_degree = 4
+            for degree in range(1, sh_degree + 1):
+                sh_mask[degree**2 : (degree + 1) ** 2] = 0.1 * 0.25**degree
+
+            sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)
+            sh = sh.broadcast_to((*opacities.shape, 3, d_sh)) * sh_mask
+            harmonics = rotate_sh(sh, c2w_rotations[..., None, :, :]) # 谐函数
 
         # Create world-space covariance matrices.
         covariances = build_covariance(scales, rotations)
@@ -470,11 +486,12 @@ class MonoSplat(BaseModel):
         pixel_gaussians = Gaussians(
             rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",),
             rearrange(covariances,"b v r srf spp i j -> b (v r srf spp) i j",),
-            rearrange(harmonics,"b v r srf spp c d_sh -> b (v r srf spp) c d_sh",),
+            rearrange(harmonics,"b v r srf spp c d_sh -> b (v r srf spp) c d_sh",) \
+                if d_sh is not None else rearrange(harmonics,"b v r srf spp rgb -> b (v r srf spp) rgb",),
             rearrange(scales,"b v r srf spp c -> b (v r srf spp) c",),
             rearrange(rotations,"b v r srf spp c -> b (v r srf spp) c",),
             rearrange(opacity_multiplier * opacities,"b v r srf spp -> b (v r srf spp)",),
         )
 
-        return  self.decoder(pixel_gaussians, inputs, image_shape=(h,w),near=near, far=far, mode=mode,**data_samples)
+        return  self.decoder(pixel_gaussians, image_shape=(h,w),near=near, far=far, mode=mode,**data_samples)
 

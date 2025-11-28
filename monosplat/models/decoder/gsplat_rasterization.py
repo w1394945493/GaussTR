@@ -15,6 +15,7 @@ def rasterize_gaussians(
     opacities,
     colors,
     use_sh = True,
+    img_aug_mat = None,
     **kwargs
     ):
 
@@ -43,18 +44,19 @@ def rasterize_gaussians(
 
     # from gsplat import rasterization
     rendered, alpha, _ = rasterization(
-        means3d,
-        rotations,
-        scales,
-        opacities,
-        colors.transpose(-2,-1) if sh_degree else colors,
+        means3d, # (n 3)
+        rotations, # (n 4)
+        scales, # (n,3)
+        opacities, # (n)
+        colors.transpose(-2,-1) if sh_degree else colors, # (n c) or (n d_sh^2 3)
         viewmat,
-        cam2img,
-        width=W,
-        height=H,
-        sh_degree=sh_degree,
+        cam2img, # (v 3 3)
+        width=W, # 192
+        height=H, # 112
+        sh_degree=sh_degree, # None or int
         **kwargs)
+    rendered = rendered.permute(0,3,1,2)
 
-    rendered_image = rendered[...,:-1] # (b h w c)
-    rendered_depth = rendered[...,-1:] # (b h w c)
-    return rendered_image.permute(0, 3, 1, 2),rendered_depth.permute(0,3,1,2) # (b c h w)
+    rendered_image = rendered[:,:3] # (v c h w)
+    rendered_depth = rendered[:,-1] # (v h w)
+    return rendered_image, rendered_depth

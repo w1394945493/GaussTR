@@ -12,8 +12,11 @@ class MonoSplatDecoder(BaseModule):
 
     def __init__(self,
                  loss_lpips,
+                 depth_limit=100.,
                  background_color=[0.0, 0.0, 0.0],
-                 renderer_type: str = "vanilla"):
+                 use_sh = True,
+                 renderer_type: str = "vanilla"
+    ):
         super().__init__()
 
         self.register_buffer(
@@ -24,11 +27,14 @@ class MonoSplatDecoder(BaseModule):
         self.loss_lpips = MODELS.build(loss_lpips)
         self.renderer_type = renderer_type
         self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg'))
+        self.use_sh = use_sh
+
+        self.depth_limit =depth_limit
 
 
     def forward(self,
                 pixel_gaussians,
-                inputs,
+                rgb_gts,
                 image_shape, # tuple(h w)
                 near, # (b v)
                 far,  # (b v)
@@ -69,7 +75,7 @@ class MonoSplatDecoder(BaseModule):
                 gaussian_opacities=repeat(opacities, "b g -> (b v) g", v=n),
             )
             colors = rearrange(colors,'(bs n) c h w -> bs n c h w',bs=bs) # (b v c h w)
-            rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs) # (b v h w)
+            rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs).squeeze(2) # (b v h w)
         else:
 
             colors, rendered_depth = rasterize_gaussians(
@@ -81,13 +87,13 @@ class MonoSplatDecoder(BaseModule):
                 scales=scales,
                 opacities=opacities.squeeze(-1),
                 colors=harmonics,
-                use_sh=True,
+                use_sh=self.use_sh,
+                img_aug_mat = img_aug_mat,
                 near_plane=0.1,
-                far_plane=100,
+                far_plane=100.,
                 render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
                 channel_chunk=32,
             )
-        rendered_depth = rendered_depth.squeeze(2)
 
 
 
@@ -95,20 +101,31 @@ class MonoSplatDecoder(BaseModule):
             outputs = [{
                 'img_pred': colors,
                 'depth_pred': rendered_depth,
-                'img_gt': inputs,
+                'img_gt': rgb_gts / 255.,
             }]
             return outputs
 
         losses = {}
 
         rendered_depth = rendered_depth.flatten(0,1)
-        depth = depth.flatten(0,1)
+        depth = depth.clamp(max=self.depth_limit).flatten(0,1)
         losses['loss_depth'] = self.depth_loss(rendered_depth, depth)
 
         rgb = colors.flatten(0,1)
-        rgb_gt = inputs.flatten(0,1)
-        losses['loss_mae'] = ((rgb - rgb_gt)**2).mean()
-        losses['loss_lpips'] = self.loss_lpips(rgb,rgb_gt)
+        rgb_gt = rgb_gts.flatten(0,1) / 255.
+
+        # temp0 = rgb_input[-1]
+
+        # mean = torch.tensor([0.485, 0.456, 0.406], device=rgb_input.device).view(3,1,1)
+        # std  = torch.tensor([0.229, 0.224, 0.225], device=rgb_input.device).view(3,1,1)
+        # temp1 = temp0 * std + mean
+
+        # temp2 = rgb_gt[-1]
+
+
+        loss_mae = (rgb - rgb_gt)**2
+        losses['loss_mae'] = loss_mae.mean()
+        losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
 
         return losses
 

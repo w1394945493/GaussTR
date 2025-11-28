@@ -100,15 +100,17 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
 
 # todo -------------------------------------#
 # todo 重新整理MonoSplat代码
+# 训练
+export CUDA_VISIBLE_DEVICES=1
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/monosplat_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/train3 \
+
+# --resume
+
 # 评估
 export CUDA_VISIBLE_DEVICES=4
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/monosplat_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/train/epoch_9.pth \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/train/epoch_40.pth \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/test
-
-# 训练
-export CUDA_VISIBLE_DEVICES=3
-PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/monosplat_base.py \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/train

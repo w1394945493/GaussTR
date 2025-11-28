@@ -144,8 +144,16 @@ class DPTHead(nn.Module):
         out = self.scratch.output_conv1(path_1)
         out = F.interpolate(out, (int(patch_h * 14), int(patch_w * 14)), mode="bilinear", align_corners=True)
         out = self.scratch.output_conv2(out)
+
+        # for i in range(out.shape[0]):
+        #     out[i] = (out[i] - out[i].min()) / (out[i].max() - out[i].min() + 1e-6) # inplace操作
+
+        out1 = []
         for i in range(out.shape[0]):
-            out[i] = (out[i] - out[i].min()) / (out[i].max() - out[i].min() + 1e-6)
+            x = out[i]
+            x = (x - x.min()) / (x.max() - x.min() + 1e-6)
+            out1.append(x)
+        out = torch.stack(out1, dim=0)
 
         feats = path_1
 

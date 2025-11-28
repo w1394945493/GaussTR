@@ -54,7 +54,7 @@ def render_cuda(
     scale_invariant = True,
     use_sh = True,
 ):
-    assert use_sh or gaussian_sh_coefficients.shape[-1] == 1
+    # assert use_sh or gaussian_sh_coefficients.shape[-1] == 1
 
 
     # Make sure everything is in a range where numerical issues don't appear.

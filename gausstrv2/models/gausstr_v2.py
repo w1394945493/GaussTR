@@ -119,7 +119,7 @@ class GaussTRV2(BaseModel):
 
         # todo -----------------------------------#
         # todo MonoSplat:
-        use_monosplat = False
+        use_monosplat = True
         if use_monosplat:
             if depth_head is not None:
                 self.depth_head = MODELS.build(depth_head)
@@ -390,7 +390,7 @@ class GaussTRV2(BaseModel):
 
         # todo ---------------------------------#
         # todo MonoSplat start 像素高斯预测
-        use_monosplat = False
+        use_monosplat = True
         if use_monosplat:
             device = inputs.device
 
@@ -405,9 +405,9 @@ class GaussTRV2(BaseModel):
             inter_h, inter_w = 64,64
 
             near = self.near
-            near = torch.full((bs,n),near).to(x.device)
+            near = torch.full((bs,n),near).to(inputs.device)
             far = self.far
-            far = torch.full((bs,n),far).to(x.device)
+            far = torch.full((bs,n),far).to(inputs.device)
 
 
             num_depth_candidates = 128

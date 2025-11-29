@@ -32,9 +32,9 @@ def rasterize_gaussians(
 
     H, W = image_shape
     # Denormalize the intrinsics into standred format
-    cam2img = intrinsics.clone()
-    cam2img[:,0] = cam2img[:,0] * W
-    cam2img[:,1] = cam2img[:,1] * H
+    cam2imgs = intrinsics.clone()
+    cam2imgs[:,0] = cam2imgs[:,0] * W
+    cam2imgs[:,1] = cam2imgs[:,1] * H
 
     sh_degree = None
     if use_sh:
@@ -50,7 +50,7 @@ def rasterize_gaussians(
         opacities, # (n)
         colors.transpose(-2,-1) if sh_degree else colors, # (n c) or (n d_sh^2 3)
         viewmat,
-        cam2img, # (v 3 3)
+        cam2imgs, # (v 3 3)
         width=W, # 192
         height=H, # 112
         sh_degree=sh_degree, # None or int

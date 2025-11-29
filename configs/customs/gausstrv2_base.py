@@ -1,17 +1,21 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
-
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis16' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis19' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
 custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 
+mean = [123.675, 116.28, 103.53]
+std  = [58.395, 57.12, 57.375]
+
 save_vis = True
 custom_hooks = [
     dict(type='DumpResultHookV2',
          interval=1,
+         mean = mean,
+         std  = std,
          save_dir = os.path.join(work_dir,'vis'),
          save_vis = save_vis,
         #  save_occ = True,
@@ -23,60 +27,51 @@ custom_hooks = [
          ),
 ]  # 保存结果
 
-# input_size = (504, 896) # todo 网络输入图像的大小 使用dinov2作为主干，则应为14的倍数
-# resize_lim=[0.56, 0.56] # todo 504/900 = 896/1600=0.56
-
-# input_size = (252,448)
-# resize_lim=[0.28, 0.28]
-
 input_size = (112,192)
 resize_lim=[0.1244, 0.12] #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
-
-embed_dims = 256
-feat_dims = 768 #! vit-base的尺寸
-reduce_dims = 128
-patch_size = 14
+ori_image_shape = (900,1600)
 
 near = 0.5
 far = 51.2
 # far = 100.
 
+# in_channels=384
+# out_channels=[48, 96, 192, 384]
+
+vit_type = 'vitb'
+model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
+in_channels=768
+out_channels=[96, 192, 384,768]
+
 model = dict(
-    # type='GaussTR',
     type = 'GaussTRV2',
-    num_queries=300,
+    vit_type = vit_type,
+    model_url = model_url,
+
+    near = near,
+    far = far,
+
+    ori_image_shape = ori_image_shape,
+
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
-        mean=[123.675, 116.28, 103.53],
-        std=[58.395, 57.12, 57.375]),
-    # todo backbone 主干网络
-    backbone=dict(
-        type='TorchHubModel',
-        repo_or_dir='facebookresearch/dinov2', # todo
-        model_name='dinov2_vitb14_reg'),
-    neck=dict(
-        type='ViTDetFPN',
-        in_channels=feat_dims,
-        out_channels=embed_dims,
-        norm_cfg=dict(type='LN2d')), #? LN2d
+        mean=mean,
+        std=std),
 
-    # todo MonoSplat部分
     depth_head = dict(
         type='DPTHead',
-        in_channels=768,
+        in_channels=in_channels,
         features=64,
         use_bn=False,
-        # out_channels=[48, 96, 192, 384],
-        out_channels=[96, 192, 384,768],
+        out_channels=out_channels,
         use_clstoken=False,
     ),
     cost_head = dict(
         type='CostHead',
-        in_channels=768,
+        in_channels=in_channels,
         features=64,
         use_bn=False,
-        # out_channels=[48, 96, 192, 384],
-        out_channels=[96, 192, 384, 768],
+        out_channels=out_channels,
         use_clstoken=False,
     ),
     transformer = dict(
@@ -86,93 +81,13 @@ model = dict(
         nhead=1,
         ffn_dim_expansion=4,
     ),
-
-    near = near,
-    far = far,
-
-    # todo 解码器
-    decoder=dict(
-        type='GaussTRDecoderV2',
-        num_layers=3, # todo 3层解码层
-        return_intermediate=True,
-        layer_cfg=dict(
-            self_attn_cfg=dict(
-                embed_dims=embed_dims,
-                num_heads=8,
-                dropout=0.0),
-            cross_attn_cfg=dict(
-                embed_dims=embed_dims,
-                num_levels=4),
-            ffn_cfg=dict(embed_dims=embed_dims, feedforward_channels=2048)),
-        post_norm_cfg=None),
     gauss_head=dict(
         type='GaussTRV2Head',
-        # todo 注：以下检测头MLP，隐藏层hidden_dim默认是input_dim * 4
-        opacity_head=dict(
-            type='MLP',
-            input_dim=embed_dims,
-            # hidden_dim= embed_dims * 2,
-            output_dim=1, mode='sigmoid'), # todo 透明度
-        feature_head=dict(
-            type='MLP',
-            input_dim=embed_dims,
-            # hidden_dim= embed_dims * 2,
-            output_dim=feat_dims), # todo 特征
-        scale_head=dict(
-            type='MLP',
-            input_dim=embed_dims,
-            # hidden_dim= embed_dims * 2,
-            output_dim=3,
-            mode='sigmoid',
-            range=(1, 16)), # todo 尺度
-        regress_head=dict(type='MLP',
-                          input_dim=embed_dims,
-                        #   hidden_dim= embed_dims * 2,
-                          output_dim=3), # todo 参考点
-        projection=dict(type='MLP',
-                        input_dim=feat_dims,
-                        # hidden_dim= feat_dims * 2,
-                        output_dim=reduce_dims),
-
-        segment_head=dict(type='MLP',
-                          input_dim=embed_dims,
-                        #   hidden_dim= embed_dims * 2,
-                          output_dim=18), # todo 分割头
-        rgb_head=dict(type='MLP',
-                      input_dim=embed_dims,
-                    #   hidden_dim= embed_dims * 2,
-                      output_dim=3), # todo 新增加的 rgb预测头
-        # todo wys 11.24 loss lpips
         loss_lpips=dict(
             type='LossLpips',
             weight = 0.05,
         ),
-        loss_depth = dict(
-            type = "LossDepth",
-            weight = 0.25,
-        ),
-        near = near,
-        far = far,
-        # depth_limit=51.2, # GaussTR：51.2
         depth_limit=far,
-
-
-        # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo
-        text_protos='/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/text_proto_embeds_talk2dino.pth', # todo 类别嵌入
-        reduce_dims=reduce_dims,
-        image_shape=input_size, # todo 输入图像尺寸
-        patch_size=patch_size,
-        voxelizer=dict(
-            type='GaussianVoxelizer',
-            vol_range=[-40, -40, -1, 40, 40, 5.4], # todo OCC3D中的感知空间范围
-
-            voxel_size=0.4,
-            filter_gaussians=True,
-            # filter_gaussians = False, # todo 是否对高斯点进行过滤
-            opacity_thresh=0.1, # 过滤透明度过低的高斯点
-            # covariance_thresh=1.5e-2
-            covariance_thresh=1.5e-2
-        )
     )
 )
 
@@ -240,8 +155,7 @@ test_pipeline = [
     # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
     dict(type='ImageAug3D',
          final_dim=input_size,
-         resize_lim=resize_lim
-
+         resize_lim=resize_lim,
          ),
     dict(
         type='LoadFeatMaps',

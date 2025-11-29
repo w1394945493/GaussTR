@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis11' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis13' # todo
 
 
 custom_imports = dict(imports=['gausstr','monosplat'])

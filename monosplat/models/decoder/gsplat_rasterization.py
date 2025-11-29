@@ -55,7 +55,7 @@ def rasterize_gaussians(
         height=H, # 112
         sh_degree=sh_degree, # None or int
         **kwargs)
-    rendered = rendered.permute(0,3,1,2)
+    rendered = rendered.permute(0, 3, 1, 2)
 
     rendered_image = rendered[:,:3] # (v c h w)
     rendered_depth = rendered[:,-1] # (v h w)

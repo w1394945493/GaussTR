@@ -1,20 +1,21 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis14' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis16' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
 custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 
+save_vis = True
 custom_hooks = [
     dict(type='DumpResultHookV2',
          interval=1,
          save_dir = os.path.join(work_dir,'vis'),
-         save_vis = True,
-         save_occ = True,
-        #  save_occ = False,
+         save_vis = save_vis,
+        #  save_occ = True,
+         save_occ = False,
          save_depth = True,
          save_sem_seg = True,
         #  save_img = False,

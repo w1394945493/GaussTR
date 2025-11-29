@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis8' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis11' # todo
 
 
 custom_imports = dict(imports=['gausstr','monosplat'])
@@ -20,19 +20,19 @@ mean=[123.675, 116.28, 103.53]
 std=[58.395, 57.12, 57.375]
 
 
-gaussian_raw_channels = 84
-d_sh = 25
+# gaussian_raw_channels = 84 # 2 + 3 + 4 + 3x25
+# d_sh = 25
 # renderer_type = "vanilla"
 
-# gaussian_raw_channels = 12
-# d_sh = None
+gaussian_raw_channels = 12 # 2 + 3 + 4 + 3
+d_sh = None
 renderer_type = 'gsplat_rasterization'
 
 use_sh = d_sh is not None
 
 
-train_ann_file = 'nuscenes_mini_infos_train.pkl'
-# train_ann_file = 'nuscenes_mini_infos_val.pkl'
+# train_ann_file = 'nuscenes_mini_infos_train.pkl'
+train_ann_file = 'nuscenes_mini_infos_val.pkl'
 val_ann_file = 'nuscenes_mini_infos_val.pkl'
 
 val_interval = 1
@@ -101,6 +101,11 @@ model = dict(
         loss_lpips=dict(
             type='LossLpips',
             weight = 0.05,
+            # weight = 1,
+        ),
+        loss_mae = dict(
+            type='LossMse',
+            weight = 1,
         ),
         renderer_type = renderer_type,
         use_sh = use_sh,

@@ -11,6 +11,7 @@ from .gsplat_rasterization import rasterize_gaussians
 class MonoSplatDecoder(BaseModule):
 
     def __init__(self,
+                 loss_mae,
                  loss_lpips,
                  depth_limit=100.,
                  background_color=[0.0, 0.0, 0.0],
@@ -24,6 +25,7 @@ class MonoSplatDecoder(BaseModule):
             torch.tensor(background_color, dtype=torch.float32),
             persistent=False,
         )
+        self.loss_mae = MODELS.build(loss_mae)
         self.loss_lpips = MODELS.build(loss_lpips)
         self.renderer_type = renderer_type
         self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg'))
@@ -122,10 +124,8 @@ class MonoSplatDecoder(BaseModule):
 
         # temp2 = rgb_gt[-1]
 
-
-        loss_mae = (rgb - rgb_gt)**2
-        losses['loss_mae'] = loss_mae.mean()
-        losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
+        losses['loss_mae'] = self.loss_mae.forward(rgb_gt,rgb)
+        losses['loss_lpips'] = self.loss_lpips.forward(rgb_gt, rgb)
 
         return losses
 

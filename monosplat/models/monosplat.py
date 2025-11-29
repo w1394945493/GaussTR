@@ -109,8 +109,8 @@ class MonoSplat(BaseModel):
         self.backbone.requires_grad_(False)
 
         self.depth_head = MODELS.build(depth_head)
-        # for param in self.depth_head.parameters():
-        #     param.requires_grad = False
+        for param in self.depth_head.parameters():
+            param.requires_grad = False
 
         self.cost_head = MODELS.build(cost_head)
         self.transformer = MODELS.build(transformer)
@@ -291,9 +291,7 @@ class MonoSplat(BaseModel):
         bs, n, _, h, w = inputs.shape
         device = inputs.device
 
-        inputs_resize = F.interpolate(rearrange(inputs,"b v c h w -> (b v) c h w"),size=(h,w), mode='bilinear', align_corners=False)
-        inputs_resize = rearrange(inputs_resize,"(b v) c h w -> b v c h w",b=bs)
-        concat = rearrange(inputs_resize,"b v c h w -> (b v) c h w")
+        concat = rearrange(inputs,"b v c h w -> (b v) c h w")
         resize_h, resize_w = h // self.patch_size * self.patch_size, w // self.patch_size * self.patch_size
         concat = F.interpolate(concat,(resize_h,resize_w),mode='bilinear',align_corners=True)
 
@@ -322,9 +320,12 @@ class MonoSplat(BaseModel):
         cam_origins = extrinsics[:,:,:3,-1]
         distance_matrix = torch.cdist(cam_origins, cam_origins, p=2)
         _, idx = torch.topk(distance_matrix, num_reference_views + 1, largest=False, dim=2)
+
+        # 输出中间层特征
         features = self.backbone.get_intermediate_layers(concat,
                                                         self.intermediate_layer_idx[self.vit_type],
                                                         return_class_token=True) # 4 ([bv n h_dim]) n = 252 / 14 x 448  / 14 = 18 x 32 = 576
+
         features_mono, disps_rel = self.depth_head(features,
                                                 patch_h=resize_h // self.patch_size,
                                                 patch_w=resize_w // self.patch_size)  # (bv c h1 w1) (bv 1 h1 w1) h1 = 18 x 8 = 144  w1 = 32 x 8 = 256
@@ -375,7 +376,7 @@ class MonoSplat(BaseModel):
         raw_correlation_in = torch.mean(torch.stack(raw_correlation_in, dim=1), dim=1)
 
         # refine cost volume and get depths
-        features_mono_tmp = F.interpolate(features_mono, (inter_w, inter_h), mode="bilinear", align_corners=True)
+        features_mono_tmp = F.interpolate(features_mono, (inter_h, inter_w), mode="bilinear", align_corners=True)
         raw_correlation_in = torch.cat((raw_correlation_in, features_mv, features_mono_tmp), dim=1)
         raw_correlation = self.corr_refine_net(raw_correlation_in) # ((b v) c h w)
         raw_correlation = raw_correlation + self.regressor_residual(raw_correlation_in)
@@ -392,7 +393,7 @@ class MonoSplat(BaseModel):
         features_mono_in_fullres = self.proj_feature_mono(features_mono_in_fullres)
         disps_rel_fullres = F.interpolate(disps_rel, (h, w), mode="bilinear", align_corners=True)
 
-        images_reorder = rearrange(inputs_resize, "b v c h w -> (b v) c h w")
+        images_reorder = rearrange(inputs, "b v c h w -> (b v) c h w")
         refine_out = self.refine_unet(
             torch.cat((features_mv_in_fullres, features_mono_in_fullres, images_reorder, \
                 disps_metric_fullres, disps_rel_fullres, pdf_max),
@@ -432,6 +433,7 @@ class MonoSplat(BaseModel):
         )
         raw_gaussians = rearrange(raw_gaussians, "(b v) c h w -> b v (h w) c", v=n, b=bs) # (b v (h w) 84)
 
+        # Convert the features and depths into Gaussians.
         xy_ray, _ = sample_image_grid((h, w), device) # [0.1]网格点
         xy_ray = rearrange(xy_ray, "h w xy -> (h w) () xy")
         gaussians = rearrange(
@@ -441,6 +443,7 @@ class MonoSplat(BaseModel):
         )
 
         offset_xy = gaussians[..., :2].sigmoid()
+
         pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
         xy_ray = xy_ray + (offset_xy - 0.5) * pixel_size # 归一化的图像坐标
 

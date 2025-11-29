@@ -189,10 +189,10 @@ class MonoSplatDumpResultHook(Hook):
 
             depth_pred = outputs['depth_pred'] # (b,n, H, W)
 
-            # depth_norm = depth_pred.clone()
-            # depth_norm -= depth_norm.min()
-            # depth_norm /= (depth_norm.max() + 1e-6)  # 归一化0~1
-            depth_norm = depth_pred.clamp(max=self.depth_limit) / self.depth_limit
+            depth_norm = depth_pred.clone()
+            depth_norm -= depth_norm.min()
+            depth_norm /= (depth_norm.max() + 1e-6)  # 归一化0~1
+            # depth_norm = depth_pred.clamp(max=self.depth_limit) / self.depth_limit
 
 
             for i in range(b):
@@ -207,9 +207,9 @@ class MonoSplatDumpResultHook(Hook):
                 torchvision.utils.save_image(grid, save_path)
 
                 depth_gt = data_sample.depth.unsqueeze(1)
-                # depth_gt -= depth_gt.min()
-                # depth_gt /= (depth_gt.max() + 1e-6)
-                depth_gt = depth_gt.clamp(self.depth_limit) / self.depth_limit
+                depth_gt -= depth_gt.min()
+                depth_gt /= (depth_gt.max() + 1e-6)
+                # depth_gt = depth_gt.clamp(self.depth_limit) / self.depth_limit
 
                 grid = torchvision.utils.make_grid(depth_gt, nrow=cols, padding=2)
                 save_name = f"{data_sample.scene_token}_{data_sample.token}_gt.png"

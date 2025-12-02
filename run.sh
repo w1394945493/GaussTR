@@ -87,16 +87,16 @@ python /home/lianghao/wangyushen/Projects/GaussTR/demo.py \
 export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train13
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train2
 
 
 
 # todo 评估/可视化
 export CUDA_VISIBLE_DEVICES=4
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/train13/epoch_24.pth \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train/epoch_24.pth \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/test
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/test
 
 # todo -------------------------------------#
 # todo 重新整理MonoSplat代码
@@ -112,5 +112,10 @@ PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/config
 export CUDA_VISIBLE_DEVICES=4
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/monosplat_base.py \
     -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/train6/epoch_24.pth \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/test
+
+PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/monosplat_base.py \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train/epoch_24.pth \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/test

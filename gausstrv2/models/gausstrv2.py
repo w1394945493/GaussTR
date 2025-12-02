@@ -44,6 +44,8 @@ class GaussTRV2(BaseModel):
                 vit_type = 'vitb',
                 model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
 
+                num_classes = 18,
+
                 near = 0.5,
                 far = 51.2,
 
@@ -195,7 +197,6 @@ class GaussTRV2(BaseModel):
             ),
         )
 
-        num_classes = 18
         self.to_gaussians_semantic = nn.Sequential(
             nn.Conv2d(gau_in, num_classes   * 2, 3, 1, 1),
             nn.GELU(),
@@ -487,6 +488,14 @@ class GaussTRV2(BaseModel):
         origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
         means = origins + directions * depths[..., None] # 初始位置 + 方向 x 预测深度
 
+        '''
+        import numpy as np
+        means3d = rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",)[0]
+        # 保存为 numpy
+        np.save("means3d_gausstrv2_0.npy.npy", means3d.cpu().numpy())
+        '''
+
+
         pixel_gaussians = Gaussians(
             rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",),
             rearrange(covariances,"b v r srf spp i j -> b (v r srf spp) i j",),
@@ -497,20 +506,12 @@ class GaussTRV2(BaseModel):
             rearrange(opacity_multiplier * opacities,"b v r srf spp -> b (v r srf spp)",),
         )
 
-        if mode == 'predict':
-            return self.gauss_head(
-                pixel_gaussians = pixel_gaussians,
-                gt_imgs = inputs,
-                image_shape=(h,w),
-                mode=mode,
-                **data_samples)
 
 
-        losses = self.gauss_head(
+        return self.gauss_head(
             pixel_gaussians = pixel_gaussians,
             gt_imgs = inputs,
             image_shape=(h,w),
             mode=mode,
             **data_samples)
 
-        return losses

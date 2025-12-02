@@ -36,6 +36,7 @@ class MonoSplatDecoder(BaseModule):
 
     def forward(self,
                 pixel_gaussians,
+                inputs,
                 rgb_gts,
                 image_shape, # tuple(h w)
                 near, # (b v)
@@ -103,7 +104,8 @@ class MonoSplatDecoder(BaseModule):
             outputs = [{
                 'img_pred': colors,
                 'depth_pred': rendered_depth,
-                'img_gt': rgb_gts / 255.,
+                # 'img_gt': rgb_gts / 255.,
+                'img_gt': inputs,
             }]
             return outputs
 
@@ -114,7 +116,8 @@ class MonoSplatDecoder(BaseModule):
         losses['loss_depth'] = self.depth_loss(rendered_depth, depth)
 
         rgb = colors.flatten(0,1)
-        rgb_gt = rgb_gts.flatten(0,1) / 255.
+        # rgb_gt = rgb_gts.flatten(0,1) / 255.
+        rgb_gt = inputs.flatten(0,1)
 
         # temp0 = rgb_input[-1]
 

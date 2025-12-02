@@ -208,6 +208,15 @@ class MonoSplat(BaseModel):
             ),
         )
 
+        num_classes = 18
+        self.to_gaussians_semantic = nn.Sequential(
+            nn.Conv2d(gau_in, num_classes   * 2, 3, 1, 1),
+            nn.GELU(),
+            nn.Conv2d(
+                num_classes * 2, num_classes, 3, 1, 1
+            ),
+        )
+
         # Gaussians prediction: centers, opacity
         in_channels = 1 + depth_unet_feat_dim + 1 + 1
         channels = depth_unet_feat_dim
@@ -217,7 +226,8 @@ class MonoSplat(BaseModel):
             nn.Conv2d(channels * 2, gaussians_per_pixel * 2, 3, 1, 1),
         )
 
-        self.decoder = MODELS.build(decoder)
+        # self.decoder = MODELS.build(decoder)
+        self.gauss_head = MODELS.build(decoder)
 
     def prepare_inputs(self, inputs_dict, data_samples):
         num_views = data_samples[0].num_views
@@ -501,5 +511,8 @@ class MonoSplat(BaseModel):
             rearrange(opacity_multiplier * opacities,"b v r srf spp -> b (v r srf spp)",),
         )
 
-        return  self.decoder(pixel_gaussians, image_shape=(h,w),near=near, far=far, mode=mode,**data_samples)
+        return  self.gauss_head(pixel_gaussians,
+                                inputs = inputs,
+                                image_shape=(h,w),
+                                near=near, far=far, mode=mode,**data_samples)
 

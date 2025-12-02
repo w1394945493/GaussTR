@@ -1,6 +1,6 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/vis19' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
@@ -10,7 +10,7 @@ custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
-save_vis = True
+save_vis = False
 custom_hooks = [
     dict(type='DumpResultHookV2',
          interval=1,
@@ -32,8 +32,12 @@ resize_lim=[0.1244, 0.12] #! 这个是提供了一个随机缩放比例的取值
 ori_image_shape = (900,1600)
 
 near = 0.5
-far = 51.2
-# far = 100.
+# far = 51.2
+far = 100.
+
+# train_ann_file='nuscenes_mini_infos_train.pkl'
+train_ann_file='nuscenes_mini_infos_val.pkl'
+val_ann_file='nuscenes_mini_infos_val.pkl'
 
 # in_channels=384
 # out_channels=[48, 96, 192, 384]
@@ -41,7 +45,11 @@ far = 51.2
 vit_type = 'vitb'
 model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
 in_channels=768
-out_channels=[96, 192, 384,768]
+out_channels=[96, 192, 384, 768]
+
+
+
+
 
 model = dict(
     type = 'GaussTRV2',
@@ -208,7 +216,7 @@ train_dataloader = dict(
     dataset=dict(
         # ann_file='nuscenes_infos_train.pkl',
         # ann_file='nuscenes_mini_infos_train.pkl',
-        ann_file='nuscenes_mini_infos_val.pkl',
+        ann_file=train_ann_file,
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(
@@ -223,7 +231,7 @@ val_dataloader = dict(
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         # ann_file='nuscenes_infos_val.pkl',
-        ann_file='nuscenes_mini_infos_val.pkl', # todo ann文件：.pkl
+        ann_file=val_ann_file, # todo ann文件：.pkl
         # ann_file='nuscenes_mini_infos_train.pkl',
         pipeline=test_pipeline, # todo 定义数据集处理流程
         **shared_dataset_cfg))

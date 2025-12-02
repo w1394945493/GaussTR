@@ -1,7 +1,7 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis13' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/outputs/vis14' # todo
 
 
 custom_imports = dict(imports=['gausstr','monosplat'])
@@ -39,28 +39,28 @@ val_interval = 1
 lr = 2e-4
 max_epochs=24
 
-vit_type = 'vits'
-model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vits14_pretrain.pth'
-in_channels = 384
-out_channels = [48, 96, 192, 384]
+# vit_type = 'vits'
+# model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vits14_pretrain.pth'
+# in_channels = 384
+# out_channels = [48, 96, 192, 384]
 
-# vit_type = 'vitb'
-# model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
-# in_channels = 768
-# out_channels = [96, 192, 384, 768]
+vit_type = 'vitb'
+model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
+in_channels = 768
+out_channels = [96, 192, 384, 768]
 
-# save vis
-custom_hooks = [
-    dict(type='MonoSplatDumpResultHook',
-         interval=1,
-         save_dir = os.path.join(work_dir,'vis'),
-         save_vis = True,
-         mean = mean,
-         std = std,
-         save_img = True,
-         save_depth = True,
-         ),
-]
+# save_vis = False
+# custom_hooks = [
+#     dict(type='MonoSplatDumpResultHook',
+#          interval=1,
+#          save_dir = os.path.join(work_dir,'vis'),
+#          save_vis = save_vis,
+#          mean = mean,
+#          std = std,
+#          save_img = True,
+#          save_depth = True,
+#          ),
+# ]
 
 # model
 model = dict(

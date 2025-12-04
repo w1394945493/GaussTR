@@ -54,7 +54,7 @@ model = dict(
             type='MLP',
             input_dim=embed_dims,
             output_dim=3,
-            mode='sigmoid',
+            mode='sigmoid', # todo sigmoid
             range=(1, 16)),
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
         # text_protos='ckpts/text_proto_embeds_talk2dino.pth', # todo

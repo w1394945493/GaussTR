@@ -85,7 +85,7 @@ def unproject(
     ) # 将像素坐标变换到相机坐标
 
     # Apply the supplied depth values.
-    return ray_directions * z[..., None]
+    return ray_directions * z[..., None] # z: 全1张量
 
 
 def get_world_rays(

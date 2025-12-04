@@ -176,7 +176,12 @@ class DumpResultHookV2(Hook):
 
                 data_sample = data_batch['data_samples'][i] # todo 每个batch的数据都放在一个data_samples下
 
-                d = depth_norm[i].unsqueeze(1)  # (n,1,H,W)
+                d = depth_pred[i].unsqueeze(1)  # (n,1,H,W)
+                d = d.clamp(0,100.0)
+                max_val = float(d.max())
+                d = d / (max_val + 1e-6)
+
+
                 grid = torchvision.utils.make_grid(d, nrow=cols, padding=2)
                 save_name = f"{data_sample.scene_token}_{data_sample.token}.png"
                 save_path = os.path.join(self.dir_depth, save_name)
@@ -184,8 +189,10 @@ class DumpResultHookV2(Hook):
                 torchvision.utils.save_image(grid, save_path)
 
                 depth_gt = data_sample.depth.unsqueeze(1)
-                depth_gt -= depth_gt.min()
-                depth_gt /= (depth_gt.max() + 1e-6)
+                depth_gt = depth_gt.clamp(0,100.0)
+                max_val = float(depth_gt.max())
+                depth_gt /= (max_val + 1e-6)
+
                 grid = torchvision.utils.make_grid(depth_gt, nrow=cols, padding=2)
                 save_name = f"{data_sample.scene_token}_{data_sample.token}_gt.png"
                 save_path = os.path.join(self.dir_depth, save_name)

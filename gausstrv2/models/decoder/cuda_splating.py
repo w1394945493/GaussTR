@@ -42,34 +42,39 @@ def get_projection_matrix(
 def render_cuda(
     extrinsics,
     intrinsics,
+    image_shape,
     near,
     far,
-    image_shape,
     background_color,
 
     gaussian_means,
-    gaussian_covariances,
     gaussian_sh_coefficients,
     gaussian_opacities,
+    gaussian_scales=None,
+    gaussian_rotations=None,
+    gaussian_covariances=None,
     scale_invariant = True,
     use_sh = True,
 ):
-    # assert use_sh or gaussian_sh_coefficients.shape[-1] == 1
-
-
     # Make sure everything is in a range where numerical issues don't appear.
     if scale_invariant:
         scale = 1 / near # ((bv))
         extrinsics = extrinsics.clone()
         extrinsics[..., :3, 3] = extrinsics[..., :3, 3] * scale[:, None]
-        gaussian_covariances = gaussian_covariances * (scale[:, None, None, None] ** 2)
+        if gaussian_covariances is not None:
+            gaussian_covariances = gaussian_covariances * (scale[:, None, None, None] ** 2)
         gaussian_means = gaussian_means * scale[:, None, None]
         near = near * scale
         far = far * scale
 
-    _, _, _, d_sh = gaussian_sh_coefficients.shape
-    degree = isqrt(d_sh) - 1
-    shs = rearrange(gaussian_sh_coefficients, "b g xyz n -> b g n xyz").contiguous() # todo xyz: c n: d_sh
+    if use_sh:
+        _, _, _, d_sh = gaussian_sh_coefficients.shape
+        degree = isqrt(d_sh) - 1
+    else:
+        degree = 0
+
+    shs = rearrange(gaussian_sh_coefficients, "b g c d_sh -> b g d_sh c").contiguous() # todo (bv g d_sh c) | (bv g 1 rgb)
+
 
     bsn, _, _ = extrinsics.shape
     h, w = image_shape
@@ -87,11 +92,13 @@ def render_cuda(
     depths = []
     for i in range(bsn):
         # Set up a tensor for the gradients of the screen-space means.
-        mean_gradients = torch.zeros_like(gaussian_means[i], requires_grad=True)
-        try:
-            mean_gradients.retain_grad()
-        except Exception:
-            pass
+        # mean_gradients = torch.zeros_like(gaussian_means[i], requires_grad=True)
+        # try:
+        #     mean_gradients.retain_grad()
+        # except Exception:
+        #     pass
+
+        means2D = torch.zeros_like(gaussian_means[i])
         settings = GaussianRasterizationSettings(
             image_height=h,
             image_width=w,
@@ -111,13 +118,19 @@ def render_cuda(
 
         row, col = torch.triu_indices(3, 3)
         image, radii, depth, alpha = rasterizer(
-            means3D=gaussian_means[i],
-            means2D=mean_gradients,
+            means3D=gaussian_means[i], # (N 3)
+            # means2D=mean_gradients,
+            means2D = means2D,
             shs=shs[i] if use_sh else None,
-            colors_precomp=None if use_sh else shs[i, :, 0, :],
-            opacities=gaussian_opacities[i, ..., None],
-            cov3D_precomp=gaussian_covariances[i, :, row, col],
+            colors_precomp=None if use_sh else shs[i, :, 0, :], # (N 3)
+            opacities=gaussian_opacities[i, ..., None], # (N 1)
+            scales = gaussian_scales[i], # (N 3)
+            rotations = gaussian_rotations[i], # (N 4)
+            cov3D_precomp=gaussian_covariances[i, :, row, col] if gaussian_covariances is not None else None,
         )
+
+        # image = torch.clamp(image,min=0.0,max=1.0) # todo 参考Omni-Scene中的工作
+
         images.append(image)
         depths.append(depth)
 

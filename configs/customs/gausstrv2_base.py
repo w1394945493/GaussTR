@@ -1,6 +1,6 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis14' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
@@ -10,7 +10,13 @@ custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
-save_vis = False
+
+d_sh = None
+use_sh = d_sh is not None
+renderer_type = "vanilla"
+# renderer_type = "gsplat"
+
+save_vis = True
 custom_hooks = [
     dict(type='DumpResultHookV2',
          interval=1,
@@ -28,74 +34,105 @@ custom_hooks = [
 ]  # 保存结果
 
 input_size = (112,192)
-resize_lim=[0.1244, 0.12] #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
+resize_lim=[0.1244, 0.12]  #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
 ori_image_shape = (900,1600)
 
-near = 0.5
-# far = 51.2
-far = 100.
+near = 0.1
+# far = 100.
+far = 1000.
 
 # train_ann_file='nuscenes_mini_infos_train.pkl'
 train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
-# in_channels=384
-# out_channels=[48, 96, 192, 384]
+use_checkpoint = True
+num_cams = 6
 
-vit_type = 'vitb'
-model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
-in_channels=768
-out_channels=[96, 192, 384, 768]
-
+_dim_ = 128
+num_heads = 8
+num_layers = 1
+patch_sizes=[8, 8, 4, 2]
 
 
 
 
 model = dict(
     type = 'GaussTRV2',
-    vit_type = vit_type,
-    model_url = model_url,
 
     near = near,
     far = far,
-
+    d_sh = d_sh,
     ori_image_shape = ori_image_shape,
+    use_checkpoint = use_checkpoint,
 
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
         mean=mean,
         std=std),
 
-    depth_head = dict(
-        type='DPTHead',
-        in_channels=in_channels,
-        features=64,
-        use_bn=False,
-        out_channels=out_channels,
-        use_clstoken=False,
-    ),
-    cost_head = dict(
-        type='CostHead',
-        in_channels=in_channels,
-        features=64,
-        use_bn=False,
-        out_channels=out_channels,
-        use_clstoken=False,
-    ),
-    transformer = dict(
-        type='MultiViewFeatureTransformer',
-        num_layers=3,
-        d_model=64,
-        nhead=1,
-        ffn_dim_expansion=4,
-    ),
+    backbone=dict(
+        type='mmdet.ResNet',
+        depth=50,
+        in_channels=3,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=-1,
+        norm_cfg=dict(type='BN', requires_grad=False),
+        norm_eval=True,
+        style='pytorch',
+        init_cfg=dict(
+            type='Pretrained',
+            # checkpoint='pretrained/dino_resnet50_pretrain.pth',
+            checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
+            prefix=None)),
+    neck=dict(
+        type='mmdet.FPN',
+        in_channels=[256, 512, 1024, 2048],
+        out_channels=_dim_,
+        start_level=0,
+        add_extra_convs='on_input',
+        num_outs=4),
+    pixel_gs=dict(
+        type="PixelGaussian",
+        use_checkpoint=use_checkpoint,
+        down_block=dict(
+            type='MVDownsample2D',
+            num_layers=num_layers,
+            resnet_act_fn="silu",
+            resnet_groups=32,
+            num_attention_heads=num_heads,
+            num_views=num_cams),
+        up_block=dict(
+            type='MVUpsample2D',
+            num_layers=num_layers,
+            resnet_act_fn="silu",
+            resnet_groups=32,
+            num_attention_heads=num_heads,
+            num_views=num_cams),
+        mid_block=dict(
+            type='MVMiddle2D',
+            num_layers=num_layers,
+            resnet_act_fn="silu",
+            resnet_groups=32,
+            num_attention_heads=num_heads,
+            num_views=num_cams),
+        patch_sizes=patch_sizes,
+        in_embed_dim=_dim_,
+        out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
+        num_cams=num_cams,
+        near=near,
+        far=far),
+
     gauss_head=dict(
         type='GaussTRV2Head',
         loss_lpips=dict(
             type='LossLpips',
             weight = 0.05,
         ),
-        depth_limit=far,
+        near = near,
+        far = far,
+        use_sh = use_sh,
+        renderer_type = renderer_type,
     )
 )
 
@@ -147,7 +184,7 @@ train_pipeline = [
             'sample_idx',
             'num_views', 'img_path', 'depth', 'feats',
             #--------------------------------------------#
-            'sem_seg', # todo 2D分割图
+            'img','sem_seg', # todo 2D分割图
             # -------------------------------------------#
             'token','scene_token','scene_idx',
         ] # todo 返回 'data_samples'

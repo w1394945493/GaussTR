@@ -181,9 +181,9 @@ class GaussTRV2Head(BaseModule):
         probs = segs.flatten(0,1).flatten(2)
         target = sem_segs.flatten(0, 1).flatten(1).long()
 
-        losses['loss_ce'] = F.cross_entropy(
-            probs,
-            target)
+        # losses['loss_ce'] = F.cross_entropy(
+        #     probs,
+        #     target)
 
         return losses
 

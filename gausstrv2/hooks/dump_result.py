@@ -134,11 +134,12 @@ class DumpResultHookV2(Hook):
         if self.save_img and outputs['img_pred'] is not None:
 
             img_pred  = outputs['img_pred']   # (b, n, 3, H, W)
-            img_pred = img_pred*self.std.view(1,1,3,1,1).to(img_pred.device) + self.mean.view(1,1,3,1,1).to(img_pred.device)
+            # img_pred = img_pred*self.std.view(1,1,3,1,1).to(img_pred.device) + self.mean.view(1,1,3,1,1).to(img_pred.device)
 
             for i in range(b):
                 data_sample = data_batch['data_samples'][i]
-                imgs = img_pred[i].float() / 255.0  # 0~1 float，方便save_image
+                # imgs = img_pred[i].float() / 255.0  # 0~1 float，方便save_image
+                imgs = img_pred[i].clamp(min=0.,max=1.)
 
                 # 布局：偶数 → 3×2；奇数 → 1×n
                 grid = torchvision.utils.make_grid(

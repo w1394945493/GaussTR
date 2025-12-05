@@ -129,7 +129,7 @@ def render_cuda(
             cov3D_precomp=gaussian_covariances[i, :, row, col] if gaussian_covariances is not None else None,
         )
 
-        # image = torch.clamp(image,min=0.0,max=1.0) # todo 参考Omni-Scene中的工作
+        image = torch.clamp(image,min=0.0,max=1.0) # todo 参考Omni-Scene中的工作
 
         images.append(image)
         depths.append(depth)

@@ -27,6 +27,7 @@ class PixelGaussian(BaseModule):
                  num_cams=6,
                  near=0.1,
                  far=1000.0,
+                 num_classes = 18,
                  use_checkpoint=False,
                  **kwargs,
                  ):
@@ -115,7 +116,7 @@ class PixelGaussian(BaseModule):
         self.delta_act = torch.exp
 
         # todo 预测高斯相应的语义
-        num_classes = 18
+
         self.num_classes = num_classes
         self.to_semantics = nn.Sequential(
             nn.GELU(),
@@ -212,6 +213,8 @@ class PixelGaussian(BaseModule):
         gaussians = self.to_gaussians(features) # todo: 高斯参数预测：(bs*v,128,h,w) -> (bs*v,14,h,w) 网络输出14通道
         gaussians = rearrange(gaussians, "(b v) (n c) h w -> b (v h w n) c",
                               b=bs, v=self.num_cams, n=1, c=self.gs_channels)
+
+        # todo 语义预测
         semantics = self.to_semantics(features)
         semantics = rearrange(semantics, "(b v) (n c) h w -> b (v h w n) c",
                               b=bs, v=self.num_cams, n=1, c=self.num_classes)
@@ -226,6 +229,7 @@ class PixelGaussian(BaseModule):
         depths_in = rearrange(depths_in, "(b v) c h w-> b (v h w) c", b=bs, v=self.num_cams)
         origins = rearrange(origins, "b v h w c -> b (v h w) c")
         origins = origins.unsqueeze(-2) # todo 射线原点
+
         #----------------------------------#
         # means计算过程：见论文3.2节式(3) # todo 位置计算：Omni-Scene中，没有计算深度值，而是直接使用的Metric 3D预测的度量深度
         directions = rearrange(directions, "b v h w c -> b (v h w) c")

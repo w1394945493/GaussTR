@@ -103,7 +103,6 @@ class GaussTRV2Head(BaseModule):
             rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs).squeeze(2) # (b v h w)
 
         else:
-
             colors, rendered_depth = rasterize_gaussians(
                 extrinsics=extrinsics,
                 intrinsics=intrinsics,

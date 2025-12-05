@@ -1,6 +1,6 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis14' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis18' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
@@ -13,8 +13,8 @@ std  = [58.395, 57.12, 57.375]
 
 d_sh = None
 use_sh = d_sh is not None
-renderer_type = "vanilla"
-# renderer_type = "gsplat"
+# renderer_type = "vanilla"
+renderer_type = "gsplat"
 
 save_vis = True
 custom_hooks = [
@@ -41,8 +41,8 @@ near = 0.1
 # far = 100.
 far = 1000.
 
-# train_ann_file='nuscenes_mini_infos_train.pkl'
-train_ann_file='nuscenes_mini_infos_val.pkl'
+train_ann_file='nuscenes_mini_infos_train.pkl'
+# train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
 use_checkpoint = True
@@ -121,7 +121,9 @@ model = dict(
         out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
         num_cams=num_cams,
         near=near,
-        far=far),
+        far=far,
+
+        ),
 
     gauss_head=dict(
         type='GaussTRV2Head',

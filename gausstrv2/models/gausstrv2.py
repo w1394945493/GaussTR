@@ -168,29 +168,34 @@ class GaussTRV2(BaseModel):
         intrinsics = data_samples['cam2img'][...,:3,:3]
         extrinsics = data_samples['cam2ego']
 
-
-        img_feats = self.extract_img_feat(img=inputs)
-
         extrinsics = rearrange(extrinsics, "b v i j -> b v () () () i j")
-        intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j")
+        intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
+
         xy_ray, _ = sample_image_grid((h, w), device) # [0.1]网格点
         coordinates = repeat(xy_ray, "h w xy -> b v (h w) () () xy",b=bs,v=n)
         origins, directions = get_world_rays(coordinates, extrinsics, intrinsics) # (b v (h w) 1 1 3) (b v (h w) 1 1 3)
 
         origins = rearrange(origins,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
         directions = rearrange(directions,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
-        pluckers = self.plucker_embedder(origins,directions)
+        pluckers = self.plucker_embedder(origins,directions) # (b v 6 h w)
 
+
+
+        img_feats = self.extract_img_feat(img=inputs)
         pixel_gaussians = self.pixel_gs(
                 rearrange(img_feats[0], "b v c h w -> (b v) c h w"),
                 data_samples["depth"], # (b v h w)
-                pluckers, # (b v 6 h w)
-                origins, directions)
+                pluckers,
+                origins,
+                directions,
+                intrinsics = data_samples['cam2img'][...,:3,:3],
+                extrinsics = data_samples['cam2ego'],)
         '''
         import numpy as np
-        means3d = rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",)[0]
+        # means3d = rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",)[0]
+        means3d = pixel_gaussians.means[0]
         # 保存为 numpy
-        np.save("means3d_gausstrv2_3.npy.npy", means3d.cpu().numpy())
+        np.save("means3d_gausstrv2_4.npy.npy", means3d.cpu().numpy())
         '''
 
         return self.gauss_head(

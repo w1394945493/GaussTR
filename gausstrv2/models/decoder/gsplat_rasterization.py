@@ -12,6 +12,7 @@ def rasterize_gaussians(
     means3d,
     rotations,
     scales,
+    covariances,
     opacities,
     colors, # 颜色
     use_sh = True,
@@ -46,13 +47,14 @@ def rasterize_gaussians(
 
     # from gsplat import rasterization
     rendered, alpha, _ = rasterization(
-        means3d, # (n,3)
-        rotations, # (n,4)
-        scales, # (n,3)
-        opacities, # (n)
-        colors, # (n,c)
-        viewmat, # viewmat: world2cam变换矩阵
-        cam2imgs, # (v 3 3)
+        means=means3d, # (n,3)
+        quats=rotations, # (n,4)
+        scales=scales, # (n,3)
+        opacities=opacities, # (n)
+        colors=colors, # (n,c)
+        covars=covariances,
+        viewmats=viewmat, # viewmat: world2cam变换矩阵
+        Ks=cam2imgs, # (v 3 3)
         width=W, # 192
         height=H, # 112
         sh_degree=sh_degree, # None or int

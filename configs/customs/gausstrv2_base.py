@@ -1,6 +1,6 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis20' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis22' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs

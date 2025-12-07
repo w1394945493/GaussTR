@@ -39,6 +39,6 @@ def build_covariance(
     return (
         rotation
         @ scale
-        @ rearrange(scale, "... i j -> ... j i")
+        @ rearrange(scale, "... i j -> ... j i") # 转置
         @ rearrange(rotation, "... i j -> ... j i")
     )

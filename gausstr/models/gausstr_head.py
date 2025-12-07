@@ -130,7 +130,7 @@ class GaussTRHead(BaseModule):
         bs, n = cam2img.shape[:2] # todo
         x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
 
-        deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整: x,y, 
+        deltas = self.regress_head(x) # (b,v,300,3) 计算偏移量：表示每个参考点的位置调整: x,y,
         ref_pts = (
             deltas[..., :2] +
             inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # 参考点位置更新，参考点与x，y偏移量相加，得到新的参考点
@@ -169,7 +169,7 @@ class GaussTRHead(BaseModule):
             density, grid_feats = self.voxelizer(
                 means3d=means3d.flatten(1, 2),
                 opacities=opacities.flatten(1, 2),
-                features=features.flatten(1, 2).softmax(-1),
+                features=features.flatten(1, 2).softmax(-1), # (b n n_class)
                 covariances=covariances.flatten(1, 2)) # 将离散的3D高斯分布转换为occ占据预测网格图
             if self.prompt_denoising:
                 probs = prompt_denoising(grid_feats)

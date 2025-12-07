@@ -110,6 +110,7 @@ class GaussTRV2Head(BaseModule):
                 means3d=means3d,
                 rotations=rotations,
                 scales=scales,
+                covariances=covariances,
                 opacities=opacities.squeeze(-1),
                 colors=harmonics, # todo (b n c d_sh)
                 use_sh=self.use_sh,

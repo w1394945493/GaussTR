@@ -108,17 +108,17 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
 
 # todo GaussTRV2
 # todo 训练
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6 \
-    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train5/epoch_18.pth
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6/epoch_11.pth
 
 
 
 # todo 评估/可视化
 export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train5/epoch_21.pth \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6/epoch_24.pth \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/test

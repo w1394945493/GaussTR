@@ -34,43 +34,47 @@ class OccMetricV2(BaseMetric):
         self.pklfile_prefix = pklfile_prefix
         self.submission_prefix = submission_prefix
         super().__init__(prefix=prefix, collect_device=collect_device)
-        # self.num_classes = num_classes
-        # self.use_lidar_mask = use_lidar_mask
-        # self.use_image_mask = use_image_mask
+        self.num_classes = num_classes
+        self.use_lidar_mask = use_lidar_mask
+        self.use_image_mask = use_image_mask
 
-        # self.hist = np.zeros((num_classes, num_classes))
+        self.hist = np.zeros((num_classes, num_classes))
         self.results = []
 
         self.test_step_outputs = {}
 
     def process(self, data_batch, data_samples):
-        # # preds = torch.stack(data_samples) # 增加一个新的bs维度
-        # preds = data_samples[0]['occ_pred'] # (b,X,Y,Z)
+        # todo -------------------------------#
+        # todo 占用预测评估
+        preds = data_samples[0]['occ_pred'] # (b,X,Y,Z)
+        labels = torch.cat(
+            [d.gt_pts_seg.semantic_seg for d in data_batch['data_samples']])
+        if self.use_image_mask:
+            mask = torch.stack([
+                torch.from_numpy(d.mask_camera)
+                for d in data_batch['data_samples']
+            ]).to(labels.device, torch.bool)
+        elif self.use_lidar_mask:
+            mask = torch.stack([
+                torch.from_numpy(d.mask_lidar)
+                for d in data_batch['data_samples']
+            ]).to(labels.device, torch.bool)
+        if self.use_image_mask or self.use_lidar_mask:
+            preds = preds[mask]
+            labels = labels[mask]
 
-        # labels = torch.cat(
-        #     [d.gt_pts_seg.semantic_seg for d in data_batch['data_samples']])
+        preds = preds.flatten().cpu().numpy()
+        labels = labels.flatten().cpu().numpy()
+        hist_ = fast_hist(preds, labels, self.num_classes) # 计算混淆矩阵
+        self.hist += hist_
 
-        # if self.use_image_mask:
-        #     mask = torch.stack([
-        #         torch.from_numpy(d.mask_camera)
-        #         for d in data_batch['data_samples']
-        #     ]).to(labels.device, torch.bool)
-        # elif self.use_lidar_mask:
-        #     mask = torch.stack([
-        #         torch.from_numpy(d.mask_lidar)
-        #         for d in data_batch['data_samples']
-        #     ]).to(labels.device, torch.bool)
-        # if self.use_image_mask or self.use_lidar_mask:
-        #     preds = preds[mask]
-        #     labels = labels[mask]
-
-        # preds = preds.flatten().cpu().numpy()
-        # labels = labels.flatten().cpu().numpy()
-        # hist_ = fast_hist(preds, labels, self.num_classes) # 计算混淆矩阵
-        # self.hist += hist_
-
+        # todo -------------------------------#
+        # todo 视图合成评估
         rgb = rearrange(data_samples[0]['img_pred'],'b v c h w -> (b v) c h w')
-        rgb_gt = rearrange(data_samples[0]['img_gt'],'b v c h w -> (b v) c h w')
+        # rgb_gt = rearrange(data_samples[0]['img_gt'],'b v c h w -> (b v) c h w')
+        rgb_gt = torch.cat(
+            [d.img for d in data_batch['data_samples']],dim=0) / 255.
+        rgb_gt = rgb_gt.to(rgb.device)
 
         if f"psnr" not in self.test_step_outputs:
             self.test_step_outputs[f"psnr"] = []
@@ -108,37 +112,38 @@ class OccMetricV2(BaseMetric):
             self.format_results(results)
             return None
 
-        # iou = per_class_iou(self.hist)
-        # # if ignore_index is in iou, replace it with nan
-        # miou = np.nanmean(iou[:-1])  # NOTE: ignore free class
-        # label2cat = self.dataset_meta['label2cat']
-
-        # header = ['classes']
-        # for i in range(len(label2cat) - 1):
-        #     header.append(label2cat[i])
-        # header.extend(['miou', 'iou'])
-
-        # ret_dict = dict()
-        # table_columns = [['results']]
-        # for i in range(len(label2cat) - 1):
-        #     ret_dict[label2cat[i]] = float(iou[i])
-        #     table_columns.append([f'{iou[i]:.4f}'])
-        # ret_dict['miou'] = float(miou)
-        # ret_dict['iou'] = compute_occ_iou(self.hist, self.num_classes - 1)
-        # table_columns.append([f'{miou:.4f}'])
-        # table_columns.append([f"{ret_dict['iou']:.4f}"])
-
-        # table_data = [header]
-        # table_rows = list(zip(*table_columns))
-        # table_data += table_rows
-        # table = AsciiTable(table_data)
-        # table.inner_footing_row_border = True
-        # print_log('\n' + table.table, logger=logger)
-
-        # return ret_dict
-
-
+        # todo 评估结果记录
         ret_dict = dict()
+
+        # todo -----------------------------#
+        # todo occ占用预测评估结果打印
+        iou = per_class_iou(self.hist)
+        # if ignore_index is in iou, replace it with nan
+        miou = np.nanmean(iou[:-1])  # NOTE: ignore free class
+        label2cat = self.dataset_meta['label2cat']
+
+        header = ['classes']
+        for i in range(len(label2cat) - 1):
+            header.append(label2cat[i])
+        header.extend(['miou', 'iou'])
+        table_columns = [['results']]
+        for i in range(len(label2cat) - 1):
+            ret_dict[label2cat[i]] = float(iou[i])
+            table_columns.append([f'{iou[i]:.4f}'])
+        ret_dict['miou'] = float(miou)
+        ret_dict['iou'] = compute_occ_iou(self.hist, self.num_classes - 1)
+        table_columns.append([f'{miou:.4f}'])
+        table_columns.append([f"{ret_dict['iou']:.4f}"])
+
+        table_data = [header]
+        table_rows = list(zip(*table_columns))
+        table_data += table_rows
+        table = AsciiTable(table_data)
+        table.inner_footing_row_border = True
+        print_log('\n' + table.table, logger=logger)
+
+        # todo -----------------------------#
+        # todo 视图合成评估结果打印
         header = ['metric name']
         table_columns = ['results']
         for metric_name, metric_scores in self.test_step_outputs.items():
@@ -153,3 +158,5 @@ class OccMetricV2(BaseMetric):
         print_log('\n' + table.table, logger=logger)
 
         return ret_dict
+
+

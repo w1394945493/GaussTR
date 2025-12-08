@@ -25,11 +25,13 @@ from .decoder import rasterize_gaussians,render_cuda
 class GaussTRV2Head(BaseModule):
 
     def __init__(self,
+                 voxelizer,
                  loss_lpips,
                  near,
                  far,
                  use_sh = True,
                  background_color=[0.0, 0.0, 0.0],
+                 num_classes = 18,
                  renderer_type = "vanilla",
                  ):
         super().__init__()
@@ -39,12 +41,16 @@ class GaussTRV2Head(BaseModule):
             torch.tensor(background_color, dtype=torch.float32),
             persistent=False,
         )
+        self.voxelizer = MODELS.build(voxelizer)
+
         self.loss_lpips = MODELS.build(loss_lpips)
         self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
         self.use_sh = use_sh
         self.near = near
         self.far = far
         self.depth_limit = far
+
+        self.num_classes = num_classes
 
         self.renderer_type = renderer_type
 
@@ -129,6 +135,7 @@ class GaussTRV2Head(BaseModule):
             means3d=means3d,
             rotations=rotations,
             scales=scales,
+            covariances=covariances,
             opacities=opacities.squeeze(-1),
             colors=semantics,
 
@@ -141,25 +148,49 @@ class GaussTRV2Head(BaseModule):
             render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
             channel_chunk=32)
 
-
-        # rendered_seg = rendered[:,3:-1]
-
         # todo ---------------------------------------#
         # todo 推理
         if mode == 'predict':
-            seg_pred = rearrange(segs,'b v c h w -> b v h w c').softmax(-1).argmax(-1)
+            with torch.no_grad():
+                # todo ---------------------------------------#
+                # todo occ 占用
+                # features = torch.nn.functional.one_hot(
+                #     sem_segs.long(),
+                #     num_classes=self.num_classes,
+                # ).float()
+                # features = rearrange(features,"b v h w c -> b (v h w) c")
+                features = rearrange(segs,"b v c h w -> b (v h w) c").detach()
+                # density, grid_feats = self.voxelizer(
+                #     means3d=means3d,
+                #     opacities=opacities.unsqueeze(-1), # (b N) -> (b N 1)
+                #     features=features, # (b N n_class)
+                #     scales = scales,
+                #     rotations = rotations,
+                #     covariances=covariances) # covariances: (b N 3 3)
+                # preds = grid_feats.argmax(-1) # (b X Y Z n_class) -> (b X Y Z)
+                # preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # (b X Y Z)
 
-            outputs = [{
-                'occ_pred': None,
-                'depth_pred': rendered_depth, # (b v h w)
-                'seg_pred':seg_pred,
-                # 'seg_pred': None,
-                'img_pred': colors,
-                'img_gt': rgb_gts / 255.,
-                # 'img_gt': inputs,
+                grid_feats = self.voxelizer(
+                                means3d=means3d.detach(),
+                                opacities=opacities.detach().unsqueeze(-1), # (b N) -> (b N 1)
+                                features=features, # (b N n_class)
+                                scales = scales.detach(),
+                                rotations = rotations.detach(),
+                                covariances=covariances.detach()) # todo (b X Y Z n_classes)
+                preds = grid_feats.argmax(-1)
 
-            }]
-            return outputs
+                seg_pred = rearrange(segs,'b v c h w -> b v h w c').detach().softmax(-1).argmax(-1)
+                outputs = [{
+                    'occ_pred': preds,
+                    'depth_pred': rendered_depth, # (b v h w)
+                    'seg_pred':seg_pred,
+                    # 'seg_pred': None,
+                    'img_pred': colors,
+                    # 'img_gt': rgb_gts / 255.,
+                    # 'img_gt': inputs,
+
+                }]
+                return outputs
 
 
         losses = {}
@@ -169,7 +200,6 @@ class GaussTRV2Head(BaseModule):
         depth = depth.flatten(0,1)
         losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth,
                                                criterion='l1')
-
         rgb = colors.flatten(0,1)
         # rgb_gt = inputs.flatten(0,1)
         rgb_gt = rgb_gts.flatten(0,1) / 255.
@@ -182,9 +212,10 @@ class GaussTRV2Head(BaseModule):
         probs = segs.flatten(0,1).flatten(2)
         target = sem_segs.flatten(0, 1).flatten(1).long()
 
-        # losses['loss_ce'] = F.cross_entropy(
-        #     probs,
-        #     target)
+        losses['loss_ce'] = F.cross_entropy(
+            probs,
+            target,
+            ignore_index=0)
 
         return losses
 

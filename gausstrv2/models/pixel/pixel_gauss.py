@@ -29,6 +29,8 @@ class PixelGaussian(BaseModule):
                  num_cams=6,
                  near=0.1,
                  far=1000.0,
+                 scale_min = 0.5,
+                 scale_max = 15.0,
                  num_classes = 18,
                  use_checkpoint=False,
                  **kwargs,
@@ -102,7 +104,7 @@ class PixelGaussian(BaseModule):
             nn.GELU(),
         )
 
-        gs_channels = 3 + 1 + 3 + 4 + 3 # offset, opacity, scale, rotation, rgb
+        gs_channels = 3 + 1 + 3 + 4 + 3 # todo offset, opacity, scale, rotation, rgb
         self.gs_channels = gs_channels
         self.feature_norm = nn.GroupNorm(num_channels=out_embed_dims[0], num_groups=32, eps=1e-6)
         self.to_gaussians = nn.Sequential(
@@ -110,7 +112,13 @@ class PixelGaussian(BaseModule):
             nn.Conv2d(out_embed_dims[0], gs_channels, 1),
         )
         self.opt_act = torch.sigmoid
-        self.scale_act = lambda x: torch.exp(x) * 0.01
+
+        # todo scales解码
+        # self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
+        self.scale_act = torch.sigmoid
+        self.scale_min = scale_min
+        self.scale_max = scale_max
+
         self.rot_act = lambda x: F.normalize(x, dim=-1)
         self.rgb_act = torch.sigmoid
 
@@ -225,8 +233,15 @@ class PixelGaussian(BaseModule):
 
         offsets = gaussians[..., :3] # offsets: 每个高斯点相对射线采样点的偏移
         opacities = self.opt_act(gaussians[..., 3:4]) # opactites：透明度 # todo Sigmoid操作
-        scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
-        rotations = self.rot_act(gaussians[..., 7:11]) # rotations：四元数旋转 # todo Normalize操作
+
+        # todo Omni-Scene中的设计
+        # scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
+
+        # todo 参考MonoSplat、GaussianFormer中的设计
+        scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
+        scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
+
+        rotations = self.rot_act(gaussians[..., 7:11]) # rotations：四元数旋转 # todo Normalize归一化操作
         rgbs = self.rgb_act(gaussians[..., 11:14]) # 颜色值 # todo sigmoid 操作
         # todo-----------------------------#
         # todo 5.空间点坐标计算
@@ -250,7 +265,7 @@ class PixelGaussian(BaseModule):
         covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # 自车坐标系下的协方差矩阵
         covariances = rearrange(covariances,"b v h w i j -> b (v h w) i j")
         # todo-----------------------------#
-        # todo 6.得到最终输出
+        # todo 6.整合输出
         # gaussians = torch.cat([means, rgbs, opacities, rotations, scales], dim=-1) # todo：gaussians：每个点的几何与外观属性
         # features = rearrange(features, "(b v) c h w -> b (v h w) c", b=bs, v=self.num_cams) # todo：features：对应点的高维语义特征
         # features = features.unsqueeze(2) # b v*h*w n c

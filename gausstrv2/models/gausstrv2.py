@@ -13,7 +13,7 @@ from math import isqrt
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from gausstr.models.utils import flatten_multi_scale_feats
+from gausstrv2.models.utils import flatten_multi_scale_feats
 
 from gausstrv2.models.encoder import mv_feature_add_position,prepare_feat_proj_data_lists
 from gausstrv2.models.encoder import warp_with_pose_depth_candidates

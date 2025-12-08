@@ -1,11 +1,11 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis22' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis24' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
-custom_imports = dict(imports=['gausstr','gausstrv2']) # todo
+custom_imports = dict(imports=['gausstrv2']) # todo
 
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
@@ -16,6 +16,7 @@ use_sh = d_sh is not None
 # renderer_type = "vanilla"
 renderer_type = "gsplat"
 
+# save_vis = False
 save_vis = True
 custom_hooks = [
     dict(type='DumpResultHookV2',
@@ -24,8 +25,8 @@ custom_hooks = [
          std  = std,
          save_dir = os.path.join(work_dir,'vis'),
          save_vis = save_vis,
-        #  save_occ = True,
-         save_occ = False,
+         save_occ = True,
+        #  save_occ = False,
          save_depth = True,
          save_sem_seg = True,
         #  save_img = False,
@@ -41,8 +42,8 @@ near = 0.1
 # far = 100.
 far = 1000.
 
-train_ann_file='nuscenes_mini_infos_train.pkl'
-# train_ann_file='nuscenes_mini_infos_val.pkl'
+# train_ann_file='nuscenes_mini_infos_train.pkl'
+train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
 use_checkpoint = True
@@ -127,6 +128,15 @@ model = dict(
 
     gauss_head=dict(
         type='GaussTRV2Head',
+        voxelizer=dict(
+            type='GaussianVoxelizer',
+            vol_range=[-40, -40, -1, 40, 40, 5.4],
+            voxel_size=0.4,
+            filter_gaussians=True,
+            opacity_thresh=0.6,
+            # covariance_thresh=1.5e-2,
+            covariance_thresh=0,
+            ),
         loss_lpips=dict(
             type='LossLpips',
             weight = 0.05,

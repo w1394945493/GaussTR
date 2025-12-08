@@ -194,6 +194,8 @@ def main():
 
             sam2_predictor.set_image(image_source)
 
+            # todo ----------------------------------#
+            # todo 使用Grounding DINO进行目标框预测
             boxes, confidences, labels = predict(
                 model=grounding_model,
                 image=image,
@@ -215,14 +217,15 @@ def main():
                 # turn on tfloat32 for Ampere GPUs (https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices)
                 torch.backends.cuda.matmul.allow_tf32 = True
                 torch.backends.cudnn.allow_tf32 = True
-
+            # todo --------------------------------#
+            # todo 将目标框作为提示输入
             if input_boxes.shape[0] != 0:
                 masks, scores, logits = sam2_predictor.predict(
                     point_coords=None,
                     point_labels=None,
                     box=input_boxes, # todo (N,4)
                     multimask_output=False,
-                )
+                ) # todo (N 1 H W)
 
                 # convert the shape to (n, H, W)5
                 if masks.ndim == 4:
@@ -240,7 +243,7 @@ def main():
             # if vis and (i_iter % 10 == 0):
             if vis:
                 height, width = results.shape # todo results (H,W) 每个位置的值是预测类别
-                color_image = np.zeros((height, width, 4), dtype=np.uint8) 
+                color_image = np.zeros((height, width, 4), dtype=np.uint8)
 
                 # 遍历每个像素，给它分配对应类别的颜色
                 for i in range(height):
@@ -256,9 +259,9 @@ def main():
                 ori_save_path = f'{save_path}.png'
                 ori_image.save(ori_save_path)
 
-
+            # todo 保存语义预测结果
             np.save(osp.join(OUTPUT_DIR, image_path.split('.')[0]), results)
 
-
+# todo 用以生成语义预测标注
 if __name__=='__main__':
     main()

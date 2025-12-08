@@ -286,7 +286,7 @@ class SAM2ImagePredictor:
 
         mask_input, unnorm_coords, labels, unnorm_box = self._prep_prompts(
             point_coords, point_labels, box, mask_input, normalize_coords
-        )
+        ) # box: (N 4) -> unorm_box: (N 2 2)
 
         masks, iou_predictions, low_res_masks = self._predict(
             unnorm_coords,
@@ -336,9 +336,9 @@ class SAM2ImagePredictor:
     @torch.no_grad()
     def _predict(
         self,
-        point_coords: Optional[torch.Tensor],
-        point_labels: Optional[torch.Tensor],
-        boxes: Optional[torch.Tensor] = None,
+        point_coords: Optional[torch.Tensor], # todo point_coords: BxNx2 用户点击位置(像素坐标)
+        point_labels: Optional[torch.Tensor], # todo point_labels: BxN 1: 前景点 0: 背景点
+        boxes: Optional[torch.Tensor] = None, # todo 提示框
         mask_input: Optional[torch.Tensor] = None,
         multimask_output: bool = True,
         return_logits: bool = False,

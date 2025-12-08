@@ -1,7 +1,7 @@
 import torch
 from gsplat import rasterization
 from math import isqrt
-from gausstr.models.utils import unbatched_forward
+from gausstrv2.models.utils import unbatched_forward
 
 
 @unbatched_forward
@@ -42,8 +42,6 @@ def rasterize_gaussians(
         sh_degree = isqrt(d_sh) - 1
     else:
         sh_degree = None
-
-
 
     # from gsplat import rasterization
     rendered, alpha, _ = rasterization(

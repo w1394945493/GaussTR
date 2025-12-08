@@ -291,7 +291,7 @@ class SAM2ImagePredictor:
         masks, iou_predictions, low_res_masks = self._predict(
             unnorm_coords,
             labels,
-            unnorm_box,
+            unnorm_box, # todo 框 (N 2 2)
             mask_input,
             multimask_output,
             return_logits=return_logits,
@@ -320,10 +320,10 @@ class SAM2ImagePredictor:
             labels = torch.as_tensor(point_labels, dtype=torch.int, device=self.device)
             if len(unnorm_coords.shape) == 2:
                 unnorm_coords, labels = unnorm_coords[None, ...], labels[None, ...]
-        if box is not None:
-            box = torch.as_tensor(box, dtype=torch.float, device=self.device)
+        if box is not None: # todo
+            box = torch.as_tensor(box, dtype=torch.float, device=self.device) # todo (N 4)
             unnorm_box = self._transforms.transform_boxes(
-                box, normalize=normalize_coords, orig_hw=self._orig_hw[img_idx]
+                box, normalize=normalize_coords, orig_hw=self._orig_hw[img_idx] # todo 原图尺寸：_orig_hw: 900 1600
             )  # Bx2x2
         if mask_logits is not None:
             mask_input = torch.as_tensor(
@@ -331,7 +331,7 @@ class SAM2ImagePredictor:
             )
             if len(mask_input.shape) == 3:
                 mask_input = mask_input[None, :, :, :]
-        return mask_input, unnorm_coords, labels, unnorm_box
+        return mask_input, unnorm_coords, labels, unnorm_box # todo unorm_box (N 4) -> (N 2 2)
 
     @torch.no_grad()
     def _predict(
@@ -388,20 +388,20 @@ class SAM2ImagePredictor:
             concat_points = (point_coords, point_labels)
         else:
             concat_points = None
-
+        # todo 给SAM(Segment Anything Model)的Prompt Encoder构造输入，把框(boxes)作为提示转换成点坐标+标签的形式：
         # Embed prompts
         if boxes is not None:
-            box_coords = boxes.reshape(-1, 2, 2)
-            box_labels = torch.tensor([[2, 3]], dtype=torch.int, device=boxes.device)
+            box_coords = boxes.reshape(-1, 2, 2) # todo 把box转成坐标格式 [[x1 y1][x2 y2]] SAM 的box prompt就用这两点表示
+            box_labels = torch.tensor([[2, 3]], dtype=torch.int, device=boxes.device) # todo 给box生成标签：用SAM固定的编码： 正点1 负点0 左上角点2 右下角点3
             box_labels = box_labels.repeat(boxes.size(0), 1)
             # we merge "boxes" and "points" into a single "concat_points" input (where
             # boxes are added at the beginning) to sam_prompt_encoder
             if concat_points is not None:
                 concat_coords = torch.cat([box_coords, concat_points[0]], dim=1)
                 concat_labels = torch.cat([box_labels, concat_points[1]], dim=1)
-                concat_points = (concat_coords, concat_labels)
+                concat_points = (concat_coords, concat_labels)  # todo 合并box prompts到现有concat_points
             else:
-                concat_points = (box_coords, box_labels)
+                concat_points = (box_coords, box_labels) # todo 没有point prompts的情况
 
         sparse_embeddings, dense_embeddings = self.model.sam_prompt_encoder(
             points=concat_points,

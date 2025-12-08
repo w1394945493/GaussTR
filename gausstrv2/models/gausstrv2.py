@@ -13,15 +13,11 @@ from math import isqrt
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from gausstrv2.models.utils import flatten_multi_scale_feats
 
-from gausstrv2.models.encoder import mv_feature_add_position,prepare_feat_proj_data_lists
-from gausstrv2.models.encoder import warp_with_pose_depth_candidates
-from gausstrv2.models.encoder import UNetModel
 from gausstrv2.geometry import sample_image_grid,get_world_rays
-from gausstrv2.models.encoder.common.gaussians import build_covariance
-from gausstrv2.misc.sh_rotation import rotate_sh
-from gausstrv2.models.utils.types import Gaussians
+from  vggt.models.vggt import VGGT
+
+
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -57,11 +53,20 @@ class GaussTRV2(BaseModel):
 
         self.gauss_head = MODELS.build(gauss_head)
 
+        vggt_path = '/home/lianghao/wangyushen/data/wangyushen/Weights/anysplat/vggt-1b'
+        vggt_model = VGGT.from_pretrained(vggt_path)
+        for param in vggt_model.parameters():
+            param.requires_grad = False
+
+        self.aggregator = vggt_model.aggregator.to(torch.bfloat16)
+        self.camera_head = vggt_model.camera_head
+
         self.near = near
         self.far = far
         self.d_sh = d_sh
         self.ori_image_shape = ori_image_shape
         self.use_checkpoint = use_checkpoint
+
 
         print(cyan(f'successfully init Model!'))
 
@@ -183,10 +188,12 @@ class GaussTRV2(BaseModel):
         directions = rearrange(directions,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
         pluckers = self.plucker_embedder(origins,directions) # (b v 6 h w)
 
+        # todo 相机位姿估计(VGGT)
 
-
+        # todo backbone 特征提取
         img_feats = self.extract_img_feat(img=inputs) # todo 能否替换成vit backbone？
 
+        # todo 像素高斯预测
         pixel_gaussians = self.pixel_gs(
                 rearrange(img_feats[0], "b v c h w -> (b v) c h w"),
                 data_samples["depth"], # (b v h w)

@@ -81,9 +81,9 @@ class PromptEncoder(nn.Module):
         points: torch.Tensor,
         labels: torch.Tensor,
         pad: bool,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor: # todo 把点的坐标+点的语义标签 转成 Transformer能用的向量
         """Embeds point prompts."""
-        points = points + 0.5  # Shift to center of pixel
+        points = points + 0.5  # Shift to center of pixel # todo 把像素索引转换成像素中心
         if pad:
             padding_point = torch.zeros((points.shape[0], 1, 2), device=points.device)
             padding_label = -torch.ones((labels.shape[0], 1), device=labels.device)
@@ -93,7 +93,7 @@ class PromptEncoder(nn.Module):
             points, self.input_image_size
         )
         point_embedding[labels == -1] = 0.0
-        point_embedding[labels == -1] += self.not_a_point_embed.weight
+        point_embedding[labels == -1] += self.not_a_point_embed.weight # todo 这是padding，不是真点
         point_embedding[labels == 0] += self.point_embeddings[0].weight
         point_embedding[labels == 1] += self.point_embeddings[1].weight
         point_embedding[labels == 2] += self.point_embeddings[2].weight
@@ -166,7 +166,7 @@ class PromptEncoder(nn.Module):
         )
         if points is not None:
             coords, labels = points
-            point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
+            point_embeddings = self._embed_points(coords, labels, pad=(boxes is None)) # todo ()
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
             box_embeddings = self._embed_boxes(boxes)
@@ -179,4 +179,4 @@ class PromptEncoder(nn.Module):
                 bs, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
 
-        return sparse_embeddings, dense_embeddings
+        return sparse_embeddings, dense_embeddings # todo (N 3 256) (N 256 64 64)

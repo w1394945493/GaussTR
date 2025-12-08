@@ -86,6 +86,7 @@ model = dict(
             # checkpoint='pretrained/dino_resnet50_pretrain.pth',
             checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
             prefix=None)),
+    
     neck=dict(
         type='mmdet.FPN',
         in_channels=[256, 512, 1024, 2048],

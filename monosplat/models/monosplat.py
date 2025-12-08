@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from mmengine.model import BaseModel, BaseModule, ModuleList
 from mmdet3d.registry import MODELS
-
+from mmseg.models.builder import HEADS
 from einops import rearrange,repeat
 import torch.nn.functional as F
 
@@ -34,6 +34,7 @@ class MonoSplat(BaseModel):
                 cost_head,
                 transformer,
                 decoder,
+                seg_head,
 
                 near = 0.5,
                 far = 100.,
@@ -228,6 +229,9 @@ class MonoSplat(BaseModel):
 
         # self.decoder = MODELS.build(decoder)
         self.gauss_head = MODELS.build(decoder)
+        self.seg_head = HEADS.build(seg_head)
+
+
 
     def prepare_inputs(self, inputs_dict, data_samples):
         num_views = data_samples[0].num_views
@@ -338,8 +342,17 @@ class MonoSplat(BaseModel):
 
         # 输出中间层特征
         features = self.backbone.get_intermediate_layers(concat,
-                                                        self.intermediate_layer_idx[self.vit_type],
+                                                        n=self.intermediate_layer_idx[self.vit_type],
                                                         return_class_token=True) # 4 ([bv n h_dim]) n = 252 / 14 x 448  / 14 = 18 x 32 = 576
+
+
+
+        # x = self.backbone.get_intermediate_layers(
+        #     concat,
+        #     n = [8, 9, 10, 11],
+        #     reshape=True,
+        # )
+        # output = self.seg_head(x)
 
         features_mono, disps_rel = self.depth_head(features,
                                                 patch_h=resize_h // self.patch_size,

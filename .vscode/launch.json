@@ -85,7 +85,7 @@
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
             ],
             "console": "integratedTerminal",
-            // "justMyCode": false,
+            "justMyCode": false,
         },
         {
             "name": "run train gausstrv2",
@@ -144,6 +144,14 @@
             ],
             "console": "integratedTerminal",
             // "justMyCode": false,
+        },
+        {
+            "name": "debug semantic_segmentation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/scripts/semantic_segmentation.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
         },
     ]
 }

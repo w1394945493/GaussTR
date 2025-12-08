@@ -49,6 +49,9 @@ class GaussTRV2(BaseModel):
         super().__init__(**kwargs)
 
         self.backbone = MODELS.build(backbone)
+
+
+
         self.neck = MODELS.build(neck)
         self.pixel_gs = MODELS.build(pixel_gs)
 
@@ -145,6 +148,7 @@ class GaussTRV2(BaseModel):
             _, C, H, W = img_feat.size()
             img_feats_reshaped.append(img_feat.view(B, N, C, H, W))
         return img_feats_reshaped
+
     def plucker_embedder(
         self,
         rays_o,
@@ -181,7 +185,8 @@ class GaussTRV2(BaseModel):
 
 
 
-        img_feats = self.extract_img_feat(img=inputs)
+        img_feats = self.extract_img_feat(img=inputs) # todo 能否替换成vit backbone？
+
         pixel_gaussians = self.pixel_gs(
                 rearrange(img_feats[0], "b v c h w -> (b v) c h w"),
                 data_samples["depth"], # (b v h w)

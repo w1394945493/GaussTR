@@ -39,15 +39,15 @@ val_interval = 1
 lr = 2e-4
 max_epochs=24
 
-# vit_type = 'vits'
-# model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vits14_pretrain.pth'
-# in_channels = 384
-# out_channels = [48, 96, 192, 384]
+vit_type = 'vits'
+model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vits14_pretrain.pth'
+in_channels = 384
+out_channels = [48, 96, 192, 384]
 
-vit_type = 'vitb'
-model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
-in_channels = 768
-out_channels = [96, 192, 384, 768]
+# vit_type = 'vitb'
+# model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth'
+# in_channels = 768
+# out_channels = [96, 192, 384, 768]
 
 # save_vis = False
 # custom_hooks = [
@@ -111,6 +111,18 @@ model = dict(
         use_sh = use_sh,
         depth_limit = far,
     ),
+
+    seg_head=dict(
+        type='BNHead',
+        in_channels=[in_channels, in_channels, in_channels, in_channels],
+        in_index=[0, 1, 2, 3],
+        input_transform='resize_concat',
+        channels=int(in_channels * 4),
+        dropout_ratio=0,
+        num_classes=21,
+        align_corners=False,
+    ),
+
     near = near,
     far = far,
     ori_image_shape = ori_image_shape,

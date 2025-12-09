@@ -15,8 +15,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from gausstrv2.geometry import sample_image_grid,get_world_rays
-from  vggt.models.vggt import VGGT
-
+from vggt.models.vggt import VGGT
+from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 
 torch.autograd.set_detect_anomaly(True)
@@ -41,6 +41,7 @@ class GaussTRV2(BaseModel):
                 d_sh,
                 ori_image_shape,
                 use_checkpoint,
+                patch_size = 14,
                  **kwargs):
         super().__init__(**kwargs)
 
@@ -53,13 +54,15 @@ class GaussTRV2(BaseModel):
 
         self.gauss_head = MODELS.build(gauss_head)
 
-        vggt_path = '/home/lianghao/wangyushen/data/wangyushen/Weights/anysplat/vggt-1b'
-        vggt_model = VGGT.from_pretrained(vggt_path)
-        for param in vggt_model.parameters():
-            param.requires_grad = False
+        # vggt_path = '/home/lianghao/wangyushen/data/wangyushen/Weights/anysplat/vggt-1b'
+        # vggt_model = VGGT.from_pretrained(vggt_path)
+        # for param in vggt_model.parameters():
+        #     param.requires_grad = False
 
-        self.aggregator = vggt_model.aggregator.to(torch.bfloat16)
-        self.camera_head = vggt_model.camera_head
+        # self.aggregator = vggt_model.aggregator.to(torch.bfloat16)
+        # self.camera_head = vggt_model.camera_head
+        # self.intermediate_layer_idx = [4,11,17,23]
+        # self.patch_size = patch_size
 
         self.near = near
         self.far = far
@@ -169,6 +172,26 @@ class GaussTRV2(BaseModel):
         bs, n, _, h, w = inputs.shape # (b,v,3,H,W)
         device = inputs.device
 
+
+        # todo 相机位姿估计(VGGT)
+        # concat = rearrange(inputs,"b v c h w -> (b v) c h w")
+        # resize_h, resize_w = h // self.patch_size * self.patch_size, w // self.patch_size * self.patch_size
+        # concat = F.interpolate(concat,(resize_h,resize_w),mode='bilinear',align_corners=True)
+        # concat  = rearrange(concat,"(b v) c h w -> b v c h w",b=bs)
+
+        # with torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
+        #     aggregated_tokens_list, patch_start_idx = self.aggregator(
+        #         concat.to(torch.bfloat16), # (b v 3 h w)
+        #         intermediate_layer_idx=self.intermediate_layer_idx, # (4,11,17,23)
+        #     )
+        # with torch.amp.autocast("cuda", enabled=False):
+        #     pred_pose_enc_list = self.camera_head(aggregated_tokens_list)
+        #     last_pred_pose_enc = pred_pose_enc_list[-1] # (b v 9) 2 + 4 + 3 = 9
+        #     pred_extrinsic, pred_intrinsic = pose_encoding_to_extri_intri(
+        #         last_pred_pose_enc, concat.shape[-2:]
+        #     ) # (b v 3 4) (b v 3 3)
+
+
         near = self.near
         near = torch.full((bs,n),near).to(device)
         far = self.far
@@ -188,7 +211,9 @@ class GaussTRV2(BaseModel):
         directions = rearrange(directions,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
         pluckers = self.plucker_embedder(origins,directions) # (b v 6 h w)
 
-        # todo 相机位姿估计(VGGT)
+
+
+
 
         # todo backbone 特征提取
         img_feats = self.extract_img_feat(img=inputs) # todo 能否替换成vit backbone？

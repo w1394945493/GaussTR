@@ -3,6 +3,10 @@ import torch.nn as nn
 from einops import rearrange
 from mmdet3d.registry import MODELS
 
+from torch_scatter import scatter_add, scatter_max
+
+from tqdm import tqdm
+
 from .utils import (apply_to_items, generate_grid, get_covariance,
                     quat_to_rotmat, unbatched_forward)
 
@@ -100,51 +104,50 @@ class GaussianVoxelizer(nn.Module):
                     chunk = 128,
                     eps=1e-6):
 
-        # todo --------------------------------------------#
-        # todo 参考GaussianFormer中的体素化模块
-        sampled_xyz = rearrange(grid_coords,"H W D xyz -> (H W D) xyz").unsqueeze(0) # todo (1 200x200x16 3)
-        cov_inv = covariances.inverse().unsqueeze(0) # todo (1 n 3 3)
-        means = means3d.unsqueeze(0) # todo (1 n 3)
-        opacities = opacities.unsqueeze(0).squeeze(-1) # todo (1 n)
-        features = features.unsqueeze(0) # todo (1 n n_classes)
-        scales = torch.sqrt(covariances.diagonal(dim1=1, dim2=2)).unsqueeze(0) # todo (1 n 3)
+        # # todo --------------------------------------------#
+        # # todo 参考GaussianFormer中的体素化模块
+        # sampled_xyz = rearrange(grid_coords,"H W D xyz -> (H W D) xyz").unsqueeze(0) # todo (1 200x200x16 3)
+        # cov_inv = covariances.inverse().unsqueeze(0) # todo (1 n 3 3)
+        # means = means3d.unsqueeze(0) # todo (1 n 3)
+        # opacities = opacities.unsqueeze(0).squeeze(-1) # todo (1 n)
+        # features = features.unsqueeze(0) # todo (1 n n_classes)
+        # scales = torch.sqrt(covariances.diagonal(dim1=1, dim2=2)).unsqueeze(0) # todo (1 n 3)
 
-        # semantics = self.aggregator(
-        #     sampled_xyz,
-        #     means,
-        #     opacities,
-        #     features,
-        #     scales,
-        #     cov_inv,
-        # ) # todo (200x200x16 n_classes)
+        # # semantics = self.aggregator(
+        # #     sampled_xyz,
+        # #     means,
+        # #     opacities,
+        # #     features,
+        # #     scales,
+        # #     cov_inv,
+        # # ) # todo (200x200x16 n_classes)
 
-        b,n,c = features.shape # b=1, n=Gaussians, c=n_classes
-        V = sampled_xyz.shape[1]            # V = H*W*D
-        grid_feats = torch.zeros(V, c, device=features.device)
-        for i in range(0, n, chunk):
-            s = slice(i, i + chunk)
+        # b,n,c = features.shape # b=1, n=Gaussians, c=n_classes
+        # V = sampled_xyz.shape[1]            # V = H*W*D
+        # grid_feats = torch.zeros(V, c, device=features.device)
+        # for i in range(0, n, chunk):
+        #     s = slice(i, i + chunk)
+        #     # 分块处理 Gaussians
+        #     means_chunk     = means[:, s]        # (1, chunk, 3)
+        #     opac_chunk      = opacities[:, s]    # (1, chunk)
+        #     feats_chunk     = features[:, s]     # (1, chunk, C)
+        #     scales_chunk    = scales[:, s]       # (1, chunk, 3)
+        #     cov_inv_chunk   = cov_inv[:, s]      # (1, chunk, 3, 3)
 
-            # 分块处理 Gaussians
-            means_chunk     = means[:, s]        # (1, chunk, 3)
-            opac_chunk      = opacities[:, s]    # (1, chunk)
-            feats_chunk     = features[:, s]     # (1, chunk, C)
-            scales_chunk    = scales[:, s]       # (1, chunk, 3)
-            cov_inv_chunk   = cov_inv[:, s]      # (1, chunk, 3, 3)
+        #     # 调用原 aggregator
+        #     sem = self.aggregator(
+        #         sampled_xyz,
+        #         means_chunk,
+        #         opac_chunk,
+        #         feats_chunk,
+        #         scales_chunk,
+        #         cov_inv_chunk,
+        #     )  # (V, C)
 
-            # 调用原 aggregator
-            sem = self.aggregator(
-                sampled_xyz,
-                means_chunk,
-                opac_chunk,
-                feats_chunk,
-                scales_chunk,
-                cov_inv_chunk,
-            )  # (V, C)
-
-            grid_feats += sem # 累加到 (V, C)
-        H,W,D = self.grid_shape
-        grid_feats = rearrange(grid_feats,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
-        return grid_feats
+        #     grid_feats += sem # 累加到 (V, C)
+        # H,W,D = self.grid_shape
+        # grid_feats = rearrange(grid_feats,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
+        # return grid_feats
 
 
         # todo 将一组3D高斯点撒进体素网格，累加每个体素出的密度，并将特征按密度加权累计后归一化输出
@@ -154,32 +157,103 @@ class GaussianVoxelizer(nn.Module):
             grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
                                     device=grid_coords.device) # todo (200 200 16 n_classes)
 
+        # todo ----------------------------------#
+        # todo 一次计算：计算量过大！
+        # num_gaussian,_ = means3d.shape
+        # H,W,D = self.grid_shape # 200 200 16
+        # coords = rearrange(grid_coords,"H W D C -> (H W D) C") # (200x200x16,3)
+        # covariances_inv = covariances.inverse()
 
-        # todo 逐点循环，高斯点数量很多时会很慢(待优化)
-        for g in range(means3d.size(0)): # todo means3d: (n,3) n: 高斯点数量
-            # todo 计算sigma、bounding box(用1D标准差近似球/椭球支撑域)
-            sigma = torch.sqrt(torch.diag(covariances[g])) # todo 提取协方差的对焦元素 (3)
-            factor = 3 * torch.tensor([-1, 1])[:, None].to(sigma) # todo 取 ±3σ作为截断范围(≈99.7%高斯质量)
-            bounds = means3d[g, None] + factor * sigma[None] # todo 得到高斯在世界坐标系下的轴向最小/最大坐标 (2,3) ±3σ
+        # sigma = torch.sqrt(covariances.diagonal(dim1=-2, dim2=-1))
+        # factor = 3 * torch.tensor([-1, 1]).to(sigma.device).view(2, 1).expand(2, num_gaussian).T  # (num_gaussian, 2)
+
+        # # 计算各高斯点在每个轴的最小/最大坐标
+        # bounds = means3d[:, None, :] + factor[:, :, None] * sigma[:, None, :]
+        # # 限制到体素范围内
+        # bounds = bounds.clamp(vol_range[:3], vol_range[3:]-1)
+
+        # # 转换为体素索引
+        # bounds_indices = ((bounds - vol_range[:3]) / voxel_size).long()
+
+        # # 计算每个高斯对体素的贡献范围
+        # min_bounds_indices = bounds_indices[:, 0, :]  # (num_gaussian, 3)
+        # max_bounds_indices = bounds_indices[:, 1, :]  # (num_gaussian, 3)
+
+
+
+
+        # in_range_x = (coords[:, 0][:, None] >= min_bounds_indices[:, 0]) & (coords[:, 0][:, None] <= max_bounds_indices[:, 0])
+        # in_range_y = (coords[:, 1][:, None] >= min_bounds_indices[:, 1]) & (coords[:, 1][:, None] <= max_bounds_indices[:, 1])
+        # in_range_z = (coords[:, 2][:, None] >= min_bounds_indices[:, 2]) & (coords[:, 2][:, None] <= max_bounds_indices[:, 2])
+
+        # todo ----------------------------------#
+        # todo 参照AnySplat中的体素计算过程
+        # H,W,D = self.grid_shape # 200 200 16
+        # voxel_indices = ((means3d - vol_range[:3]) / voxel_size).round().int()
+        # voxel_indices = torch.clamp(voxel_indices, min=torch.tensor(0, device=voxel_indices.device), max=torch.tensor([H-1, W-1, D-1], device=voxel_indices.device))
+
+        # unique_voxels, inverse_indices, counts = torch.unique(
+        #     voxel_indices, dim=0, return_inverse=True, return_counts=True
+        # )
+        # conf_flat = opacities.flatten()
+        # conf_voxel_max, _ = scatter_max(conf_flat, inverse_indices, dim=0)
+        # conf_exp = torch.exp(conf_flat - conf_voxel_max[inverse_indices])
+        # voxel_weights = scatter_add(
+        #     conf_exp, inverse_indices, dim=0
+        # )
+        # weights = (conf_exp / (voxel_weights[inverse_indices] + 1e-6)).unsqueeze(
+        #     -1
+        # )
+
+        # weighted_pts = means3d * weights
+        # weighted_feats = features.squeeze(1) * weights
+        # voxel_pts = scatter_add(
+        #     weighted_pts, inverse_indices, dim=0
+        # )
+        # voxel_feats = scatter_add(
+        #     weighted_feats, inverse_indices, dim=0
+        # )
+
+        sigmas = torch.sqrt(covariances.diagonal(dim1=-2, dim2=-1))
+        factors = 3 * torch.tensor([-1, 1]).to(sigmas.device).view(2, 1).expand(2, means3d.size(0)).T  # (num_gaussian, 2)
+        bounds_all = means3d[:, None, :] + factors[:, :, None] * sigmas[:, None, :]
+        bounds_all = bounds_all.clamp(vol_range[:3], vol_range[3:])  # (N,2,3)
+        bounds_indices = ((bounds_all - vol_range[:3]) / voxel_size).long()
+        covariances_inv = covariances.inverse()
+
+        # todo 逐点循环，高斯点数量很多时会很慢(待优化): 仍然速度很慢：6x112x192个高斯点处理需几分钟以上
+        for g in tqdm(range(means3d.size(0))): # todo means3d: (n,3) n: 高斯点数量
+            # 计算sigma、bounding box(用1D标准差近似球/椭球支撑域)
+            # sigma = torch.sqrt(torch.diag(covariances[g])) # 提取协方差的对焦元素 (3)
+            # factor = 3 * torch.tensor([-1, 1])[:, None].to(sigma) # 取 ±3σ作为截断范围(≈99.7%高斯质量)
+            # bounds = means3d[g, None] + factor * sigma[None] # 得到高斯在世界坐标系下的轴向最小/最大坐标 (2,3) ±3σ
+
+            bounds = bounds_all[g] # (2 3)
             if not (((bounds > vol_range[None, :3]).max(0).values.min()) and
                     ((bounds < vol_range[None, 3:]).max(0).values.min())):
-                continue # todo 若高斯的3sigma区间完全落在体素体积外，则跳过该高斯
+                continue # 若高斯的3sigma区间完全落在体素体积外，则跳过该高斯
 
-            # todo 计算切片范围：找到与该高斯相交的voxels区域
-            bounds = bounds.clamp(vol_range[:3], vol_range[3:]) # todo 把bounds限制到体积边界范围内
-            bounds = ((bounds - vol_range[:3]) / voxel_size).int().tolist() # todo 转换成体素索引 idx = (x-x_min) / voxel_size
-            slices = tuple([slice(lo, hi + 1) for lo, hi in zip(*bounds)])
+            # 找到与该高斯相交的voxels区域
+            # bounds = bounds.clamp(vol_range[:3], vol_range[3:]) # 把bounds限制到体积边界范围内
+            # bounds = ((bounds - vol_range[:3]) / voxel_size).int().tolist() # 转换成体素索引 idx = (x-x_min) / voxel_size
 
-            # todo 计算该高斯对每个voxel的贡献：计算每个体素中心与高斯中心的马氏距离
-            diff = grid_coords[slices] - means3d[g] # (1 1 1 3)
-            maha_dist = (diff.unsqueeze(-2) @ covariances[g].inverse() # todo 这里使用的协方差的逆
-                        @ diff.unsqueeze(-1)).squeeze(-1) # todo 计算每个体素中心与高斯中心的马氏距离
+            bounds = bounds_indices[g].int().tolist() # (2 3) -> list[[x_start y_start z_start] [x_end y_end z_end]]
+            slices = tuple([slice(lo, hi + 1) for lo, hi in zip(*bounds)]) # slices: 三元组：((x_start,x_end,None),(y_start,y_end,None),(z_start,z_end,None)) None表示默认步长为1
+
+            # 计算每个体素中心与高斯中心的马氏距离
+            diff = grid_coords[slices] - means3d[g] # (x,y,z,3) -(3) = (x y z 3)
+            # cov_inv = covariances[g].inverse()
+            cov_inv = covariances_inv[g] # (3 3)
+            maha_dist = (diff.unsqueeze(-2) @ cov_inv
+                        @ diff.unsqueeze(-1)).squeeze(-1) # (x y z 1 3) @ (3 3) @ (x y z 3 1)
+
             density = opacities[g] * torch.exp(-0.5 * maha_dist) # todo 并使用高斯权重
-            # todo 向3D网格累计密度，区域内所有体素都加上该高斯的权重
+            # 向3D网格累计密度，区域内所有体素都加上该高斯的权重
             grid_density[slices] += density
 
             if features is not None:
                 grid_feats[slices] += density * features[g]
+
 
         if features is None:
             return grid_density

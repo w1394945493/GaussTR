@@ -211,10 +211,6 @@ class GaussTRV2(BaseModel):
         directions = rearrange(directions,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
         pluckers = self.plucker_embedder(origins,directions) # (b v 6 h w)
 
-
-
-
-
         # todo backbone 特征提取
         img_feats = self.extract_img_feat(img=inputs) # todo 能否替换成vit backbone？
 

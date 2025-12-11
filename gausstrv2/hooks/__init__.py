@@ -1,2 +1,2 @@
-from .dump_result import DumpResultHookV2
+from .dump_result import DumpResultHook
 from .custom_hook import CustomHook

@@ -81,6 +81,11 @@ class VolumeDecoder(nn.Module):
                  weight_entropy_last = 0.1,
                  weight_sparse_reg = 0.0,
                  view_trans = 'simple',
+                 gs_sample = 0.0,
+                 gs_scale = 0.2,
+                 cam_N = 6,
+                 auxiliary_frame = False,
+                 scales = [0],
 
                  ):
         super(VolumeDecoder, self).__init__()
@@ -113,6 +118,18 @@ class VolumeDecoder(nn.Module):
         self.weight_sparse_reg = weight_sparse_reg
 
         self.view_trans = view_trans
+
+        self.gs_sample = gs_sample
+
+        self.gs_scale = gs_scale
+
+        self.max_depth = max_depth
+
+        self.cam_N = cam_N
+
+        self.auxiliary_frame = auxiliary_frame
+
+        self.scales = scales
 
         loss_occ=dict(
             type='CrossEntropyLoss',
@@ -565,7 +582,7 @@ class VolumeDecoder(nn.Module):
         vox_grid, Z, Y, X = self.gs_vox_util.get_voxel_grid(cam_center=inputs['all_cam_center'], ) # todo 体素网格
 
         # pdb.set_trace()
-        if self.opt.gs_sample != 0:
+        if self.gs_sample != 0:
 
             sample_ret = self.grid_sampler(vox_grid, Voxel_feat_list)
 
@@ -597,9 +614,9 @@ class VolumeDecoder(nn.Module):
         pc['get_opacity'] = geo_feats
 
 
-        if self.opt.weight_entropy_last > 0:
+        if self.weight_entropy_last > 0:
             loss_entropy = -pc['get_opacity'] * torch.log(pc['get_opacity'] + 1e-8)
-            loss_entropy = self.opt.weight_entropy_last * loss_entropy.mean()
+            loss_entropy = self.weight_entropy_last * loss_entropy.mean()
             self.outputs[("loss_entropy_last", 0)] = loss_entropy
 
         pc['flow']  = 0
@@ -607,14 +624,14 @@ class VolumeDecoder(nn.Module):
         pc['get_rotation'] = torch.zeros_like(pc['get_opacity'], device="cuda").repeat(1, 4)
 
         # fix initialization
-        pc['get_scaling'][...] = -self.opt.gs_scale
+        pc['get_scaling'][...] = -self.gs_scale
 
         if 1:
             point_distance = torch.linalg.norm(vox_grid, dim =1)
-            out_depth_mask_1 = point_distance > self.opt.real_size[1] * 1.5
-            out_depth_mask_2 = point_distance > self.opt.max_depth
-            pc['get_scaling'][out_depth_mask_1]  =  -self.opt.gs_scale * 4
-            pc['get_scaling'][out_depth_mask_2]  =  -self.opt.gs_scale * 8
+            out_depth_mask_1 = point_distance > self.real_size[1] * 1.5
+            out_depth_mask_2 = point_distance > self.max_depth
+            pc['get_scaling'][out_depth_mask_1]  =  -self.gs_scale * 4
+            pc['get_scaling'][out_depth_mask_2]  =  -self.gs_scale * 8
 
         pc['get_rotation'][:, 0] = 1 # todo [1,0,0,0]
         pc['active_sh_degree'] = 0
@@ -629,16 +646,12 @@ class VolumeDecoder(nn.Module):
         # render depth map of each view
         K = inputs[('K_render', 0, 0)].to('cpu').numpy()
 
-        # if self.opt.surround_view:
-        #     C2W = inputs['surround_pose'].to('cpu').numpy()
-        # else:
         C2W = inputs['pose_spatial'].to('cpu').numpy()
 
         return K, C2W, pc
 
 
     def get_splatting_rendering(self, K, C2W, pc, inputs, flow_index = (0, 0)):
-        # if self.opt.flow != 'No':
         rgb_spaltting = []
         depth = []
 
@@ -681,7 +694,7 @@ class VolumeDecoder(nn.Module):
                 pc_i = pc
 
             # all_cam_center = inputs['all_cam_center']
-            viewpoint_camera = geom.setup_opengl_proj(w = self.opt.render_w, h = self.opt.render_h, k = K[j], c2w = C2W[j],near=self.opt.min_depth, far=100) # todo：获取相机的参数属性：viewpoint_camera: dict
+            viewpoint_camera = geom.setup_opengl_proj(w = self.render_w, h = self.render_h, k = K[j], c2w = C2W[j],near=self.min_depth, far=100) # todo：获取相机的参数属性：viewpoint_camera: dict
             # todo 高斯渲染
             render_pkg = splatting_render(viewpoint_camera, pc_i, opt = self.opt)
 
@@ -704,7 +717,7 @@ class VolumeDecoder(nn.Module):
 
         if mask_camera is not None:
             voxel_semantics=voxel_semantics.reshape(-1)
-            preds=preds.reshape(-1,self.opt.semantic_classes)
+            preds=preds.reshape(-1,self.semantic_classes)
             mask_camera=mask_camera.reshape(-1)
             num_total_samples=mask_camera.sum()
 
@@ -730,7 +743,7 @@ class VolumeDecoder(nn.Module):
 
         self.outputs["pred_occ_logits"] = pred
 
-        self.outputs[('disp', 0)] = torch.ones(6, 1, self.opt.render_h, self.opt.render_w).to('cuda')
+        self.outputs[('disp', 0)] = torch.ones(6, 1, self.render_h, self.render_w).to('cuda')
 
         return
 
@@ -749,7 +762,7 @@ class VolumeDecoder(nn.Module):
             Voxel_feat_list = self._3DCNN(Voxel_feat) # (b,c,X,Y,Z) 体素特征
 
         # pdb.set_trace()
-        if self.opt.render_type == 'gt':
+        if self.render_type == 'gt':
             preds = Voxel_feat_list[0]
             voxel_semantics = inputs['semantics_3d']
             mask_camera = inputs['mask_camera_3d']
@@ -759,9 +772,9 @@ class VolumeDecoder(nn.Module):
 
         # # rendering
         rendering_eps_time = time.time()
-        cam_num = self.opt.cam_N * 3 if self.opt.auxiliary_frame else self.opt.cam_N
+        cam_num = self.cam_N * 3 if self.auxiliary_frame else self.cam_N
 
-        for scale in self.opt.scales: # todo 0
+        for scale in self.scales: # todo 0
 
             eps_time = time.time()
             # todo -------------------------------#
@@ -769,7 +782,7 @@ class VolumeDecoder(nn.Module):
             depth, rgb_marched, semantic, reg_loss = self.get_density(Voxel_feat_list[scale], is_train, inputs, cam_num) # todo depth：深度图 semantic: 语义图
 
             eps_time = time.time() - eps_time
-            # print('single rendering {} :(eps time:'.format(self.opt.render_type), eps_time, 'secs)')
+
             self.outputs[("disp", scale)] = depth
 
             if semantic is not None:

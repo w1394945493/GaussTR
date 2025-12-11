@@ -115,34 +115,18 @@ class GaussianVoxelizer(nn.Module):
                     vol_range,
                     voxel_size,
                     features=None,
-                    chunk = 128,
                     eps=1e-6):
-
-        # # todo --------------------------------------------#
-        # # todo 参考GaussianFormer中的体素化模块
-        # sampled_xyz = rearrange(grid_coords,"H W D xyz -> (H W D) xyz").unsqueeze(0) # todo (1 200x200x16 3)
-        # cov_inv = covariances.inverse().unsqueeze(0) # todo (1 n 3 3)
-        # means = means3d.unsqueeze(0) # todo (1 n 3)
-        # opacities = opacities.unsqueeze(0).squeeze(-1) # todo (1 n)
-        # features = features.unsqueeze(0) # todo (1 n n_classes)
-        # scales = torch.sqrt(covariances.diagonal(dim1=1, dim2=2)).unsqueeze(0) # todo (1 n 3)
-
-        # semantics = self.aggregator(
-        #     sampled_xyz,
-        #     means,
-        #     opacities,
-        #     features,
-        #     scales,
-        #     cov_inv,
-        # ) # todo (200x200x16 n_classes)
-        # H,W,D = self.grid_shape
-        # grid_feats = rearrange(semantics,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
-
-        # return grid_feats,None
 
         # todo ----------------------------------#
         # todo 参照AnySplat中的体素化操作
-        voxel_indices = ((means3d - vol_range[:3]) / voxel_size).round().int() # 转为体素索引
+        H,W,D = self.grid_shape # 200 200 16
+        grid_density = torch.zeros((*grid_coords.shape[:-1], 1),
+                            device=grid_coords.device)
+
+        grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
+                                device=grid_coords.device)
+
+        voxel_indices = ((means3d - vol_range[:3]) / voxel_size).round().int() # todo 转为体素索引
         voxel_indices = torch.clamp(voxel_indices, min=torch.tensor(0, device=voxel_indices.device), max=torch.tensor([H-1, W-1, D-1], device=voxel_indices.device))
 
         unique_voxels, inverse_indices, counts = torch.unique(
@@ -157,23 +141,47 @@ class GaussianVoxelizer(nn.Module):
         weights = (conf_exp / (voxel_weights[inverse_indices] + 1e-6)).unsqueeze(-1) # todo 作为权重 (num_gaussians,1)
         weighted_feats = features.squeeze(1) * weights # todo (num_gaussians,num_classes)
 
-        feats = scatter_add(
-            weighted_feats, inverse_indices, dim=0
-        )
+        feats = scatter_add(weighted_feats, inverse_indices, dim=0)
 
-        H,W,D = self.grid_shape # 200 200 16
-        grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
-                                device=grid_coords.device)
-        grid_feats = rearrange(grid_feats,'H W D C -> (H W D) C')
+        # todo 将加权融合后的特征放到相应的体素位置上
         flat_indices = unique_voxels[:, 0] * (W * D) + unique_voxels[:, 1] * D + unique_voxels[:, 2]
+        grid_feats = rearrange(grid_feats,'H W D C -> (H W D) C')
         grid_feats = scatter_add(feats, flat_indices, dim=0, out=grid_feats)
-
         grid_feats = rearrange(grid_feats,'(H W D) C -> H W D C',H=H,W=W,D=D)
 
-        return grid_feats, None
+        opas_mean = scatter_add(opacities,inverse_indices,dim=0) / counts[:,None] # todo 计算各体素位置的平均透明度值
+        grid_density = rearrange(grid_density,'H W D C -> (H W D) C')
+        grid_density = scatter_add(opas_mean, flat_indices, dim=0, out=grid_density)
+        grid_density = rearrange(grid_density,'(H W D) C -> H W D C',H=H,W=W,D=D)
 
-        # todo GaussTR
-        # todo 将一组3D高斯点撒进体素网格，累加每个体素出的密度，并将特征按密度加权累计后归一化输出
+        return grid_feats, grid_density
+
+        # todo --------------------------------------------#
+        # todo GaussianFormer中的高斯体素化操作：当高斯点数量多时，计算开销会很大
+        sampled_xyz = rearrange(grid_coords,"H W D xyz -> (H W D) xyz").unsqueeze(0) # todo (1 200x200x16 3)
+        cov_inv = covariances.inverse().unsqueeze(0) # todo (1 n 3 3)
+        means = means3d.unsqueeze(0) # todo (1 n 3)
+        opacities = opacities.unsqueeze(0).squeeze(-1) # todo (1 n)
+        features = features.unsqueeze(0) # todo (1 n n_classes)
+        scales = torch.sqrt(covariances.diagonal(dim1=1, dim2=2)).unsqueeze(0) # todo (1 n 3)
+
+        semantics = self.aggregator(
+            sampled_xyz,
+            means,
+            opacities,
+            features,
+            scales,
+            cov_inv,
+        ) # todo (200x200x16 n_classes)
+        H,W,D = self.grid_shape
+        grid_feats = rearrange(semantics,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
+
+        return grid_feats
+
+
+
+        # todo----------------------------------------------------#
+        # todo GaussTR中的工作：逐高斯点体素化
         grid_density = torch.zeros((*grid_coords.shape[:-1], 1),
                                 device=grid_coords.device) # todo (200 200 16 1)
 

@@ -63,7 +63,7 @@ def seg_to_color(seg, color_map):
 
 
 @HOOKS.register_module()
-class DumpResultHookV2(Hook):
+class DumpResultHook(Hook):
 
     def __init__(self,
                 interval=1,

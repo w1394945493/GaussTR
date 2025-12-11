@@ -158,19 +158,16 @@ class GaussTRV2Head(BaseModule):
             features = rearrange(segs,"b v c h w -> b (v h w) c")
 
 
+            grid_feats,density = self.voxelizer(
+                            means3d=means3d,
+                            opacities=opacities.unsqueeze(-1), # (b N) -> (b N 1)
+                            features=features, # (b N n_class)
+                            scales = scales,
+                            rotations = rotations,
+                            covariances=covariances) # todo (b X Y Z n_classes) (b X Y Z 1)
 
-            occ_preds = None
-            if self.val_occ:
-                grid_feats, density = self.voxelizer(
-                                means3d=means3d,
-                                opacities=opacities.unsqueeze(-1), # (b N) -> (b N 1)
-                                features=features, # (b N n_class)
-                                scales = scales,
-                                rotations = rotations,
-                                covariances=covariances) # todo (b X Y Z n_classes)
-                occ_preds = grid_feats.argmax(-1)
-                if density is not None:
-                    occ_preds = torch.where(density.squeeze(-1) > 4e-2, occ_preds, 17)
+            occ_preds = grid_feats.argmax(-1)
+            occ_preds = torch.where(density.squeeze(-1) > 4e-2, occ_preds, 17)
 
 
             seg_preds = rearrange(segs,'b v c h w -> b v h w c').detach().softmax(-1).argmax(-1)

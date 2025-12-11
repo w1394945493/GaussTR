@@ -1,6 +1,6 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis24' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis25' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
@@ -19,7 +19,7 @@ renderer_type = "gsplat"
 # save_vis = False
 save_vis = True
 custom_hooks = [
-    dict(type='DumpResultHookV2',
+    dict(type='DumpResultHook',
          interval=1,
          mean = mean,
          std  = std,
@@ -31,11 +31,10 @@ custom_hooks = [
          save_sem_seg = True,
         #  save_img = False,
          save_img = True,
-         ),
-    dict(type='CustomHook',
-         val_occ_epoch = 10, # todo 指定epoch之后进行occ预测及评估
          )
-
+    # dict(type='CustomHook',
+    #      val_occ_epoch = 10, # todo 指定epoch之后进行occ预测及评估
+    #      )
 ]  # 保存结果
 
 input_size = (112,192)
@@ -46,8 +45,8 @@ near = 0.1
 # far = 100.
 far = 1000.
 
-# train_ann_file='nuscenes_mini_infos_train.pkl'
-train_ann_file='nuscenes_mini_infos_val.pkl'
+train_ann_file='nuscenes_mini_infos_train.pkl'
+# train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
 use_checkpoint = True

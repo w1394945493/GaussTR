@@ -29,8 +29,8 @@ class PixelGaussian(BaseModule):
                  num_cams=6,
                  near=0.1,
                  far=1000.0,
-                 scale_min = 0.5,
-                 scale_max = 15.0,
+                #  scale_min = 0.5,
+                #  scale_max = 15.0,
                  num_classes = 18,
                  use_checkpoint=False,
                  **kwargs,
@@ -114,10 +114,12 @@ class PixelGaussian(BaseModule):
         self.opt_act = torch.sigmoid
 
         # todo scales解码
-        # self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
-        self.scale_act = torch.sigmoid
-        self.scale_min = scale_min
-        self.scale_max = scale_max
+        self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
+
+        # todo MonoSplat等工作中的设计
+        # self.scale_act = torch.sigmoid
+        # self.scale_min = scale_min
+        # self.scale_max = scale_max
 
         self.rot_act = lambda x: F.normalize(x, dim=-1)
         self.rgb_act = torch.sigmoid
@@ -235,11 +237,11 @@ class PixelGaussian(BaseModule):
         opacities = self.opt_act(gaussians[..., 3:4]) # opactites：透明度 # todo Sigmoid操作
 
         # todo Omni-Scene中的设计
-        # scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
+        scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
 
         # todo 参考MonoSplat、GaussianFormer中的设计
-        scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
-        scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
+        # scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
+        # scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
 
         rotations = self.rot_act(gaussians[..., 7:11]) # rotations：四元数旋转 # todo Normalize归一化操作
         rgbs = self.rgb_act(gaussians[..., 11:14]) # 颜色值 # todo sigmoid 操作

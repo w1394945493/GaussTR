@@ -10,11 +10,18 @@ import torch.nn.functional as F
 from mmengine.model import BaseModel, BaseModule, ModuleList
 from mmdet3d.registry import MODELS
 
+from .models import Encoder_res101
+
+
+
+
+
+
 from colorama import Fore
 def cyan(text: str) -> str:
     return f"{Fore.CYAN}{text}{Fore.RESET}"
 
-#? 作为定义Model的参考
+
 
 @MODELS.register_module()
 class GaussianOCC(BaseModel):
@@ -24,6 +31,11 @@ class GaussianOCC(BaseModel):
                  patch_size = 14,
                  **kwargs):
         super().__init__(**kwargs)
+
+
+        self.encoder = Encoder_res101(C=64,network_type='101')
+
+
 
 
         self.patch_size = patch_size

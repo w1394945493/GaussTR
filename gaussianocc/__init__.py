@@ -1,4 +1,4 @@
 from .datasets import *
 from .evaluation import *
 
-from .gaussianocc import Model
+from .gaussianocc import GaussianOCC

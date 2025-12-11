@@ -1,1 +1,1 @@
-from .occ_metric import OccMetricV2
+from .occ_metric import OccMetric

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
 from einops import rearrange
 from mmdet3d.registry import MODELS
 
@@ -10,7 +11,20 @@ from tqdm import tqdm
 from .utils import (apply_to_items, generate_grid, get_covariance,
                     quat_to_rotmat, unbatched_forward)
 
+def inverse_sigmoid(x: Tensor, eps: float = 1e-5) -> Tensor:
+    """Inverse function of sigmoid.
 
+    Args:
+        x (Tensor): The tensor to do the inverse.
+        eps (float): EPS avoid numerical overflow. Defaults 1e-5.
+    Returns:
+        Tensor: The x has passed the inverse function of sigmoid, has the same
+        shape with input.
+    """
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
 
 
 
@@ -113,107 +127,58 @@ class GaussianVoxelizer(nn.Module):
         # features = features.unsqueeze(0) # todo (1 n n_classes)
         # scales = torch.sqrt(covariances.diagonal(dim1=1, dim2=2)).unsqueeze(0) # todo (1 n 3)
 
-        # # semantics = self.aggregator(
-        # #     sampled_xyz,
-        # #     means,
-        # #     opacities,
-        # #     features,
-        # #     scales,
-        # #     cov_inv,
-        # # ) # todo (200x200x16 n_classes)
-
-        # b,n,c = features.shape # b=1, n=Gaussians, c=n_classes
-        # V = sampled_xyz.shape[1]            # V = H*W*D
-        # grid_feats = torch.zeros(V, c, device=features.device)
-        # for i in range(0, n, chunk):
-        #     s = slice(i, i + chunk)
-        #     # 分块处理 Gaussians
-        #     means_chunk     = means[:, s]        # (1, chunk, 3)
-        #     opac_chunk      = opacities[:, s]    # (1, chunk)
-        #     feats_chunk     = features[:, s]     # (1, chunk, C)
-        #     scales_chunk    = scales[:, s]       # (1, chunk, 3)
-        #     cov_inv_chunk   = cov_inv[:, s]      # (1, chunk, 3, 3)
-
-        #     # 调用原 aggregator
-        #     sem = self.aggregator(
-        #         sampled_xyz,
-        #         means_chunk,
-        #         opac_chunk,
-        #         feats_chunk,
-        #         scales_chunk,
-        #         cov_inv_chunk,
-        #     )  # (V, C)
-
-        #     grid_feats += sem # 累加到 (V, C)
+        # semantics = self.aggregator(
+        #     sampled_xyz,
+        #     means,
+        #     opacities,
+        #     features,
+        #     scales,
+        #     cov_inv,
+        # ) # todo (200x200x16 n_classes)
         # H,W,D = self.grid_shape
-        # grid_feats = rearrange(grid_feats,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
-        # return grid_feats
+        # grid_feats = rearrange(semantics,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
 
+        # return grid_feats,None
 
+        # todo ----------------------------------#
+        # todo 参照AnySplat中的体素化操作
+        voxel_indices = ((means3d - vol_range[:3]) / voxel_size).round().int() # 转为体素索引
+        voxel_indices = torch.clamp(voxel_indices, min=torch.tensor(0, device=voxel_indices.device), max=torch.tensor([H-1, W-1, D-1], device=voxel_indices.device))
+
+        unique_voxels, inverse_indices, counts = torch.unique(
+            voxel_indices, dim=0, return_inverse=True, return_counts=True
+        ) # todo unique_voxels: 唯一的体素索引(去重后的结果) inverse_indices: 原始的体素索引对应到unique_voxels中的索引，返回和voxel_indices长度一样的张量，表示每个voxel_indices中每个元素在unique_voxels中的位置
+
+        conf_flat = opacities.flatten() # todo 使用透明度作为置信度依据
+        conf_voxel_max, _ = scatter_max(conf_flat, inverse_indices, dim=0) # todo scatter_max: 按照指定的索引对张量进行聚合操作 scatter_max(src,index,dim): src: 你想要聚合的张量 index：和src相同大小的张量 dim：制定者那个维度聚合
+        conf_exp = torch.exp(conf_flat - conf_voxel_max[inverse_indices]) # todo 计算各个位置的透明度 - 该位置最大透明度 的对数值
+        voxel_weights = scatter_add(conf_exp, inverse_indices, dim=0) # todo 按照指定索引进行求和
+
+        weights = (conf_exp / (voxel_weights[inverse_indices] + 1e-6)).unsqueeze(-1) # todo 作为权重 (num_gaussians,1)
+        weighted_feats = features.squeeze(1) * weights # todo (num_gaussians,num_classes)
+
+        feats = scatter_add(
+            weighted_feats, inverse_indices, dim=0
+        )
+
+        H,W,D = self.grid_shape # 200 200 16
+        grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
+                                device=grid_coords.device)
+        grid_feats = rearrange(grid_feats,'H W D C -> (H W D) C')
+        flat_indices = unique_voxels[:, 0] * (W * D) + unique_voxels[:, 1] * D + unique_voxels[:, 2]
+        grid_feats = scatter_add(feats, flat_indices, dim=0, out=grid_feats)
+
+        grid_feats = rearrange(grid_feats,'(H W D) C -> H W D C',H=H,W=W,D=D)
+
+        return grid_feats, None
+
+        # todo GaussTR
         # todo 将一组3D高斯点撒进体素网格，累加每个体素出的密度，并将特征按密度加权累计后归一化输出
         grid_density = torch.zeros((*grid_coords.shape[:-1], 1),
                                 device=grid_coords.device) # todo (200 200 16 1)
-        if features is not None:
-            grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
-                                    device=grid_coords.device) # todo (200 200 16 n_classes)
 
-        # todo ----------------------------------#
-        # todo 一次计算：计算量过大！
-        # num_gaussian,_ = means3d.shape
-        # H,W,D = self.grid_shape # 200 200 16
-        # coords = rearrange(grid_coords,"H W D C -> (H W D) C") # (200x200x16,3)
-        # covariances_inv = covariances.inverse()
-
-        # sigma = torch.sqrt(covariances.diagonal(dim1=-2, dim2=-1))
-        # factor = 3 * torch.tensor([-1, 1]).to(sigma.device).view(2, 1).expand(2, num_gaussian).T  # (num_gaussian, 2)
-
-        # # 计算各高斯点在每个轴的最小/最大坐标
-        # bounds = means3d[:, None, :] + factor[:, :, None] * sigma[:, None, :]
-        # # 限制到体素范围内
-        # bounds = bounds.clamp(vol_range[:3], vol_range[3:]-1)
-
-        # # 转换为体素索引
-        # bounds_indices = ((bounds - vol_range[:3]) / voxel_size).long()
-
-        # # 计算每个高斯对体素的贡献范围
-        # min_bounds_indices = bounds_indices[:, 0, :]  # (num_gaussian, 3)
-        # max_bounds_indices = bounds_indices[:, 1, :]  # (num_gaussian, 3)
-
-
-
-
-        # in_range_x = (coords[:, 0][:, None] >= min_bounds_indices[:, 0]) & (coords[:, 0][:, None] <= max_bounds_indices[:, 0])
-        # in_range_y = (coords[:, 1][:, None] >= min_bounds_indices[:, 1]) & (coords[:, 1][:, None] <= max_bounds_indices[:, 1])
-        # in_range_z = (coords[:, 2][:, None] >= min_bounds_indices[:, 2]) & (coords[:, 2][:, None] <= max_bounds_indices[:, 2])
-
-        # todo ----------------------------------#
-        # todo 参照AnySplat中的体素计算过程
-        # H,W,D = self.grid_shape # 200 200 16
-        # voxel_indices = ((means3d - vol_range[:3]) / voxel_size).round().int()
-        # voxel_indices = torch.clamp(voxel_indices, min=torch.tensor(0, device=voxel_indices.device), max=torch.tensor([H-1, W-1, D-1], device=voxel_indices.device))
-
-        # unique_voxels, inverse_indices, counts = torch.unique(
-        #     voxel_indices, dim=0, return_inverse=True, return_counts=True
-        # )
-        # conf_flat = opacities.flatten()
-        # conf_voxel_max, _ = scatter_max(conf_flat, inverse_indices, dim=0)
-        # conf_exp = torch.exp(conf_flat - conf_voxel_max[inverse_indices])
-        # voxel_weights = scatter_add(
-        #     conf_exp, inverse_indices, dim=0
-        # )
-        # weights = (conf_exp / (voxel_weights[inverse_indices] + 1e-6)).unsqueeze(
-        #     -1
-        # )
-
-        # weighted_pts = means3d * weights
-        # weighted_feats = features.squeeze(1) * weights
-        # voxel_pts = scatter_add(
-        #     weighted_pts, inverse_indices, dim=0
-        # )
-        # voxel_feats = scatter_add(
-        #     weighted_feats, inverse_indices, dim=0
-        # )
-
+        grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
+                                device=grid_coords.device) # todo (200 200 16 n_classes)
         sigmas = torch.sqrt(covariances.diagonal(dim1=-2, dim2=-1))
         factors = 3 * torch.tensor([-1, 1]).to(sigmas.device).view(2, 1).expand(2, means3d.size(0)).T  # (num_gaussian, 2)
         bounds_all = means3d[:, None, :] + factors[:, :, None] * sigmas[:, None, :]
@@ -254,8 +219,7 @@ class GaussianVoxelizer(nn.Module):
             if features is not None:
                 grid_feats[slices] += density * features[g]
 
+        if features is not None:
+            grid_feats /= grid_density.clamp(eps)
 
-        if features is None:
-            return grid_density
-        grid_feats /= grid_density.clamp(eps)
-        return grid_density, grid_feats
+        return grid_feats, grid_density

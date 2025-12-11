@@ -78,6 +78,9 @@ class VolumeDecoder(nn.Module):
                  use_fp16 = True,
                  weight_distortion = 0.1,
                  last_free = True,
+                 weight_entropy_last = 0.1,
+                 weight_sparse_reg = 0.0,
+                 view_trans = 'simple',
 
                  ):
         super(VolumeDecoder, self).__init__()
@@ -104,6 +107,12 @@ class VolumeDecoder(nn.Module):
         self.last_free = last_free
 
         self.render_h, self.render_w = render_shape
+
+        self.weight_entropy_last = weight_entropy_last
+
+        self.weight_sparse_reg = weight_sparse_reg
+
+        self.view_trans = view_trans
 
         loss_occ=dict(
             type='CrossEntropyLoss',
@@ -477,26 +486,26 @@ class VolumeDecoder(nn.Module):
             semantic_out = None
 
         if is_train:
-            if self.opt.weight_entropy_last > 0:
+            if self.weight_entropy_last > 0:
                 pout = alphainv_fin.float().clamp(1e-6, 1-1e-6)
                 entropy_last_loss = -(pout*torch.log(pout) + (1-pout)*torch.log(1-pout)).mean()
-                reg_loss["loss_entropy_last"] = self.opt.weight_entropy_last * entropy_last_loss
+                reg_loss["loss_entropy_last"] = self.weight_entropy_last * entropy_last_loss
 
-            if self.opt.weight_distortion > 0:
+            if self.weight_distortion > 0:
                 loss_distortion = eff_distloss(weights.float(), z_vals.float(), dists.float())
-                reg_loss['loss_distortion'] =  self.opt.weight_distortion * loss_distortion
+                reg_loss['loss_distortion'] =  self.weight_distortion * loss_distortion
 
-            if self.opt.weight_sparse_reg > 0:
+            if self.weight_sparse_reg > 0:
                 geo_f = Voxel_feat[..., -1].float().flatten()
                 if self.last_free:
                     geo_f = - geo_f
                 loss_sparse_reg = F.binary_cross_entropy_with_logits(geo_f, torch.zeros_like(geo_f), reduction='mean')
-                reg_loss['loss_sparse_reg'] = self.opt.weight_sparse_reg * loss_sparse_reg
+                reg_loss['loss_sparse_reg'] = self.weight_sparse_reg * loss_sparse_reg
 
 
-        depth = depth.reshape(cam_num, self.opt.render_h, self.opt.render_w).unsqueeze(1)
+        depth = depth.reshape(cam_num, self.render_h, self.render_w).unsqueeze(1)
 
-        if self.opt.infinite_range:
+        if self.infinite_range:
             depth = depth.clamp(min=self.near, max=200)
         else:
             depth = depth.clamp(min=self.near, max=self.far)
@@ -511,12 +520,12 @@ class VolumeDecoder(nn.Module):
         camXs_T_cam0_ = geom.safe_inverse(cam0_T_camXs)
         Hf, Wf = features.shape[-2], features.shape[-1]
 
-        if self.opt.view_trans == 'query' or self.opt.view_trans == 'query1':
+        if self.view_trans == 'query' or self.view_trans == 'query1':
             featpix_T_cams_ = pix_T_cams_
         else:
 
-            sy = Hf / float(self.opt.height)
-            sx = Wf / float(self.opt.width)
+            sy = Hf / float(self.height)
+            sx = Wf / float(self.width)
             # unproject image feature to 3d grid
             featpix_T_cams_ = geom.scale_intrinsics(pix_T_cams_, sx, sy)
 
@@ -538,7 +547,7 @@ class VolumeDecoder(nn.Module):
         nextcam2curego = None
 
         # input_channel=64
-        feature_size = self.opt.input_channel
+        feature_size = self.input_channel
 
         Extrix_RT = inputs['pose_spatial'][:6]  # (b,4,4) # todo 相机之间的相对位姿
         Intrix_K = inputs[('K', 0, 0)][:6] # (b,4,4) # todo 相机内参

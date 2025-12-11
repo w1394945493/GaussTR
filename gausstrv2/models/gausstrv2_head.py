@@ -54,6 +54,8 @@ class GaussTRV2Head(BaseModule):
 
         self.renderer_type = renderer_type
 
+        self.val_occ = False # todo 用于在指定epoch后进行occ估计
+
     def forward(self,
                 pixel_gaussians,
                 inputs,
@@ -151,46 +153,38 @@ class GaussTRV2Head(BaseModule):
         # todo ---------------------------------------#
         # todo 推理
         if mode == 'predict':
-            with torch.no_grad():
-                # todo ---------------------------------------#
-                # todo occ 占用
-                # features = torch.nn.functional.one_hot(
-                #     sem_segs.long(),
-                #     num_classes=self.num_classes,
-                # ).float()
-                # features = rearrange(features,"b v h w c -> b (v h w) c")
-                features = rearrange(segs,"b v c h w -> b (v h w) c").detach()
-                # density, grid_feats = self.voxelizer(
-                #     means3d=means3d,
-                #     opacities=opacities.unsqueeze(-1), # (b N) -> (b N 1)
-                #     features=features, # (b N n_class)
-                #     scales = scales,
-                #     rotations = rotations,
-                #     covariances=covariances) # covariances: (b N 3 3)
-                # preds = grid_feats.argmax(-1) # (b X Y Z n_class) -> (b X Y Z)
-                # preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # (b X Y Z)
+            # todo ---------------------------------------#
+            # todo occ 占用
+            features = rearrange(segs,"b v c h w -> b (v h w) c")
 
-                grid_feats = self.voxelizer(
-                                means3d=means3d.detach(),
-                                opacities=opacities.detach().unsqueeze(-1), # (b N) -> (b N 1)
+
+
+            occ_preds = None
+            if self.val_occ:
+                grid_feats, density = self.voxelizer(
+                                means3d=means3d,
+                                opacities=opacities.unsqueeze(-1), # (b N) -> (b N 1)
                                 features=features, # (b N n_class)
-                                scales = scales.detach(),
-                                rotations = rotations.detach(),
-                                covariances=covariances.detach()) # todo (b X Y Z n_classes)
-                preds = grid_feats.argmax(-1)
+                                scales = scales,
+                                rotations = rotations,
+                                covariances=covariances) # todo (b X Y Z n_classes)
+                occ_preds = grid_feats.argmax(-1)
+                if density is not None:
+                    occ_preds = torch.where(density.squeeze(-1) > 4e-2, occ_preds, 17)
 
-                seg_pred = rearrange(segs,'b v c h w -> b v h w c').detach().softmax(-1).argmax(-1)
-                outputs = [{
-                    'occ_pred': preds,
-                    'depth_pred': rendered_depth, # (b v h w)
-                    'seg_pred':seg_pred,
-                    # 'seg_pred': None,
-                    'img_pred': colors,
-                    # 'img_gt': rgb_gts / 255.,
-                    # 'img_gt': inputs,
 
-                }]
-                return outputs
+            seg_preds = rearrange(segs,'b v c h w -> b v h w c').detach().softmax(-1).argmax(-1)
+            outputs = [{
+                'occ_pred': occ_preds,
+                'depth_pred': rendered_depth, # (b v h w)
+                'seg_pred':seg_preds, # (b v h w)
+                # 'seg_pred': None,
+                'img_pred': colors,
+                # 'img_gt': rgb_gts / 255.,
+                # 'img_gt': inputs,
+
+            }]
+            return outputs
 
 
         losses = {}

@@ -32,6 +32,10 @@ custom_hooks = [
         #  save_img = False,
          save_img = True,
          ),
+    dict(type='CustomHook',
+         val_occ_epoch = 10, # todo 指定epoch之后进行occ预测及评估
+         )
+
 ]  # 保存结果
 
 input_size = (112,192)
@@ -86,7 +90,7 @@ model = dict(
             # checkpoint='pretrained/dino_resnet50_pretrain.pth',
             checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
             prefix=None)),
-    
+
     neck=dict(
         type='mmdet.FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -270,7 +274,7 @@ train_dataloader = dict(
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(
-    batch_size=2,
+    batch_size=1,
     # num_workers=4,
     # num_workers=1,
     # persistent_workers=True,
@@ -289,7 +293,7 @@ test_dataloader = val_dataloader
 
 # todo 指标评估器
 val_evaluator = dict(
-    type='OccMetricV2',
+    type='OccMetric',
     num_classes=18, # todo 类别： 17(Occ3D) + 1(1：天空类)
     use_lidar_mask=False,
     use_image_mask=True)
@@ -306,7 +310,7 @@ optim_wrapper = dict(
 
 # train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
-val_cfg = dict(type='ValLoop')
+val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')
 
 param_scheduler = [

@@ -426,7 +426,5 @@ def pad_to_shape(this, shp):
 
 
 
-if __name__ == '__main__':
 
-    pass
 

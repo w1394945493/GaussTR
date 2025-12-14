@@ -29,9 +29,11 @@ class PixelGaussian(BaseModule):
                  num_cams=6,
                  near=0.1,
                  far=1000.0,
-                #  scale_min = 0.5,
-                #  scale_max = 15.0,
-                 num_classes = 18,
+                #  scale_min = 0.05,
+                #  scale_max = 1.5,
+                 scale_min = 0.08,
+                 scale_max = 0.64,
+                 num_classes = 17,
                  use_checkpoint=False,
                  **kwargs,
                  ):
@@ -112,23 +114,17 @@ class PixelGaussian(BaseModule):
             nn.Conv2d(out_embed_dims[0], gs_channels, 1),
         )
         self.opt_act = torch.sigmoid
-
-        # todo scales解码
-        self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
-
-        # todo MonoSplat等工作中的设计
-        # self.scale_act = torch.sigmoid
-        # self.scale_min = scale_min
-        # self.scale_max = scale_max
+        # todo scales(使用OmniScene中方法，对预测尺度进行处理)
+        # self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
+        # todo MonoSplat等工作中的处理(没有使用)
+        self.scale_act = torch.sigmoid
+        self.scale_min = scale_min
+        self.scale_max = scale_max
 
         self.rot_act = lambda x: F.normalize(x, dim=-1)
         self.rgb_act = torch.sigmoid
 
-        self.delta_clamp = lambda x: x.clamp(-10.0, 6.0)
-        self.delta_act = torch.exp
-
         # todo 预测高斯相应的语义
-
         self.num_classes = num_classes
         self.to_semantics = nn.Sequential(
             nn.GELU(),
@@ -185,7 +181,7 @@ class PixelGaussian(BaseModule):
         #? todo Metric 3D 未提供相应的深度置信度
         # confs_in = rearrange(confs_in, "b v h w -> (b v) () h w") # todo (b v h w)
         # todo depths_in
-        # img_feats = torch.cat([img_feats, depths_in / 20.0, confs_in], dim=1) # 将深度与置信度作为附加通道嵌入，使网络学习到每个像素点的可靠性和深度信息
+        # img_feats = torch.cat([img_feats, depths_in / 20.0, confs_in], dim=1) # 将深度与置信度作为附加通道嵌入
         img_feats = torch.cat([img_feats, depths_in / 20.0], dim=1)
 
         # todo-----------------------------#
@@ -224,24 +220,26 @@ class PixelGaussian(BaseModule):
         # post-process
         _, _, h, w = features.shape
         # todo：self.to_gaussians: 将多视角图像与射线几何信息转换为带颜色、旋转、尺度、透明度等属性的高斯点云，同时输出每个点的语义特征
-        gaussians = self.to_gaussians(features) # todo: 高斯参数预测：(bs*v,128,h,w) -> (bs*v,14,h,w) 网络输出14通道
+        gaussians = self.to_gaussians(features) # todo: 高斯参数预测：(bs*v,128,h,w) -> (bs*v,14,h,w) 网络输出14维度向量
         gaussians = rearrange(gaussians, "(b v) (n c) h w -> b (v h w n) c",
                               b=bs, v=self.num_cams, n=1, c=self.gs_channels)
         # todo-----------------------------#
-        # todo 语义预测
-        semantics = self.to_semantics(features)
+        # todo 语义预测：(bs*v,128,h,w) -> (bs*v,num_classes,h,w)
+        semantics = self.to_semantics(features) # todo semantics.shape: ((bs v),num_classes,112,192)
         semantics = rearrange(semantics, "(b v) (n c) h w -> b (v h w n) c",
                               b=bs, v=self.num_cams, n=1, c=self.num_classes)
+        semantics = F.softplus(semantics)
+
 
         offsets = gaussians[..., :3] # offsets: 每个高斯点相对射线采样点的偏移
         opacities = self.opt_act(gaussians[..., 3:4]) # opactites：透明度 # todo Sigmoid操作
 
         # todo Omni-Scene中的设计
-        scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
+        # scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
 
         # todo 参考MonoSplat、GaussianFormer中的设计
-        # scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
-        # scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
+        scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
+        scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
 
         rotations = self.rot_act(gaussians[..., 7:11]) # rotations：四元数旋转 # todo Normalize归一化操作
         rgbs = self.rgb_act(gaussians[..., 11:14]) # 颜色值 # todo sigmoid 操作
@@ -257,15 +255,17 @@ class PixelGaussian(BaseModule):
         directions = directions.unsqueeze(-2)
         means = origins + directions * depths_in[..., None] # todo: 射线起点 + 深度 × 方向 得到空间位置
         means = rearrange(means, "b r n c -> b (r n) c")
-        means = means + offsets # todo：再加上网络预测的offsets微调 偏移量 三维空间下的偏移量
+        means = means + offsets # todo：再加上网络预测的offsets偏移量 在三维空间下的偏移量
         # todo ----------------------------#
-        # todo 协方差计算
-        covariances = build_covariance(scales, rotations) # (b (v h w) 3 3)
+        # todo 协方差计算(参照MonoSplat中的计算)
+        covariances = build_covariance(scales, rotations) # todo shape: (b (v h w) 3 3)
         covariances = rearrange(covariances,"b (v h w) i j -> b v h w i j",v=self.num_cams,h=h,w=w)
-        c2w_rotations = extrinsics[..., :3, :3] # (b v 3 3)
+        c2w_rotations = extrinsics[..., :3, :3] # todo 相机外参cam2ego (b v 3 3)
         c2w_rotations = rearrange(c2w_rotations,"b v i j -> b v () () i j")
-        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # 自车坐标系下的协方差矩阵
+        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # todo 转换到自车坐标系下
         covariances = rearrange(covariances,"b v h w i j -> b (v h w) i j")
+
+
         # todo-----------------------------#
         # todo 6.整合输出
         # gaussians = torch.cat([means, rgbs, opacities, rotations, scales], dim=-1) # todo：gaussians：每个点的几何与外观属性

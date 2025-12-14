@@ -6,9 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import geom
-from utils import basic
-from utils import render
+from . import geom
+from . import basic
+
 
 
 def world2contracted(xyz_world, pc_range_roi=[-52, -52, 0, 52, 52, 6], ratio=0.8):

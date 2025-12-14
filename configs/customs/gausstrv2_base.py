@@ -31,10 +31,11 @@ custom_hooks = [
          save_sem_seg = True,
         #  save_img = False,
          save_img = True,
+         ),
+    dict(type='CustomHook',
+         val_occ_epoch = 20, # todo 指定epoch之后进行occ预测及评估
+        # val_occ_epoch = 0,
          )
-    # dict(type='CustomHook',
-    #      val_occ_epoch = 10, # todo 指定epoch之后进行occ预测及评估
-    #      )
 ]  # 保存结果
 
 input_size = (112,192)
@@ -171,6 +172,8 @@ train_pipeline = [
         to_float32=True,
         color_type='color',
         num_views=6),
+    # todo 载入occ标注
+    dict(type='LoadOccFromFile'),
     dict(
         type='ImageAug3D', # todo 对图像数据进行缩放
         final_dim=input_size,
@@ -194,7 +197,8 @@ train_pipeline = [
         apply_aug=True),
     dict(
         type='Pack3DDetInputs', # todo 把预处理的原始数据转成标注的数据集输入格式
-        keys=['img'], # todo
+        # keys=['img'], # todo
+        keys=['img', 'gt_semantic_seg'],
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat',
             'sample_idx',
@@ -235,7 +239,7 @@ test_pipeline = [
 
     dict(
         type='Pack3DDetInputs',
-        keys=['img', 'gt_semantic_seg'], # todo img：2D输入图 'gt_semantic_seg': 3D occ图
+        keys=['img', 'gt_semantic_seg'],
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat',
             'sample_idx',
@@ -308,7 +312,7 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=35, norm_type=2))
 
 # train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=30, val_interval=1)
 val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')
 

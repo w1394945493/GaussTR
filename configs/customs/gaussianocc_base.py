@@ -1,12 +1,12 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/c3g/ours/outputs/vis24' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/outputs/debug' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
-custom_imports = dict(imports=['base_model']) # todo
+custom_imports = dict(imports=['gaussianocc']) # todo
 
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
@@ -14,7 +14,7 @@ std  = [58.395, 57.12, 57.375]
 
 
 
-input_size = (112,192)
+input_size = (384,640)
 resize_lim=[0.1244, 0.12]  #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
 ori_image_shape = (900,1600)
 
@@ -34,6 +34,7 @@ model = dict(
         type='Det3DDataPreprocessor', # todo 图像数据预处理，打包为patch
         mean=mean,
         std=std),
+    ori_image_shape = ori_image_shape,
 
 )
 

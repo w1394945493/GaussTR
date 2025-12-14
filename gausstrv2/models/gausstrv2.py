@@ -78,6 +78,8 @@ class GaussTRV2(BaseModel):
 
         rgb_gts = [] # 真实图像
 
+        occ_gts = []
+
         for i in range(len(data_samples)):
             data_samples[i].set_metainfo(
                 {'cam2img': data_samples[i].cam2img[:num_views]})
@@ -108,6 +110,11 @@ class GaussTRV2(BaseModel):
                 feats.append(data_samples[i].feats)
             if hasattr(data_samples[i], 'sem_seg'):
                 sem_segs.append(data_samples[i].sem_seg) # todo 分割图
+
+            if hasattr(data_samples[i].gt_pts_seg, 'semantic_seg'):
+                occ_gts.append(data_samples[i].gt_pts_seg.semantic_seg) # todo occ占用图
+
+
         data_samples = dict(
             rgb_gts = rgb_gts,
             depth=depth,
@@ -120,6 +127,8 @@ class GaussTRV2(BaseModel):
             data_samples['feats'] = feats
         if sem_segs:
             data_samples['sem_segs'] = sem_segs
+        if occ_gts:
+            data_samples['occ_gts'] = torch.cat(occ_gts) # todo occ占用真值
         for k, v in data_samples.items():
             if isinstance(v, torch.Tensor) or not isinstance(v, Iterable):
                 continue
@@ -181,17 +190,17 @@ class GaussTRV2(BaseModel):
         pluckers = self.plucker_embedder(origins,directions) # (b v 6 h w)
 
         # todo backbone 特征提取
-        img_feats = self.extract_img_feat(img=inputs) # todo 能否替换成vit backbone？
+        img_feats = self.extract_img_feat(img=inputs)
 
         # todo 像素高斯预测
         pixel_gaussians = self.pixel_gs(
-                rearrange(img_feats[0], "b v c h w -> (b v) c h w"),
+                rearrange(img_feats[0], "b v c h w -> (b v) c h w"), # img_feats[0].shape torch.Size([1, 6, 128, 28, 48])
                 data_samples["depth"], # (b v h w)
-                pluckers,
-                origins,
-                directions,
-                intrinsics = data_samples['cam2img'][...,:3,:3],
-                extrinsics = data_samples['cam2ego'],)
+                pluckers, # torch.Size([1, 6, 6, 112, 192])
+                origins, # torch.Size([1, 6, 112, 192, 3])
+                directions, # torch.Size([1, 6, 112, 192, 3])
+                intrinsics = data_samples['cam2img'][...,:3,:3], # data_samples['cam2img'][...,:3,:3].shape torch.Size([1, 6, 3, 3])
+                extrinsics = data_samples['cam2ego'],)  # data_samples['cam2ego'].shape torch.Size([1, 6, 4, 4])
         '''
         import numpy as np
         # means3d = rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",)[0]

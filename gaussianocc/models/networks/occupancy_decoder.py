@@ -6,6 +6,7 @@
 
 from __future__ import absolute_import, division, print_function
 
+from sys import path
 import pdb
 import time
 
@@ -15,21 +16,22 @@ import torch.nn.functional as F
 import numpy as np
 from torch_efficient_distloss import eff_distloss, eff_distloss_native
 
-from utils import geom
-# from utils import vox
-from utils import basic
-from utils import render
+from einops import rearrange
+
+from ..utils import geom
+
+from ..utils import basic
+from ..utils import render
 from ._3DCNN import S3DCNN
-from sys import path
 
-from lib.gaussian_renderer import splatting_render, DistCUDA2
+from ..lib.gaussian_renderer import splatting_render, DistCUDA2
 
-# from mmdet.models.builder import build_loss
-from mmdet.registry import MODELS
 
-# for gt occ loss
-from utils.losses.semkitti_loss import sem_scal_loss, geo_scal_loss
-from utils.losses.lovasz_softmax import lovasz_softmax
+
+
+
+from ..utils.losses.semkitti_loss import sem_scal_loss, geo_scal_loss
+from ..utils.losses.lovasz_softmax import lovasz_softmax
 
 
 from ..utils import vox
@@ -86,8 +88,7 @@ class VolumeDecoder(nn.Module):
                  cam_N = 6,
                  auxiliary_frame = False,
                  scales = [0],
-
-                 ):
+                 dataset = 'nusc'):
         super(VolumeDecoder, self).__init__()
 
         self.use_semantic = use_semantic
@@ -131,14 +132,16 @@ class VolumeDecoder(nn.Module):
 
         self.scales = scales
 
-        loss_occ=dict(
-            type='CrossEntropyLoss',
-            use_sigmoid=False,
-            ignore_index=255,
-            loss_weight=1.0)
+        self.dataset = dataset
+
+        # loss_occ=dict(
+        #     type='CrossEntropyLoss',
+        #     use_sigmoid=False,
+        #     ignore_index=255,
+        #     loss_weight=1.0)
 
         # self.loss_occ = build_loss(loss_occ)
-        self.loss_occ = MODELS.build(loss_occ)
+        # self.loss_occ = MODELS.build(loss_occ)
 
 
         num_classes = self.semantic_classes
@@ -262,24 +265,23 @@ class VolumeDecoder(nn.Module):
                 assert_cube=False)
 
 
-    def feature2vox_simple(self, features, pix_T_cams, cam0_T_camXs, __p, __u): # todo 将多相机2D feature投影到 3D 体素网格中
+    def feature2vox_simple(self, features, intrinsics,extrinsics): # todo 将多相机2D feature投影到 3D 体素网格中
 
-        pix_T_cams_ = pix_T_cams
-        camXs_T_cam0_ = geom.safe_inverse(cam0_T_camXs) # todo 求逆矩阵：通过旋转矩阵的正交性质计算
+        bs,n,_,_ = intrinsics.shape
 
-        _, C, Hf, Wf = features.shape
+        _,c,h,w = features.shape
 
-        sy = Hf / float(self.height)
-        sx = Wf / float(self.width)
+        extrinsics = rearrange(extrinsics,"b v i j -> (b v) i j")
+        viewmat = geom.safe_inverse(extrinsics)
 
-        # unproject image feature to 3d grid
-        featpix_T_cams_ = geom.scale_intrinsics(pix_T_cams_, sx, sy) # todo 图像经过下采样提取特征后，内参进行同步缩放
-        # pix_T_cams_ shape: [6,4,4]  feature down sample -> featpix_T_cams_
-        # todo 反投影2D features 到 3D voxel 空间: 2D -> 3D Lifting 将2D的图像特征变换到3D体素网格
+        cam2imgs = rearrange(intrinsics,"b v i j -> (b v) i j")
+        cam2imgs[:,0] = cam2imgs[:,0] * w
+        cam2imgs[:,1] = cam2imgs[:,1] * h
+
         feat_mems_ = self.vox_util.unproject_image_to_mem(
             features,
-            basic.matmul2(featpix_T_cams_, camXs_T_cam0_), # todo 统一坐标系
-            camXs_T_cam0_, self.Z, self.Y, self.X) # (bv,c,Z,Y,X) c: 特征维度，如64 (Z,Y,X):这是预定义的体素尺寸
+            basic.matmul2(cam2imgs, viewmat),
+            viewmat, self.Z, self.Y, self.X) # 24,300,300
 
         # feat_mems_ shape： torch.Size([6, 128, 200, 8, 200])
         feat_mems = __u(feat_mems_)  # B, S, C, Z, Y, X # torch.Size([1, 6, 128, 200, 8, 200])
@@ -553,28 +555,6 @@ class VolumeDecoder(nn.Module):
 
         return ego2featpix, camXs_T_cam0_, Hf, Wf
 
-    def get_voxel(self, features, inputs):
-
-        __p = lambda x: basic.pack_seqdim(x, self.batch)  # merge batch and number of cameras # todo 合并batch和camera维度
-        __u = lambda x: basic.unpack_seqdim(x, self.batch) # todo 还原batch和camera维度
-
-        meta_similarity = None
-        meta_feature = None
-        curcar2precar = None
-        nextcam2curego = None
-
-        # input_channel=64
-        feature_size = self.input_channel
-
-        Extrix_RT = inputs['pose_spatial'][:6]  # (b,4,4) # todo 相机之间的相对位姿
-        Intrix_K = inputs[('K', 0, 0)][:6] # (b,4,4) # todo 相机内参
-
-        Voxel_feat = self.feature2vox_simple(features[0], Intrix_K, Extrix_RT, __p, __u) # features[0]: (b,64,h,w)
-
-
-        return Voxel_feat, meta_similarity, meta_feature, nextcam2curego, feature_size
-
-
     def prepare_gs_attribute(self, Voxel_feat_list, inputs, is_train = None, index = 0):
         # prepare gaussian
         pc = {}
@@ -696,7 +676,11 @@ class VolumeDecoder(nn.Module):
             # all_cam_center = inputs['all_cam_center']
             viewpoint_camera = geom.setup_opengl_proj(w = self.render_w, h = self.render_h, k = K[j], c2w = C2W[j],near=self.min_depth, far=100) # todo：获取相机的参数属性：viewpoint_camera: dict
             # todo 高斯渲染
-            render_pkg = splatting_render(viewpoint_camera, pc_i, opt = self.opt)
+            render_pkg = splatting_render(viewpoint_camera, pc_i,
+                                          use_semantic=self.use_semantic,
+                                          render_type=self.render_type,
+
+                                          )
 
             depth_i = render_pkg['depth']
             rgb_marched_i = render_pkg['render'].unsqueeze(0) # todo 语义图 or rgb图像
@@ -747,31 +731,16 @@ class VolumeDecoder(nn.Module):
 
         return
 
-    def forward(self, features, inputs, epoch = 0, outputs={}, is_train=True, Voxel_feat_list=None, no_depth=False):
+    def forward(self, features, data_samples):
 
-        self.outputs = outputs
-
-        # todo ---------------------#
-        # todo 体素特征构建：从2D图像 -> 3D体素
-        if Voxel_feat_list is None: # todo 从 2D feat lift 3D voxel
-            # todo 通过视图变换得到体素特征
-            # 2D to 3D
-            Voxel_feat, meta_similarity, meta_feature, nextcam2curego, feature_size = self.get_voxel(features, inputs)
-            # todo 使用3DCNN,用于对代价体执行多级的下采样和上采样, 且这里最后预测得到18维的特征向量 17语义类别 + 1维透明度
-            # 3D aggregation
-            Voxel_feat_list = self._3DCNN(Voxel_feat) # (b,c,X,Y,Z) 体素特征
-
-        # pdb.set_trace()
-        if self.render_type == 'gt':
-            preds = Voxel_feat_list[0]
-            voxel_semantics = inputs['semantics_3d']
-            mask_camera = inputs['mask_camera_3d']
-            self.get_semantic_gt_loss(voxel_semantics, preds, mask_camera)
-            return self.outputs
+        intrinsics = data_samples['cam2img']
+        extrinsics = data_samples['cam2ego']
+        # 2D to 3D
+        Voxel_feat = self.feature2vox_simple(features[0],intrinsics,extrinsics) # features[0]: (b,64,h,w)
+        # 3D aggregation
+        Voxel_feat_list = self._3DCNN(Voxel_feat)
 
 
-        # # rendering
-        rendering_eps_time = time.time()
         cam_num = self.cam_N * 3 if self.auxiliary_frame else self.cam_N
 
         for scale in self.scales: # todo 0
@@ -797,12 +766,12 @@ class VolumeDecoder(nn.Module):
 
 
         if not is_train:
-            if self.opt.dataset == 'nusc': # todo 可见论文中 4.1 实验部分介绍
+            if self.dataset == 'nusc': # todo 可见论文中 4.1 实验部分介绍
                 H, W, Z = 200, 200, 16
                 xyz_min = [-40, -40, -1]
                 xyz_max = [40, 40, 5.4]
 
-            elif self.opt.dataset == 'ddad':
+            elif self.dataset == 'ddad':
                 H, W, Z = 200, 200, 16
                 xyz_min = [-40, -40, -1]
                 xyz_max = [40, 40, 5.4]

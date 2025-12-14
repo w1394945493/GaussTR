@@ -8,9 +8,9 @@ class LossLpips(nn.Module):
     lpips: LPIPS
     def __init__(self,weight=0.05):
         super().__init__()
-        self.weight = weight
+        self.weight = weight # todo 取0.05
         self.lpips = LPIPS(net="vgg")
-        
+
         convert_to_buffer(self.lpips, persistent=False)
 
     def forward(self,gt_imgs,pred_imgs):

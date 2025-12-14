@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from mmengine.model import BaseModel, BaseModule, ModuleList
 from mmdet3d.registry import MODELS
 
-from .models import Encoder_res101
+from .models import Encoder_res101,VolumeDecoder
 
 
 
@@ -28,23 +28,12 @@ class GaussianOCC(BaseModel):
 
     def __init__(self,
                  ori_image_shape,
-                 patch_size = 14,
                  **kwargs):
         super().__init__(**kwargs)
-
-
-        self.encoder = Encoder_res101(C=64,network_type='101')
-
-
-
-
-        self.patch_size = patch_size
+        self.encoder = Encoder_res101(network_type='101')
+        self.depth = VolumeDecoder()
         self.ori_image_shape = ori_image_shape
-
         print(cyan(f'successfully init Model!'))
-
-
-
 
     def prepare_inputs(self, inputs_dict, data_samples):
         num_views = data_samples[0].num_views
@@ -116,11 +105,11 @@ class GaussianOCC(BaseModel):
         bs, n, _, h, w = inputs.shape # (b,v,3,H,W)
         device = inputs.device
 
-        # 将图像缩放为14的倍数
-        concat = rearrange(inputs,"b v c h w -> (b v) c h w")
-        resize_h, resize_w = h // self.patch_size * self.patch_size, w // self.patch_size * self.patch_size
-        concat = F.interpolate(concat,(resize_h,resize_w),mode='bilinear',align_corners=True)
-        resize  = rearrange(concat,"(b v) c h w -> b v c h w",b=bs)
+        input_color = rearrange(inputs,"b v c h w -> (b v) c h w")
+        features = self.encoder(input_color)
+
+        
+        output = self.depth(features, data_samples)
 
 
         return

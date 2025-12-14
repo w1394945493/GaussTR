@@ -119,14 +119,13 @@ def render_cuda(
         row, col = torch.triu_indices(3, 3)
         image, radii, depth, alpha = rasterizer(
             means3D=gaussian_means[i], # (N 3)
-            # means2D=mean_gradients,
-            means2D = means2D,
-            shs=shs[i] if use_sh else None,
-            colors_precomp=None if use_sh else shs[i, :, 0, :], # (N 3)
+            means2D = means2D, # (N 3)
+            shs=shs[i] if use_sh else None, # None
+            colors_precomp=None if use_sh else shs[i, :, 0, :], # (N 3) rgb
             opacities=gaussian_opacities[i, ..., None], # (N 1)
             scales = gaussian_scales[i], # (N 3)
             rotations = gaussian_rotations[i], # (N 4)
-            cov3D_precomp=gaussian_covariances[i, :, row, col] if gaussian_covariances is not None else None,
+            cov3D_precomp=gaussian_covariances[i, :, row, col] if gaussian_covariances is not None else None, # (N 3 3)
         )
 
         image = torch.clamp(image,min=0.0,max=1.0) # todo 参考Omni-Scene中的工作

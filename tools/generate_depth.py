@@ -68,9 +68,11 @@ if __name__ == '__main__':
         'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl'
     ]
     # cfg = Config.fromfile('configs/gausstr_featup.py')
+
     cfg = Config.fromfile('configs/customs/gausstr_featup.py')
     model = MODELS.build(
         dict(type='Metric3D', model_name='metric3d_vit_large')).cuda()
+
     # save_dir = 'data/nuscenes_metric3d'
     save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d'
     os.makedirs(save_dir,exist_ok=True)

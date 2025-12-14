@@ -35,7 +35,7 @@ def build_covariance(
     rotation_xyzw: Float[Tensor, "*#batch 4"],
 ) -> Float[Tensor, "*batch 3 3"]:
     scale = scale.diag_embed()
-    rotation = quaternion_to_matrix(rotation_xyzw)
+    rotation = quaternion_to_matrix(rotation_xyzw) # todo 将四元数转换为(3 3)的旋转矩阵
     return (
         rotation
         @ scale

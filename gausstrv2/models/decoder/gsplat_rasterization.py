@@ -43,22 +43,22 @@ def rasterize_gaussians(
     else:
         sh_degree = None
 
-    # from gsplat import rasterization
+    # todo from gsplat import rasterization
     rendered, alpha, _ = rasterization(
         means=means3d, # (n,3)
         quats=rotations, # (n,4)
         scales=scales, # (n,3)
         opacities=opacities, # (n)
-        colors=colors, # (n,c)
-        covars=covariances,
+        colors=colors, # (n,3) rgb
+        covars=covariances, # (n 3 3)
         viewmats=viewmat, # viewmat: world2cam变换矩阵
         Ks=cam2imgs, # (v 3 3)
         width=W, # 192
         height=H, # 112
-        sh_degree=sh_degree, # None or int
-        **kwargs) # near_plane:0.1 far_plane:100 render_mode:RGB+D channel_chunk:32
+        sh_degree=sh_degree, # None (未使用)
+        **kwargs) # kwargs：near_plane:0.1 far_plane:100 render_mode:RGB+D channel_chunk:32
 
-    rendered = rendered.permute(0, 3, 1, 2)
+    rendered = rendered.permute(0, 3, 1, 2) # (v h w c) -> (v c h w) v=num_cams c = 特征维度 + 1(深度)
 
     rendered_image = rendered[:,:-1] # (v c h w)
     rendered_depth = rendered[:,-1] # (v h w)

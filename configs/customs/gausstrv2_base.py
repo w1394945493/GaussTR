@@ -33,8 +33,8 @@ custom_hooks = [
          save_img = True,
          ),
     dict(type='CustomHook',
-         val_occ_epoch = 20, # todo 指定epoch之后进行occ预测及评估
-        # val_occ_epoch = 0,
+        #  val_occ_epoch = 20, # todo 指定epoch之后进行occ预测及评估
+        val_occ_epoch = 0,
          )
 ]  # 保存结果
 

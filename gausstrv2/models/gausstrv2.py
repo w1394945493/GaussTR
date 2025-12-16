@@ -47,8 +47,6 @@ class GaussTRV2(BaseModel):
 
         self.backbone = MODELS.build(backbone)
 
-
-
         self.neck = MODELS.build(neck)
         self.pixel_gs = MODELS.build(pixel_gs)
 

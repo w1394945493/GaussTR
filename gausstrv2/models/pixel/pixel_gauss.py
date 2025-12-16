@@ -116,10 +116,10 @@ class PixelGaussian(BaseModule):
         self.opt_act = torch.sigmoid
         # todo scales(使用OmniScene中方法，对预测尺度进行处理)
         # self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
-        # todo MonoSplat等工作中的处理(没有使用)
+        # todo MonoSplat/GaussianFormer等工作中的处理
         self.scale_act = torch.sigmoid
-        self.scale_min = scale_min
-        self.scale_max = scale_max
+        self.scale_min = scale_min # todo 0.08
+        self.scale_max = scale_max # todo 0.64
 
         self.rot_act = lambda x: F.normalize(x, dim=-1)
         self.rgb_act = torch.sigmoid
@@ -228,7 +228,8 @@ class PixelGaussian(BaseModule):
         semantics = self.to_semantics(features) # todo semantics.shape: ((bs v),num_classes,112,192)
         semantics = rearrange(semantics, "(b v) (n c) h w -> b (v h w n) c",
                               b=bs, v=self.num_cams, n=1, c=self.num_classes)
-        semantics = F.softplus(semantics)
+
+        semantics = F.softplus(semantics) # todo (b g 17) -> (b g 17)
 
 
         offsets = gaussians[..., :3] # offsets: 每个高斯点相对射线采样点的偏移

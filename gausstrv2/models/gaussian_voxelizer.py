@@ -143,30 +143,25 @@ class GaussianVoxelizer(nn.Module):
         # todo 3. 根据每个体素位置的透明度进行聚合，找到每个位置的最大透明度值
         max_values, max_indices = scatter_max(conf_flat, inverse_indices, dim=0) # todo scatter_max: 按照指定的索引对张量进行聚合操作 scatter_max(src,index,dim): src: 你想要聚合的张量 index：和src相同大小的张量 dim：指定在哪个维度聚合
         sampled_xyz = rearrange(grid_coords,"H W D xyz -> (H W D) xyz").unsqueeze(0) # todo (1 200x200x16 3)
-
-        # todo 4. 利用Gaussformer的local aggregator进行语义信息聚合
         # cov_inv = covariances[max_indices].inverse().unsqueeze(0) # todo N ->(滤除) n  (1 n 3 3) 只取密度(透明度)最大的高斯点
         # scales = torch.sqrt(covariances[max_indices].diagonal(dim1=1, dim2=2)).unsqueeze(0) # todo (1 n 3)
         # covs = covariances[max_indices].unsqueeze(0)
-
+        # todo 4. 根据透明度筛选透明度最大的高斯点
         means = means3d[max_indices].unsqueeze(0) # todo (1 n 3)
         origi_opa = opacities[max_indices].unsqueeze(0) # todo (1 n)
         feats = features[max_indices].unsqueeze(0) # todo 语义预测 (1 n n_classes)
         gs_scales = scales[max_indices].unsqueeze(0)
         gs_rotations = rotations[max_indices].unsqueeze(0)
-
-
+        # todo 5. 拼接上了这个空的高斯点
         feats = torch.cat([feats,torch.zeros_like(feats[...,:1])],dim=-1)
         means = torch.cat([means, self.empty_mean], dim=1)
         gs_scales = torch.cat([gs_scales, self.empty_scale], dim=1)
         gs_rotations = torch.cat([gs_rotations, self.empty_rot], dim=1)
-
         empty_sem = self.empty_sem.clone()
         empty_sem[..., self.empty_label] += self.empty_scalar
         feats = torch.cat([feats,empty_sem],dim=1)
         origi_opa = torch.cat([origi_opa,self.empty_opa],dim=1).squeeze(-1)
-
-
+        # todo 6. 重新计算了一下协方差和相应的逆矩阵(没有使用相机外参)
         bs, g, _ = means.shape
         S = torch.zeros(bs, g, 3, 3, dtype=means.dtype, device=means.device)
         S[..., 0, 0] = gs_scales[..., 0]
@@ -177,7 +172,7 @@ class GaussianVoxelizer(nn.Module):
         covs = torch.matmul(M.transpose(-1, -2), M)
         # covs_inv = covs.cpu().inverse().cuda()
         covs_inv = covs.inverse()
-
+        # todo 6. 利用Gaussformer的local aggregator进行语义信息聚合
         semantics = self.aggregator(sampled_xyz,means,origi_opa,feats,gs_scales,covs_inv) # todo 输出的semantics (200x200x16 n_classes)
         grid_feats = rearrange(semantics,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
         return grid_feats, grid_density

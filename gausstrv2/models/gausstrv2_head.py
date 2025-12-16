@@ -245,7 +245,7 @@ class GaussTRV2Head(BaseModule):
         rgb = colors.flatten(0,1) # todo rgb.shape:torch.Size([6, 3, 112, 192])
         rgb_gt = rgb_gts.flatten(0,1) / 255. # todo rgb_gt.shape: torch.Size([6, 3, 112, 192])
         reg_loss = (rgb - rgb_gt) ** 2
-        losses['loss_mae'] = reg_loss.mean()
+        losses['loss_l2'] = reg_loss.mean()
 
         losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
 

@@ -11,9 +11,12 @@ custom_imports = dict(imports=['gausstrv3']) # todo
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
-num_classes = 17
+num_classes = 18
+near = 0.1
+far = 100.
 
-
+d_sh = None
+use_sh = d_sh is not None
 
 # input_size = (112,192)
 # input_size = (448,800)
@@ -60,7 +63,9 @@ model = dict(
         opacity_head=dict(type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'),
         scale_head=dict(type='MLP',input_dim=embed_dims,output_dim=3,mode='sigmoid',range=(1, 16)),
         rot_head=dict(type='MLP', input_dim=embed_dims, output_dim=4,mode = 'normalize'),
-        semantic_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes,mode = 'softplus'),
+        rgb_head=dict(type='MLP', input_dim=embed_dims, output_dim=3, mode='sigmoid'),
+        semantic_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes-1,mode = 'softplus'),
+
         voxelizer=dict(
             type='GaussianVoxelizer',
             vol_range=[-40, -40, -1, 40, 40, 5.4],
@@ -69,6 +74,9 @@ model = dict(
             opacity_thresh=0.6,
             covariance_thresh=1.5e-2,
             ),
+        near = near,
+        far = far,
+        use_sh = use_sh,
     ),
     model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     ori_image_shape = ori_image_shape,
@@ -219,7 +227,7 @@ test_dataloader = val_dataloader
 # todo 指标评估器
 val_evaluator = dict(
     type='OccMetric',
-    num_classes=18, # todo 类别： 17(Occ3D) + 1(1：天空类)
+    num_classes=num_classes, # todo 类别： 17(Occ3D) + 1(1：天空类)
     use_lidar_mask=False,
     use_image_mask=True)
 test_evaluator = val_evaluator
@@ -244,7 +252,7 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-     # todo
+    logger=dict(type='LoggerHook', interval=1),
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 

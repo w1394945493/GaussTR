@@ -148,8 +148,6 @@ class GaussTRV3(BaseModel):
         resize_h, resize_w = h // self.patch_size * self.patch_size, w // self.patch_size * self.patch_size
         concat = F.interpolate(concat,(resize_h,resize_w),mode='bilinear',align_corners=True)
 
-        resize  = rearrange(concat,"(b v) c h w -> b v c h w",b=bs)
-
         self.backbone.eval()
         with torch.no_grad():
             x = self.backbone.forward_features(
@@ -171,12 +169,21 @@ class GaussTRV3(BaseModel):
 
 
 
+        if mode == 'predict':
+            return self.gauss_heads[-1](
+                query[-1], reference_points[-1],
+                image_shape=(h,w),
+                mode=mode, **data_samples)
+
+        losses = {}
         for i, gauss_head in enumerate(self.gauss_heads): # 多层
             loss = gauss_head(
-                query[i], reference_points[i], mode=mode, **data_samples)
-
-
-        return
+                query[i], reference_points[i],
+                image_shape=(h,w),
+                mode=mode, **data_samples)
+            for k, v in loss.items():
+                losses[f'{k}/{i}'] = v
+        return losses
 
 
     def pre_transformer(self, mlvl_feats):

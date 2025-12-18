@@ -123,3 +123,9 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
     -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6/epoch_24.pth \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/test
+
+
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv3_base.py \
+    -G 0 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv3/ours/train \
+    

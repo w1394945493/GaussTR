@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from einops import rearrange
+from einops import rearrange,repeat
 
 from mmdet3d.registry import MODELS
 from mmdet.models import inverse_sigmoid
@@ -16,7 +16,8 @@ from mmengine.model import BaseModule
 from .utils import flatten_bsn_forward
 from ..geometry import get_world_rays
 from .encoder.common.gaussians import build_covariance
-from ..loss import *
+from ..loss import lovasz_softmax_flat,CE_ssc_loss
+from .decoder import rasterize_gaussians,render_cuda
 
 nusc_class_frequencies = np.array([
     944004,
@@ -89,7 +90,12 @@ class GaussTRHead(BaseModule):
                  scale_head,
                  rot_head,
                  semantic_head,
+                 rgb_head,
                  voxelizer,
+                 near,
+                 far,
+                 use_sh = True,
+                 background_color=[0.0, 0.0, 0.0],
                  num_classes = 18,
                  balance_cls_weight = True,
                  manual_class_weight=[
@@ -100,12 +106,23 @@ class GaussTRHead(BaseModule):
                  ):
         super().__init__()
 
+        self.register_buffer(
+            "background_color",
+            torch.tensor(background_color, dtype=torch.float32),
+            persistent=False,
+        )
         self.regress_head = MODELS.build(regress_head)
         self.opacity_head = MODELS.build(opacity_head)
         self.scale_head = MODELS.build(scale_head)
         self.rot_head = MODELS.build(rot_head)
         self.semantic_head = MODELS.build(semantic_head)
+        self.rgb_head = MODELS.build(rgb_head)
         self.voxelizer = MODELS.build(voxelizer)
+
+        self.near = near
+        self.far = far
+
+        self.use_sh = use_sh
 
         if balance_cls_weight:
             if manual_class_weight is not None:
@@ -121,6 +138,7 @@ class GaussTRHead(BaseModule):
     def forward(self,
                 x,
                 ref_pts,
+                image_shape,
                 depth,
                 cam2img,
                 cam2ego,
@@ -130,6 +148,7 @@ class GaussTRHead(BaseModule):
                 **kwargs):
 
         bs, n = cam2img.shape[:2]
+        device = cam2img.device
         x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
         deltas = self.regress_head(x)
 
@@ -142,10 +161,11 @@ class GaussTRHead(BaseModule):
 
         intrinsics = cam2img[...,:3,:3] # (b v 3 3)
         extrinsics = cam2ego # (b v 4 4)
-        extrinsics = rearrange(extrinsics, "b v i j -> b v () () () i j")
-        intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
 
-        origins, directions = get_world_rays(coordinates, extrinsics, intrinsics) # (b v g 1 1 3) (b v g 1 1 3)
+        extrinsics_ = rearrange(extrinsics, "b v i j -> b v () () () i j")
+        intrinsics_ = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
+
+        origins, directions = get_world_rays(coordinates, extrinsics_, intrinsics_) # (b v g 1 1 3) (b v g 1 1 3)
         origins = rearrange(origins,"b v g srf spp c -> b v g (srf spp c)") # (b v g 3)
         directions = rearrange(directions,"b v g srf spp c -> b v g (srf spp c)") # (b v g 3)
 
@@ -154,21 +174,71 @@ class GaussTRHead(BaseModule):
         scales = self.scale_head(x) # (b v g 3)
         rotations = self.rot_head(x) # (b v g 4) 四元数格式
         semantics =self.semantic_head(x) # (b v g n_cls) n_cls = 17
+        rgbs = self.rgb_head(x) # (b v g 3)
+
 
         covariances = build_covariance(scales, rotations) # (b v g 3 3)
         c2w_rotations = rearrange(cam2ego[...,:3,:3],'b v i j -> b v () i j')
         covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # (b v g 3 3)
 
-        means = rearrange(means,'b v g c -> b (v g) c') # (b (v g) 3)
+        means3d = rearrange(means,'b v g c -> b (v g) c') # (b (v g) 3)
         opacities = rearrange(opacities,'b v g c -> b (v g) c') # (b (v g) 1)
         semantics = rearrange(semantics,'b v g c -> b (v g) c') # (b (v g) n_cls)
+        rgbs = rearrange(rgbs,'b v g c -> b (v g) c') # (b (v g) 3)
         scales = rearrange(scales,'b v g c -> b (v g) c') # (b (v g) 3)
         rotations = rearrange(rotations,'b v g c -> b (v g) c') # (b (v g) 4)
         covariances = rearrange(covariances,'b v g i j -> b (v g) i j') # (b (v g) 3 3)
 
+        # h, w = image_shape
+
+        # near = self.near
+        # near = torch.full((bs,n),near).to(device)
+        # far = self.far
+        # far = torch.full((bs,n),far).to(device)
+        # colors, rendered_depth = render_cuda(
+        #     extrinsics=rearrange(extrinsics, "b v i j -> (b v) i j"),
+        #     intrinsics=rearrange(intrinsics, "b v i j -> (b v) i j"),
+        #     image_shape = (h,w),
+        #     near=rearrange(near, "b v -> (b v)"),
+        #     far=rearrange(far, "b v -> (b v)"),
+        #     background_color=repeat(self.background_color, "c -> (b v) c", b=bs, v=n),
+
+        #     gaussian_means=repeat(means3d, "b g xyz -> (b v) g xyz", v=n),
+        #     gaussian_sh_coefficients=
+        #         repeat(rgbs, "b g c d_sh -> (b v) g c d_sh", v=n) if self.use_sh else repeat(rgbs, "b g rgb -> (b v) g rgb ()", v=n),
+        #     gaussian_opacities=repeat(opacities.squeeze(-1), "b g -> (b v) g", v=n),
+
+        #     gaussian_scales=repeat(scales, "b g c -> (b v) g c", v=n),
+        #     gaussian_rotations=repeat(rotations, "b g c -> (b v) g c", v=n),
+        #     # gaussian_covariances=repeat(covariances, "b g i j -> (b v) g i j", v=n) if covariances is not None else None,
+        #     scale_invariant = False,
+        #     use_sh= self.use_sh,
+        # )
+        # colors = rearrange(colors,'(bs n) c h w -> bs n c h w',bs=bs) # (b v c h w)
+        # rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs).squeeze(2) # (b v h w)
+
+        # colors, rendered_depth = rasterize_gaussians(
+        #     extrinsics=cam2ego,
+        #     intrinsics=cam2img[...,:3,:3],
+        #     image_shape = (h,w),
+        #     means3d=means3d,
+        #     rotations=rotations,
+        #     scales=scales,
+        #     covariances=covariances,
+        #     opacities=opacities.squeeze(-1),
+        #     colors=rgbs, # (b n c d_sh)
+        #     use_sh=self.use_sh,
+        #     img_aug_mats=img_aug_mat,
+
+        #     near_plane=self.near,
+        #     far_plane=self.far,
+
+        #     render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
+        #     channel_chunk=32)
+
         # occ占用预测
         grid_density, grid_feats = self.voxelizer(
-            means,
+            means3d,
             opacities,
             semantics,
             covariances,
@@ -180,11 +250,12 @@ class GaussTRHead(BaseModule):
             outputs = [{
                 'occ_pred': occ_preds,
             }]
+            return outputs
 
         losses = {}
         probs = rearrange(grid_feats,"b H W D C -> b C (H W D)")
         target = rearrange(occ_gts,"b H W D ->b (H W D)").long()
-        losses['loss_ce'] = 10.0 * CE_ssc_loss(probs, target, self.class_weights.type_as(probs), ignore_index=255)
+        losses['loss_ce'] = 1.0 * CE_ssc_loss(probs, target, self.class_weights.type_as(probs), ignore_index=255)
 
         inputs = torch.softmax(probs, dim=1).transpose(1,2).flatten(0,1)
         target = occ_gts.flatten()
@@ -192,7 +263,7 @@ class GaussTRHead(BaseModule):
         valid = (target != ignore)
         probas = inputs[valid]
         labels = target[valid]
-        losses['loss_lovasz'] = 1.0 * lovasz_softmax_flat(probas,labels)
+        losses['loss_lovasz'] = 10.0 * lovasz_softmax_flat(probas,labels)
 
         return losses
 

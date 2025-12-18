@@ -78,6 +78,7 @@ class GaussTR(BaseModel):
 
         self.query_embeds = nn.Embedding(
             num_queries, decoder.layer_cfg.self_attn_cfg.embed_dims)
+
         self.gauss_heads = ModuleList(
             [MODELS.build(gauss_head) for _ in range(decoder.num_layers)])
 

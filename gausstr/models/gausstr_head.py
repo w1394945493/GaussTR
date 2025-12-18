@@ -153,6 +153,7 @@ class GaussTRHead(BaseModule):
 
         # todo ------------------------------------#
         # todo： 协方差计算：
+        # todo 尺度：
         scales = self.scale_head(x) * self.scale_transform(
             sample_depth, cam2img[..., 0, 0]).clamp(1e-6)
         covariances = flatten_bsn_forward(get_covariance, scales,

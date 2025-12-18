@@ -79,6 +79,7 @@ class GaussianVoxelizer(nn.Module):
                 **kwargs):
         if covariances is None:
             covariances = get_covariance(scales, quat_to_rotmat(rotations))
+
         gaussians = dict(
             means3d=means3d,
             opacities=opacities,

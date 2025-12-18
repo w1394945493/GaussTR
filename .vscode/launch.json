@@ -181,5 +181,18 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
+        {
+            "name": "run train gausstrv3",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/train.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv3_base.py",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

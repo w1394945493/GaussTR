@@ -11,14 +11,6 @@ from tqdm import tqdm
 from .utils import (apply_to_items, generate_grid, get_covariance,
                     quat_to_rotmat, unbatched_forward)
 
-
-
-
-
-
-
-
-
 @MODELS.register_module()
 class GaussianVoxelizer(nn.Module):
 
@@ -152,6 +144,7 @@ class GaussianVoxelizer(nn.Module):
         feats = features[max_indices].unsqueeze(0) # todo 语义预测 (1 n n_classes)
         gs_scales = scales[max_indices].unsqueeze(0)
         gs_rotations = rotations[max_indices].unsqueeze(0)
+
         # todo 5. 拼接上了这个空的高斯点
         feats = torch.cat([feats,torch.zeros_like(feats[...,:1])],dim=-1)
         means = torch.cat([means, self.empty_mean], dim=1)

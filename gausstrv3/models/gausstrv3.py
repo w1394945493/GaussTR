@@ -85,16 +85,16 @@ class GaussTRV3(BaseModel):
         for i in range(len(data_samples)):
             data_samples[i].set_metainfo(
                 {'cam2img': data_samples[i].cam2img[:num_views]})
+            cam2img.append(data_samples[i].cam2img)
 
-            # normalize the standred format into intrinsics
-            ori_h, ori_w = self.ori_image_shape # (900, 1600)
-            intrinsics = data_samples[i].cam2img
-            intrinsics[:, 0, 0] /= ori_w
-            intrinsics[:, 1, 1] /= ori_h
-            intrinsics[:, 0, 2] /= ori_w
-            intrinsics[:, 1, 2] /= ori_h
-            cam2img.append(intrinsics)
-
+            # # normalize the standred format into intrinsics
+            # ori_h, ori_w = self.ori_image_shape # (900, 1600)
+            # intrinsics = data_samples[i].cam2img
+            # intrinsics[:, 0, 0] /= ori_w
+            # intrinsics[:, 1, 1] /= ori_h
+            # intrinsics[:, 0, 2] /= ori_w
+            # intrinsics[:, 1, 2] /= ori_h
+            # cam2img.append(intrinsics)
             data_samples[i].set_metainfo(
                 {'cam2ego': data_samples[i].cam2ego[:num_views]})
             cam2ego.append(data_samples[i].cam2ego)
@@ -141,7 +141,7 @@ class GaussTRV3(BaseModel):
     def forward(self, inputs, data_samples, mode='loss'):
         inputs, data_samples = self.prepare_inputs(inputs, data_samples)
         bs, n, _, h, w = inputs.shape # (b,v,3,H,W)
-        device = inputs.device
+        # device = inputs.device
 
         # 将图像缩放为14的倍数
         concat = rearrange(inputs,"b v c h w -> (b v) c h w")
@@ -160,6 +160,7 @@ class GaussTRV3(BaseModel):
         decoder_inputs = self.pre_transformer(feats)
         feats = flatten_multi_scale_feats(feats)[0]
         decoder_inputs.update(self.pre_decoder(feats))
+
         decoder_outputs = self.forward_decoder(
             reg_branches=[h.regress_head for h in self.gauss_heads],
             **decoder_inputs)

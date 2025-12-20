@@ -14,6 +14,7 @@ std  = [58.395, 57.12, 57.375]
 num_classes = 18
 near = 0.1
 far = 100.
+depth_limit = 51.2
 
 d_sh = None
 use_sh = d_sh is not None
@@ -64,7 +65,7 @@ model = dict(
         scale_head=dict(type='MLP',input_dim=embed_dims,output_dim=3,mode='sigmoid',range=(1, 16)),
         rot_head=dict(type='MLP', input_dim=embed_dims, output_dim=4,mode = 'normalize'),
         rgb_head=dict(type='MLP', input_dim=embed_dims, output_dim=3, mode='sigmoid'),
-        semantic_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes-1,mode = 'softplus'),
+        semantic_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes-1,mode = 'softplus',),
 
         voxelizer=dict(
             type='GaussianVoxelizer',
@@ -74,8 +75,14 @@ model = dict(
             opacity_thresh=0.6,
             covariance_thresh=1.5e-2,
             ),
+        loss_lpips=dict(
+            type='LossLpips',
+            weight = 0.05,
+            ),
         near = near,
         far = far,
+        ori_image_shape = ori_image_shape,
+        depth_limit = depth_limit,
         use_sh = use_sh,
     ),
     model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
@@ -252,7 +259,7 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=1),
+    logger=dict(type='LoggerHook', interval=20),
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 

@@ -210,5 +210,34 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
+        {
+            "name": "run train gausstrv4",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/train.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv4_base.py",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
+            "name": "run test ausstrv4",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/test.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv4_base.py",
+                // "--checkpoint",
+                // "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6/epoch_24.pth",
+                // "/home/lianghao/wangyushen/data/wangyushen/Weights/gausstr/gausstr_talk2dino_e20_miou12.27.pth",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

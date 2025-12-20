@@ -94,6 +94,8 @@ class GaussTR(BaseModel):
         feats = []
         sem_segs = []
 
+        occ_gts = [] # occ标注
+
         for i in range(len(data_samples)):
             data_samples[i].set_metainfo(
                 {'cam2img': data_samples[i].cam2img[:num_views]})
@@ -114,6 +116,8 @@ class GaussTR(BaseModel):
                 feats.append(data_samples[i].feats)
             if hasattr(data_samples[i], 'sem_seg'):
                 sem_segs.append(data_samples[i].sem_seg)
+            if hasattr(data_samples[i].gt_pts_seg, 'semantic_seg'):
+                occ_gts.append(data_samples[i].gt_pts_seg.semantic_seg) # todo occ占用图
 
         data_samples = dict(
             depth=depth,
@@ -126,6 +130,9 @@ class GaussTR(BaseModel):
             data_samples['feats'] = feats
         if sem_segs:
             data_samples['sem_segs'] = sem_segs
+        if occ_gts:
+            data_samples['occ_gts'] = torch.cat(occ_gts)
+
         for k, v in data_samples.items():
             if isinstance(v, torch.Tensor) or not isinstance(v, Iterable):
                 continue

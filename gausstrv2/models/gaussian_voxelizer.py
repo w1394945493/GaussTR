@@ -54,7 +54,7 @@ class GaussianVoxelizer(nn.Module):
                                                           H=H, W=W, D=D, # todo 体素空间 H:200 W:200 D:16
                                                           pc_min=pc_min, # todo [-40 -40 -1]
                                                           grid_size=voxel_size) # todo 体素尺寸: 0.4
-        # self.aggregator.requires_grad_(False)
+
 
     @unbatched_forward
     def forward(self,
@@ -168,6 +168,7 @@ class GaussianVoxelizer(nn.Module):
         # todo 6. 利用Gaussformer的local aggregator进行语义信息聚合
         semantics = self.aggregator(sampled_xyz,means,origi_opa,feats,gs_scales,covs_inv) # todo 输出的semantics (200x200x16 n_classes)
         grid_feats = rearrange(semantics,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
+
         return grid_feats, grid_density
 
 

@@ -124,8 +124,13 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/test
 
-
+export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv3_base.py \
-    -G 0 \
+    -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv3/ours/train \
-    
+
+
+export CUDA_VISIBLE_DEVICES=6
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv4_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv4/ours/train

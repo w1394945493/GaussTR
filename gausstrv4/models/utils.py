@@ -76,12 +76,12 @@ def cam2world(points, cam2img, cam2ego, img_aug_mat=None): # points: (b,v,n,3) i
         points = (torch.inverse(post_rots).unsqueeze(2) # torch.inverse: 计算逆矩阵
                   @ points.unsqueeze(-1)).squeeze(-1) # 图像增强的逆 x 参考点
 
-    cam2img = cam2img[..., :3, :3]
-    with autocast(enabled=False): # todo 关闭AMP(数值稳定)
-        combine = cam2ego[..., :3, :3] @ torch.inverse(cam2img)
+    cam2img = cam2img[..., :3, :3] # 相机 -> 像素 (3 3)
+    with autocast(enabled=False):
+        combine = cam2ego[..., :3, :3] @ torch.inverse(cam2img) # 像素 -> 相机 -> 自车
         points = points.float()
         points = torch.cat(
-            [points[..., :2] * points[..., 2:3], points[..., 2:3]], dim=-1) # (zu,zv,z) z为深度
+            [points[..., :2] * points[..., 2:3], points[..., 2:3]], dim=-1) # 去除相机内参的像素缩放影响
         points = combine.unsqueeze(2) @ points.unsqueeze(-1)
     points = points.squeeze(-1) + cam2ego[..., None, :3, 3]
     return points

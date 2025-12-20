@@ -10,10 +10,38 @@ from mmdet3d.registry import MODELS
 from mmdet.models import inverse_sigmoid
 from mmengine.model import BaseModule
 
+from einops import rearrange,repeat
+from gsplat import rasterization
+
+
+
 from .gsplat_rasterization import rasterize_gaussians
 from .utils import (OCC3D_CATEGORIES, cam2world, flatten_bsn_forward,
                     get_covariance, rotmat_to_quat)
+from ..loss import lovasz_softmax_flat,CE_ssc_loss
 
+
+
+nusc_class_frequencies = np.array([
+    944004,
+    1897170,
+    152386,
+    2391677,
+    16957802,
+    724139,
+    189027,
+    2074468,
+    413451,
+    2384460,
+    5916653,
+    175883646,
+    4275424,
+    51393615,
+    61411620,
+    105975596,
+    116424404,
+    1892500630
+])
 
 @MODELS.register_module()
 class MLP(nn.Module):
@@ -85,11 +113,19 @@ class GaussTRHead(BaseModule):
                  image_shape,
                  patch_size,
                  voxelizer,
+                 num_classes,
                  segment_head=None,
                  depth_limit=51.2,
                  projection=None,
                  text_protos=None,
-                 prompt_denoising=True):
+                 prompt_denoising=True,
+                 balance_cls_weight = True,
+                 manual_class_weight=[
+                    1.01552756, 1.06897009, 1.30013094, 1.07253735, 0.94637502, 1.10087012,
+                    1.26960524, 1.06258364, 1.189019,   1.06217292, 1.00595144, 0.85706115,
+                    1.03923299, 0.90867526, 0.8936431,  0.85486129, 0.8527829,  0.5       ],
+
+                 ):
         super().__init__()
         self.opacity_head = MODELS.build(opacity_head) # todo 透明度预测
         self.feature_head = MODELS.build(feature_head)
@@ -115,6 +151,18 @@ class GaussTRHead(BaseModule):
         self.voxelizer = MODELS.build(voxelizer)
         self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
 
+        if balance_cls_weight:
+            if manual_class_weight is not None:
+                self.class_weights = torch.tensor(manual_class_weight)
+            else:
+                class_freqs = nusc_class_frequencies
+                self.class_weights = torch.from_numpy(1 / np.log(class_freqs[:num_classes] + 0.001))
+            self.class_weights = num_classes * F.normalize(self.class_weights, 1, -1)
+            print(self.__class__, self.class_weights)
+        else:
+            self.class_weights = torch.ones(num_classes)
+
+
     def forward(self,
                 x,
                 ref_pts,
@@ -124,6 +172,7 @@ class GaussTRHead(BaseModule):
                 feats=None,
                 img_aug_mat=None,
                 sem_segs=None, # todo cam2img, cam2ego, feats, img_aug_mat, sem_segs: 标注和真值
+                occ_gts=None,
                 mode='tensor',
                 **kwargs):
 
@@ -149,6 +198,7 @@ class GaussTRHead(BaseModule):
         means3d = cam2world(points, cam2img, cam2ego, img_aug_mat) # 将2D图像坐标转换为3D世界坐标
         # 从高斯查询中，预测高斯属性：透明度、特征向量(代替SH)、缩放因子、旋转四元数
         opacities = self.opacity_head(x).float() # 不透明度、特征和尺度计算
+
         features = self.feature_head(x).float() # (b,v,300,768)
 
         # todo ------------------------------------#
@@ -164,88 +214,180 @@ class GaussTRHead(BaseModule):
         rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])
         rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
+        # todo -------------------------------------#
+        K = torch.tensor([
+            [2.5, 0.0, 100.0],
+            [0.0, 2.5, 100.0],
+            [0.0, 0.0, 1.0],
+        ])
+
+        R = torch.tensor([
+            [1.0, 0.0,  0.0],
+            [0.0, 1.0,  0.0],
+            [0.0, 0.0, -1.0],
+        ])  # [3, 3]
+
+        z_centers = -1.0 + (torch.arange(16) + 0.5) * 0.4  # [16]
+
+        T = torch.eye(4).repeat(16, 1, 1)  # [16, 4, 4]
+        T[:, :3, :3] = R
+        T[:, 2, 3] = z_centers
+
+        T = T.to(means3d.device)
+        K = K.unsqueeze(0).repeat(16,1,1).to(means3d.device)
+        H, W = 200,200
+        near = -1.0
+        far  = 5.4
+
+        means3d = rearrange(means3d,'b v g c -> b (v g) c') # (b (v g) 3)
+        opacities = rearrange(opacities,'b v g c -> b (v g) c') # (b (v g) 1)
+        features = rearrange(features,'b v g c -> b (v g) c') # (b (v g) n_cls)
+        scales = rearrange(scales,'b v g c -> b (v g) c') # (b (v g) 3)
+        rotations = rearrange(rotations,'b v g c -> b (v g) c') # (b (v g) 4)
+        covariances = rearrange(covariances,'b v g i j -> b (v g) i j') # (b (v g) 3 3)
+
+        grid_feats = []
+        for i in range(means3d.size(0)):
+
+            means = means3d[i]
+            rot =rotations[i]
+            scale = scales[i]
+            opa = opacities[i].squeeze(-1)
+            feat = features[i]
+
+            rendered_image = rasterization(
+                means, # (n,3)
+                rot, # (n,4)
+                scale, # (n,3)
+                opa, # (n)
+                feat, # (n,c)
+                T, # (v 4 4)
+                K, # (v 3 3)
+                width=H, # 192
+                height=W, # 112
+                near_plane=near,
+                far_plane=far,
+                render_mode='RGB'
+                )[0]
+
+            rendered_image = rearrange(rendered_image,'D H W C -> H W D C')
+            grid_feats.append(rendered_image)
+        grid_feats = torch.stack(grid_feats, dim=0)
+
+
+        # density, grid_feats = self.voxelizer(
+        #     means3d=means3d.flatten(1, 2),
+        #     opacities=opacities.flatten(1, 2),
+        #     features=features.flatten(1, 2).softmax(-1), # (b n n_class)
+        #     scales = scales.flatten(1, 2), # todo 增加的
+        #     covariances=covariances.flatten(1, 2)) # 将离散的3D高斯分布转换为occ占据预测网格图
+
+
         if mode == 'predict':
-            # todo -----------------------------------#
-            # todo 占据预测 3.3 开放词汇占据预测
-            features = features @ self.text_proto_embeds # 查询特征与文本嵌入结合，帮助模型理解类别信息 (b,v,300,768) @ (768 21)
-            density, grid_feats = self.voxelizer(
-                means3d=means3d.flatten(1, 2),
-                opacities=opacities.flatten(1, 2),
-                features=features.flatten(1, 2).softmax(-1), # (b n n_class)
-                covariances=covariances.flatten(1, 2)) # 将离散的3D高斯分布转换为occ占据预测网格图
-            if self.prompt_denoising:
-                probs = prompt_denoising(grid_feats)
-            else:
-                probs = grid_feats.softmax(-1)
-            # todo -----------------------------------#
-            # todo merge_probs: 合并类别的概率：每个类别可能包含多个子类
-            probs = merge_probs(probs, OCC3D_CATEGORIES) # (b,x,y,z,n_txt_cls) (bs,x,y,z,n_cls)
-            preds = probs.argmax(-1) # (bs,h,w,16)
-            preds += (preds > 10) * 1 + 1  # skip two classes of "others"
-            preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17
+            # # todo -----------------------------------#
+            # # todo 占据预测 3.3 开放词汇占据预测
+            # features = features @ self.text_proto_embeds # 查询特征与文本嵌入结合，帮助模型理解类别信息 (b,v,300,768) @ (768 21)
+            # density, grid_feats = self.voxelizer(
+            #     means3d=means3d.flatten(1, 2),
+            #     opacities=opacities.flatten(1, 2),
+            #     features=features.flatten(1, 2).softmax(-1), # (b n n_class)
+            #     scales = scales.flatten(1, 2), # todo 增加的
+            #     covariances=covariances.flatten(1, 2)) # 将离散的3D高斯分布转换为occ占据预测网格图
+
+            # if self.prompt_denoising:
+            #     probs = prompt_denoising(grid_feats)
+            # else:
+            #     probs = grid_feats.softmax(-1)
+            # # todo -----------------------------------#
+            # # todo merge_probs: 合并类别的概率：每个类别可能包含多个子类
+            # probs = merge_probs(probs, OCC3D_CATEGORIES) # (b,x,y,z,n_txt_cls) (bs,x,y,z,n_cls)
+            # preds = probs.argmax(-1) # (bs,h,w,16)
+            # preds += (preds > 10) * 1 + 1  # skip two classes of "others"
+            # # preds = torch.where(density.squeeze(-1) > 4e-2, preds, 17) # 密度过小，将其类别设置为17
+
+            probs = grid_feats.softmax(-1)
+            preds = probs.argmax(-1)
+
             return preds
 
-        # todo feats: 视觉基础模型提取的特征图
-        tgt_feats = feats.flatten(-2).mT # todo .mT: 对矩阵转置，即交换最后两个维度
-        if hasattr(self, 'projection'):
-            tgt_feats = self.projection(tgt_feats)[0]
-        # 执行PCA(主成分分析)降维操作，对输入张量进行低秩近似，减少特征维度
-        u, s, v = torch.pca_lowrank(
-            tgt_feats.flatten(0, 2).double(), q=self.reduce_dims, niter=4) # (b,v,(h w),c) -> v: (c,q) q：降维后的维度
-        tgt_feats = tgt_feats @ v.to(tgt_feats)
-        features = features @ v.to(features)
-        features = features.float()
-        # todo ---------------------------#
-        # gsplat 光栅化
 
-        rendered = rasterize_gaussians(
-            means3d.flatten(1, 2), # (b,vx300,3)
-            features.flatten(1, 2), # (b,vx300,128)
-            opacities.squeeze(-1).flatten(1, 2),
-            scales.flatten(1, 2),
-            rotations.flatten(1, 2),
-            cam2img,
-            cam2ego,
-            img_aug_mats=img_aug_mat,
-            image_size=(900, 1600),
-            near_plane=0.1,
-            far_plane=100,
-            render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
-            channel_chunk=32).flatten(0, 1) # ((b v) c h w)
+        # # todo feats: 视觉基础模型提取的特征图
+        # tgt_feats = feats.flatten(-2).mT # todo .mT: 对矩阵转置，即交换最后两个维度
+        # if hasattr(self, 'projection'):
+        #     tgt_feats = self.projection(tgt_feats)[0]
+        # # 执行PCA(主成分分析)降维操作，对输入张量进行低秩近似，减少特征维度
+        # u, s, v = torch.pca_lowrank(
+        #     tgt_feats.flatten(0, 2).double(), q=self.reduce_dims, niter=4) # (b,v,(h w),c) -> v: (c,q) q：降维后的维度
+        # tgt_feats = tgt_feats @ v.to(tgt_feats)
+        # features = features @ v.to(features)
+        # features = features.float()
+        # # todo ---------------------------#
+        # # gsplat 光栅化
+
+        # rendered = rasterize_gaussians(
+        #     means3d.flatten(1, 2), # (b,vx300,3)
+        #     features.flatten(1, 2), # (b,vx300,128)
+        #     opacities.squeeze(-1).flatten(1, 2),
+        #     scales.flatten(1, 2),
+        #     rotations.flatten(1, 2),
+        #     cam2img,
+        #     cam2ego,
+        #     img_aug_mats=img_aug_mat,
+        #     image_size=(900, 1600),
+        #     near_plane=0.1,
+        #     far_plane=100,
+        #     render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
+        #     channel_chunk=32).flatten(0, 1) # ((b v) c h w)
 
 
-        rendered_depth = rendered[:, -1] # todo ((b v) h w) 深度图
-        rendered = rendered[:, :-1] #  ((b v) c h w) -> ((b v) c-1 h w)
+        # rendered_depth = rendered[:, -1] # todo ((b v) h w) 深度图
+        # rendered = rendered[:, :-1] #  ((b v) c h w) -> ((b v) c-1 h w)
+
+
         # todo ------------------------------#
         # todo 损失计算 3.2 VFM对齐的自监督学习
         losses = {}
-        depth = torch.where(depth < self.depth_limit, depth,
-                            1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
-        # todo 深度预测监督：结合尺度不变对数和L1损失
-        losses['loss_depth'] = self.depth_loss(rendered_depth, depth) # todo 深度图计算损失
-        losses['mae_depth'] = self.depth_loss(
-            rendered_depth, depth, criterion='l1')
 
-        # Interpolating to high resolution for supervision can improve mIoU by 0.7
-        # compared to average pooling to low resolution.
-        bsn, c, h, w = rendered.shape
-        tgt_feats = tgt_feats.mT.reshape(bsn, c, h // self.patch_size,
-                                         w // self.patch_size)
-        tgt_feats = F.interpolate(
-            tgt_feats, scale_factor=self.patch_size, mode='bilinear')
-        rendered = rendered.flatten(2).mT
-        tgt_feats = tgt_feats.flatten(2).mT.flatten(0, 1)
-        # todo 通过高斯点积进行渲染监督：
-        losses['loss_cosine'] = F.cosine_embedding_loss(
-            rendered.flatten(0, 1), tgt_feats, torch.ones_like(
-                tgt_feats[:, 0])) * 5
+        # depth = torch.where(depth < self.depth_limit, depth,
+        #                     1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
+        # # todo 深度预测监督：结合尺度不变对数和L1损失
+        # losses['loss_depth'] = self.depth_loss(rendered_depth, depth) # todo 深度图计算损失
+        # losses['mae_depth'] = self.depth_loss(
+        #     rendered_depth, depth, criterion='l1')
 
-        # --------------------#
-        if self.segment_head: # (optional) 分割损失
-            losses['loss_ce'] = F.cross_entropy(
-                self.segment_head(rendered).mT,
-                sem_segs.flatten(0, 1).flatten(1).long(),
-                ignore_index=0)
+        # # Interpolating to high resolution for supervision can improve mIoU by 0.7
+        # # compared to average pooling to low resolution.
+        # bsn, c, h, w = rendered.shape
+        # tgt_feats = tgt_feats.mT.reshape(bsn, c, h // self.patch_size,
+        #                                  w // self.patch_size)
+        # tgt_feats = F.interpolate(
+        #     tgt_feats, scale_factor=self.patch_size, mode='bilinear')
+        # rendered = rendered.flatten(2).mT
+        # tgt_feats = tgt_feats.flatten(2).mT.flatten(0, 1)
+        # # todo 通过高斯点积进行渲染监督：
+        # losses['loss_cosine'] = F.cosine_embedding_loss(
+        #     rendered.flatten(0, 1), tgt_feats, torch.ones_like(
+        #         tgt_feats[:, 0])) * 5
+
+        # # --------------------#
+        # if self.segment_head: # (optional) 分割损失
+        #     losses['loss_ce'] = F.cross_entropy(
+        #         self.segment_head(rendered).mT,
+        #         sem_segs.flatten(0, 1).flatten(1).long(),
+        #         ignore_index=0)
+
+        probs = rearrange(grid_feats,"b H W D C -> b C (H W D)")
+        target = rearrange(occ_gts,"b H W D ->b (H W D)").long()
+        losses['loss_ce'] = 10.0 * CE_ssc_loss(probs, target, self.class_weights.type_as(probs), ignore_index=255)
+
+        inputs = torch.softmax(probs, dim=1).transpose(1,2).flatten(0,1)
+        target = occ_gts.flatten()
+        ignore = 17
+        valid = (target != ignore)
+        probas = inputs[valid]
+        labels = target[valid]
+        losses['loss_lovasz'] = 1.0 * lovasz_softmax_flat(probas,labels)
+
         return losses
 
     def photometric_error(self, src_imgs, rec_imgs):

@@ -18,6 +18,8 @@ from ..geometry import get_world_rays
 from .encoder.common.gaussians import build_covariance
 from ..loss import lovasz_softmax_flat,CE_ssc_loss
 from .decoder import rasterize_gaussians,render_cuda
+from .utils import cam2world,rotmat_to_quat,get_covariance
+
 
 nusc_class_frequencies = np.array([
     944004,
@@ -92,8 +94,11 @@ class GaussTRHead(BaseModule):
                  semantic_head,
                  rgb_head,
                  voxelizer,
+                 loss_lpips,
                  near,
                  far,
+                 ori_image_shape,
+                 depth_limit=51.2,
                  use_sh = True,
                  background_color=[0.0, 0.0, 0.0],
                  num_classes = 18,
@@ -121,6 +126,8 @@ class GaussTRHead(BaseModule):
 
         self.near = near
         self.far = far
+        self.ori_image_shape = ori_image_shape
+        self.depth_limit = depth_limit
 
         self.use_sh = use_sh
 
@@ -135,11 +142,15 @@ class GaussTRHead(BaseModule):
         else:
             self.class_weights = torch.ones(num_classes)
 
+        self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
+
+
     def forward(self,
                 x,
                 ref_pts,
                 image_shape,
                 depth,
+                rgb_gts,
                 cam2img,
                 cam2ego,
                 img_aug_mat=None,
@@ -147,39 +158,59 @@ class GaussTRHead(BaseModule):
                 mode='tensor',
                 **kwargs):
 
+
         bs, n = cam2img.shape[:2]
-        device = cam2img.device
+
         x = x.reshape(bs, n, *x.shape[1:]) # (b,v,300,256)
         deltas = self.regress_head(x)
 
         ref_pts = (deltas[..., :2] + inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid() # (b v 300 2)
 
+        # todo ---------------------------------------#
+        # todo GaussTR中的
+        depth = depth.clamp(max=self.depth_limit)
         sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None],ref_pts.unsqueeze(2) * 2 - 1) # (b v 1 1 300)
         sample_depth = sample_depth[:, :, 0, 0, :, None] # (b v 1 1 n) -> (b v n 1)
-
-        coordinates = rearrange(ref_pts,'b v g xy -> b v g () () xy') # (b v g 1 1 2)
-
-        intrinsics = cam2img[...,:3,:3] # (b v 3 3)
-        extrinsics = cam2ego # (b v 4 4)
-
-        extrinsics_ = rearrange(extrinsics, "b v i j -> b v () () () i j")
-        intrinsics_ = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
-
-        origins, directions = get_world_rays(coordinates, extrinsics_, intrinsics_) # (b v g 1 1 3) (b v g 1 1 3)
-        origins = rearrange(origins,"b v g srf spp c -> b v g (srf spp c)") # (b v g 3)
-        directions = rearrange(directions,"b v g srf spp c -> b v g (srf spp c)") # (b v g 3)
-
-        means = origins + directions * sample_depth # (b v g 3)
+        points = torch.cat([
+            ref_pts * torch.tensor(image_shape[::-1]).to(x),
+            sample_depth * (1 + deltas[..., 2:3])], -1) # gausstr预测的偏移量：x,y: 像素坐标系下偏移 z: 真实的深度(m)下的偏移
+        means = cam2world(points, cam2img, cam2ego) # (b v g 3)
+        scales = self.scale_head(x) * self.scale_transform(sample_depth, cam2img[..., 0, 0]).clamp(1e-6) # (b v g 3)
+        covariances = flatten_bsn_forward(get_covariance, scales, cam2ego[..., None, :3, :3]) # (b v g 3 3)
+        rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3]) # (b v g 4)
+        rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1)
         opacities = self.opacity_head(x) # (b v g 1)
-        scales = self.scale_head(x) # (b v g 3)
-        rotations = self.rot_head(x) # (b v g 4) 四元数格式
         semantics =self.semantic_head(x) # (b v g n_cls) n_cls = 17
         rgbs = self.rgb_head(x) # (b v g 3)
 
 
-        covariances = build_covariance(scales, rotations) # (b v g 3 3)
-        c2w_rotations = rearrange(cam2ego[...,:3,:3],'b v i j -> b v () i j')
-        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # (b v g 3 3)
+        # todo ---------------------------------------#
+        # todo 参考了Omni-Scene中的解码
+        # sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None],ref_pts.unsqueeze(2) * 2 - 1) # (b v 1 1 300)
+        # sample_depth = sample_depth[:, :, 0, 0, :, None] # (b v 1 1 n) -> (b v n 1)
+
+        # coordinates = rearrange(ref_pts,'b v g xy -> b v g () () xy') # (b v g 1 1 2)
+        # intrinsics = cam2img[...,:3,:3] # (b v 3 3)
+        # extrinsics = cam2ego # (b v 4 4)
+
+
+        # extrinsics_ = rearrange(extrinsics, "b v i j -> b v () () () i j")
+        # intrinsics_ = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
+
+        # origins, directions = get_world_rays(coordinates, extrinsics_, intrinsics_) # (b v g 1 1 3) (b v g 1 1 3)
+        # origins = rearrange(origins,"b v g srf spp c -> b v g (srf spp c)") # (b v g 3)
+        # directions = rearrange(directions,"b v g srf spp c -> b v g (srf spp c)") # (b v g 3)
+        # means = origins + directions * sample_depth # (b v g 3)
+        # opacities = self.opacity_head(x) # (b v g 1)
+        # scales = self.scale_head(x) # (b v g 3)
+        # rotations = self.rot_head(x) # (b v g 4) 四元数格式
+        # semantics =self.semantic_head(x) # (b v g n_cls) n_cls = 17
+        # rgbs = self.rgb_head(x) # (b v g 3)
+        # covariances = build_covariance(scales, rotations) # (b v g 3 3)
+        # c2w_rotations = rearrange(cam2ego[...,:3,:3],'b v i j -> b v () i j')
+        # covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # (b v g 3 3)
+
+
 
         means3d = rearrange(means,'b v g c -> b (v g) c') # (b (v g) 3)
         opacities = rearrange(opacities,'b v g c -> b (v g) c') # (b (v g) 1)
@@ -189,8 +220,7 @@ class GaussTRHead(BaseModule):
         rotations = rearrange(rotations,'b v g c -> b (v g) c') # (b (v g) 4)
         covariances = rearrange(covariances,'b v g i j -> b (v g) i j') # (b (v g) 3 3)
 
-        # h, w = image_shape
-
+        h,w = image_shape
         # near = self.near
         # near = torch.full((bs,n),near).to(device)
         # far = self.far
@@ -217,10 +247,16 @@ class GaussTRHead(BaseModule):
         # colors = rearrange(colors,'(bs n) c h w -> bs n c h w',bs=bs) # (b v c h w)
         # rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs).squeeze(2) # (b v h w)
 
+        # intrinsics = cam2img.detach().clone()
+        # extrinsics = cam2ego.detach().clone()
+        # ori_h, ori_w = self.ori_image_shape
+        # intrinsics[..., 0] /= ori_w
+        # intrinsics[..., 1] /= ori_h
+
         # colors, rendered_depth = rasterize_gaussians(
-        #     extrinsics=cam2ego,
-        #     intrinsics=cam2img[...,:3,:3],
-        #     image_shape = (h,w),
+        #     extrinsics=extrinsics,
+        #     intrinsics=intrinsics[...,:3,:3],
+        #     image_shape = (h, w),
         #     means3d=means3d,
         #     rotations=rotations,
         #     scales=scales,
@@ -236,7 +272,7 @@ class GaussTRHead(BaseModule):
         #     render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
         #     channel_chunk=32)
 
-        # occ占用预测
+        # todo occ占用预测
         grid_density, grid_feats = self.voxelizer(
             means3d,
             opacities,
@@ -249,21 +285,49 @@ class GaussTRHead(BaseModule):
             occ_preds = grid_feats.argmax(-1) # (b 200 200 16 18) -> (b 200 200 16)
             outputs = [{
                 'occ_pred': occ_preds,
+                # 'img_pred': colors,
             }]
             return outputs
 
         losses = {}
+        # todo 深度估计损失
+        # rendered_depth = rendered_depth.flatten(0,1)
+        # depth = torch.where(depth < self.depth_limit, depth, 1e-3).flatten(0, 1)
+        # losses['loss_depth'] = self.depth_loss(rendered_depth, depth)
+        # losses['mae_depth'] = self.depth_loss(rendered_depth, depth, criterion='l1')
+        # # todo 视图渲染损失
+        # rgb = colors.flatten(0,1)
+        # rgb_gt = rgb_gts.flatten(0,1) / 255.
+        # mse_loss = (rgb - rgb_gt) ** 2
+        # losses['loss_l2'] = mse_loss.mean()
+        # # losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
+
+
         probs = rearrange(grid_feats,"b H W D C -> b C (H W D)")
         target = rearrange(occ_gts,"b H W D ->b (H W D)").long()
-        losses['loss_ce'] = 1.0 * CE_ssc_loss(probs, target, self.class_weights.type_as(probs), ignore_index=255)
+        losses['loss_ce'] = 10.0 * CE_ssc_loss(probs, target, self.class_weights.type_as(probs), ignore_index=255)
 
-        inputs = torch.softmax(probs, dim=1).transpose(1,2).flatten(0,1)
-        target = occ_gts.flatten()
-        ignore = 17
-        valid = (target != ignore)
-        probas = inputs[valid]
-        labels = target[valid]
-        losses['loss_lovasz'] = 10.0 * lovasz_softmax_flat(probas,labels)
+        # inputs = torch.softmax(probs, dim=1).transpose(1,2).flatten(0,1)
+        # target = occ_gts.flatten()
+        # ignore = 17
+        # valid = (target != ignore)
+        # probas = inputs[valid]
+        # labels = target[valid]
+        # losses['loss_lovasz'] = 1.0 * lovasz_softmax_flat(probas,labels)
 
         return losses
 
+    def depth_loss(self, pred, target, criterion='silog_l1'):
+        loss = 0
+        if 'silog' in criterion: # todo 这个没有用到
+            loss += self.silog_loss(pred, target)
+        if 'l1' in criterion: # todo 只是用了l1 loss
+            target = target.flatten()
+            pred = pred.flatten()[target != 0]
+            l1_loss = F.l1_loss(pred, target[target != 0])
+            if loss != 0:
+                l1_loss *= 0.2
+            loss += l1_loss
+        return loss
+    def scale_transform(self, depth, focal, multiplier=7.5):
+        return depth * multiplier / focal.reshape(*depth.shape[:2], 1, 1)

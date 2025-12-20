@@ -9,7 +9,7 @@ work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/baseline/te
 train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
-custom_imports = dict(imports=['gausstr'])
+custom_imports = dict(imports=['gausstrv4'])
 
 input_size = (504, 896)
 resize_lim=[0.56, 0.56] #!
@@ -20,6 +20,7 @@ embed_dims = 256
 feat_dims = 768
 reduce_dims = 128
 patch_size = 14
+num_classes = 18
 
 model = dict(
     type='GaussTR',
@@ -51,8 +52,11 @@ model = dict(
         type='GaussTRHead',
         opacity_head=dict(
             type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'),
-        feature_head=dict(
-            type='MLP', input_dim=embed_dims, output_dim=feat_dims),
+        # feature_head=dict(
+        #     type='MLP', input_dim=embed_dims, output_dim=feat_dims),
+        # feature_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes-1),
+        feature_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes),
+
         scale_head=dict(
             type='MLP',
             input_dim=embed_dims,
@@ -65,10 +69,12 @@ model = dict(
         reduce_dims=reduce_dims,
         image_shape=input_size, # todo 网络输入尺寸
         patch_size=patch_size,
+        num_classes = num_classes,
         voxelizer=dict(
             type='GaussianVoxelizer',
             vol_range=[-40, -40, -1, 40, 40, 5.4],
             voxel_size=0.4,
+            num_classes = num_classes,
             filter_gaussians=True,
             opacity_thresh=0.6,
             covariance_thresh=1.5e-2)))
@@ -92,6 +98,7 @@ train_pipeline = [
         to_float32=True,
         color_type='color',
         num_views=6),
+    dict(type='LoadOccFromFile'),
     dict(
         type='ImageAug3D', # todo 对图像数据做仿射增强，同时处理相机参数矩阵，保持一致 (自定义)
         final_dim=input_size,
@@ -106,7 +113,8 @@ train_pipeline = [
         apply_aug=True),
     dict(
         type='Pack3DDetInputs', # todo 把预处理的原始数据转成标注的数据集输入格式
-        keys=['img'], # todo 返回 'inputs': 网络输入
+        # keys=['img'], # todo 返回 'inputs': 网络输入
+        keys=['img', 'gt_semantic_seg'],
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat', 'sample_idx',
             'num_views', 'img_path', 'depth', 'feats',
@@ -205,7 +213,7 @@ param_scheduler = [
 
 default_hooks = dict(
     logger=dict(type='LoggerHook', interval=20),
-    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1) # todo 每隔多少个epoch保存一次model
+    checkpoint=dict(type='CheckpointHook', interval=20,max_keep_ckpts=1) # todo 每隔多少个epoch保存一次model
 )
 
 # custom_hooks = [

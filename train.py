@@ -4,7 +4,7 @@ from setproctitle import setproctitle
 setproctitle("wys")
 
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 # os.environ['RANK'] = '0'
 import argparse
 

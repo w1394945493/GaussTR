@@ -18,8 +18,7 @@ from torch import nn, Tensor
 logger = logging.getLogger("dinov2")
 
 # todo 取消使用XFORMERS加速
-# XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
-XFORMERS_ENABLED = None
+XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
 try:
     if XFORMERS_ENABLED:
         from xformers.ops import memory_efficient_attention, unbind

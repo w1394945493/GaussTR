@@ -224,7 +224,7 @@
             "justMyCode": false,
         },
         {
-            "name": "run test ausstrv4",
+            "name": "run test gausstrv4",
             "type": "debugpy",
             "request": "launch",
             "program": "/home/lianghao/wangyushen/Projects/GaussTR/test.py",
@@ -246,6 +246,21 @@
             "program": "/home/lianghao/wangyushen/Projects/GaussTR/train.py",
             "args": [
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
+            "name": "run test gaussianformer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/test.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py",
+                "--checkpoint",
+                "/home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth",
                 "--work-dir",
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
             ],

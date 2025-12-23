@@ -202,7 +202,7 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-     # todo
+    logger=dict(type='LoggerHook', interval=20),
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 

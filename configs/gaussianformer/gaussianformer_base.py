@@ -159,9 +159,16 @@ test_dataloader = val_dataloader
 # todo 指标评估器
 val_evaluator = dict(
     type='OccMetric',
-    num_classes=18, # todo 类别： 17(Occ3D) + 1(1：天空类)
-    use_lidar_mask=False,
-    use_image_mask=True)
+    class_indices = list(range(1, 17)),
+    empty_label = 17,
+    label_str = ['barrier', 'bicycle', 'bus', 'car', 'construction_vehicle',
+         'motorcycle', 'pedestrian', 'traffic_cone', 'trailer', 'truck',
+         'driveable_surface', 'other_flat', 'sidewalk', 'terrain', 'manmade',
+         'vegetation'],
+    dataset_empty_label = 17,
+    filter_minmax = False,
+    )
+
 test_evaluator = val_evaluator
 
 
@@ -184,7 +191,7 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-     # todo
+    logger=dict(type='LoggerHook', interval=20),
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 

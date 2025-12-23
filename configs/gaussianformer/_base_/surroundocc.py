@@ -1,4 +1,5 @@
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
 occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录
 
 train_ann_file='nuscenes_mini_infos_train.pkl'
@@ -30,20 +31,6 @@ test_pipeline = [
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
 ]
 
-
-
-data_prefix = dict(
-    CAM_FRONT='samples/CAM_FRONT',
-    CAM_FRONT_LEFT='samples/CAM_FRONT_LEFT',
-    CAM_FRONT_RIGHT='samples/CAM_FRONT_RIGHT',
-    CAM_BACK='samples/CAM_BACK',
-    CAM_BACK_RIGHT='samples/CAM_BACK_RIGHT',
-    CAM_BACK_LEFT='samples/CAM_BACK_LEFT',
-    LIDAR_TOP = 'samples/LIDAR_TOP', # todo
-    )
-input_modality = dict(use_camera=True, use_lidar=False)
-
-
 input_shape = (1600, 864)
 data_aug_conf = {
     "resize_lim": (1.0, 1.0),
@@ -52,16 +39,29 @@ data_aug_conf = {
     "rot_lim": (0.0, 0.0),
     "H": 900,
     "W": 1600,
-    "rand_flip": True,
+    "rand_flip": True, # todo 训练时做数据增强
 }
 
-shared_dataset_cfg = dict(
+train_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
-    modality=input_modality,
-    data_prefix=data_prefix,
-    filter_empty_gt=False)
+    # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
+    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
+    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    data_aug_conf=data_aug_conf,
+    pipeline=train_pipeline,
+    phase='train'
+)
 
+val_dataset_config = dict(
+    type=dataset_type,
+    data_root=data_root,
+    # imageset=anno_root + "nuscenes_infos_val_sweeps_occ.pkl",
+    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    data_aug_conf=data_aug_conf,
+    pipeline=test_pipeline,
+    phase='val'
+)
 
 train_dataloader = dict(
     batch_size=1,
@@ -69,11 +69,7 @@ train_dataloader = dict(
     persistent_workers=False,
     pin_memory=True,
     collate_fn=dict(type='custom_collate_fn_temporal'),
-    dataset=dict(
-        ann_file=train_ann_file,
-        data_aug_conf=data_aug_conf,
-        pipeline=train_pipeline,
-        **shared_dataset_cfg))
+    dataset=train_dataset_config)
 
 val_dataloader = dict(
     batch_size=1,
@@ -83,10 +79,6 @@ val_dataloader = dict(
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     collate_fn=dict(type='custom_collate_fn_temporal'),
-    dataset=dict(
-        ann_file=val_ann_file,
-        data_aug_conf=data_aug_conf,
-        pipeline=test_pipeline,
-        **shared_dataset_cfg))
+    dataset=val_dataset_config)
 
 test_dataloader = val_dataloader

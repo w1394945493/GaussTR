@@ -239,5 +239,26 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
+        {
+            "name": "run train gaussianformer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/train.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
+            "name": "debug nuscenes surround occ",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/gaussianformer/datasets/nuscenes_surroundocc.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

@@ -1,8 +1,5 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
-import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/c3g/ours/outputs/vis24' # todo
-
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -34,7 +31,7 @@ model = dict(
         type='Det3DDataPreprocessor', # todo 图像数据预处理，打包为patch
         mean=mean,
         std=std),
-
+    ori_image_shape = ori_image_shape,
 )
 
 # Data
@@ -56,6 +53,7 @@ train_pipeline = [
         to_float32=True,
         color_type='color',
         num_views=6),
+    dict(type='LoadOccFromFile'),
     dict(
         type='ImageAug3D', # todo 对图像数据进行缩放
         final_dim=input_size,
@@ -79,7 +77,8 @@ train_pipeline = [
         apply_aug=True),
     dict(
         type='Pack3DDetInputs', # todo 把预处理的原始数据转成标注的数据集输入格式
-        keys=['img'], # todo
+        # keys=['img'], # todo
+        keys=['img', 'gt_semantic_seg'], # todo img：2D输入图 'gt_semantic_seg': 3D occ图
         meta_keys=[
             'cam2img', 'cam2ego', 'ego2global', 'img_aug_mat',
             'sample_idx',

@@ -207,7 +207,7 @@ class ImageAug3D(BaseTransform):
         self.bot_pct_lim = bot_pct_lim
         self.rand_flip = rand_flip
         self.rot_lim = rot_lim
-        # self.is_train = is_train
+        self.is_train = is_train
 
     def sample_augmentation(self, results):
         H, W = results['ori_shape']
@@ -217,39 +217,31 @@ class ImageAug3D(BaseTransform):
         resize_dims = (fW, fH)
         newW, newH = resize_dims
 
-        # ! 只做缩放
-        crop_h = int((1 - np.mean(self.bot_pct_lim)) * newH) - fH
-        crop_w = int(max(0, newW - fW) / 2)
-        crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
-        flip = False
-        rotate = 0
+        if self.is_train:
+            # resize = np.random.uniform(*self.resize_lim) # 在给定范围内随机生成浮动数值
+            # resize_dims = (int(W * resize), int(H * resize))
+            # newW, newH = resize_dims
 
 
-        # if self.is_train:
-        #     # resize = np.random.uniform(*self.resize_lim) # 在给定范围内随机生成浮动数值
-        #     # resize_dims = (int(W * resize), int(H * resize))
-        #     # newW, newH = resize_dims
+            crop_h = int(
+                (1 - np.random.uniform(*self.bot_pct_lim)) * newH) - fH
+            crop_w = int(np.random.uniform(0, max(0, newW - fW)))
+            crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
+            flip = False
+            if self.rand_flip and np.random.choice([0, 1]):
+                flip = True
+            rotate = np.random.uniform(*self.rot_lim)
+        else:
+            # resize = np.mean(self.resize_lim)
+            # resize_dims = (int(W * resize), int(H * resize))
+            # newW, newH = resize_dims
 
 
-        #     crop_h = int(
-        #         (1 - np.random.uniform(*self.bot_pct_lim)) * newH) - fH
-        #     crop_w = int(np.random.uniform(0, max(0, newW - fW)))
-        #     crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
-        #     flip = False
-        #     if self.rand_flip and np.random.choice([0, 1]):
-        #         flip = True
-        #     rotate = np.random.uniform(*self.rot_lim)
-        # else:
-        #     # resize = np.mean(self.resize_lim)
-        #     # resize_dims = (int(W * resize), int(H * resize))
-        #     # newW, newH = resize_dims
-
-
-        #     crop_h = int((1 - np.mean(self.bot_pct_lim)) * newH) - fH
-        #     crop_w = int(max(0, newW - fW) / 2)
-        #     crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
-        #     flip = False
-        #     rotate = 0
+            crop_h = int((1 - np.mean(self.bot_pct_lim)) * newH) - fH
+            crop_w = int(max(0, newW - fW) / 2)
+            crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
+            flip = False
+            rotate = 0
         return resize, resize_dims, crop, flip, rotate
 
     def img_transform(self, img, rotation, translation, resize, resize_dims,

@@ -53,6 +53,7 @@ model = dict(
             type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'),
         feature_head=dict(
             type='MLP', input_dim=embed_dims, output_dim=feat_dims),
+
         scale_head=dict(
             type='MLP',
             input_dim=embed_dims,

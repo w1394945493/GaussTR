@@ -4,14 +4,15 @@ import os
 work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/baseline/test' # todo
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-# train_ann_file='nuscenes_mini_infos_train.pkl'
 
+# train_ann_file='nuscenes_mini_infos_train.pkl'
 train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
 custom_imports = dict(imports=['gausstrv4'])
 
 input_size = (504, 896)
+# input_size = (448, 800)
 resize_lim=[0.56, 0.56] #!
 # input_size = (252,448)
 # resize_lim=[0.28, 0.28] #!
@@ -22,13 +23,22 @@ reduce_dims = 128
 patch_size = 14
 num_classes = 18
 
+num_queries = 1200
+# num_queries = 300
+
+opacity_thresh = 0.6
+
+# _dim_ = 128 # todo 128
+_dim_ = 256
+
 model = dict(
     type='GaussTR',
-    num_queries=300,
+    num_queries=900,
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
         mean=[123.675, 116.28, 103.53],
         std=[58.395, 57.12, 57.375]),
+
     backbone=dict(
         type='TorchHubModel',
         repo_or_dir='facebookresearch/dinov2', # todo
@@ -38,6 +48,31 @@ model = dict(
         in_channels=feat_dims,
         out_channels=embed_dims,
         norm_cfg=dict(type='LN2d')), #? LN2d
+
+    # backbone=dict(
+    #     type='mmdet.ResNet',
+    #     depth=50,
+    #     in_channels=3,
+    #     num_stages=4,
+    #     out_indices=(0, 1, 2, 3),
+    #     frozen_stages=-1,
+    #     norm_cfg=dict(type='BN', requires_grad=False),
+    #     norm_eval=True,
+    #     style='pytorch',
+    #     init_cfg=dict(
+    #         type='Pretrained',
+    #         # checkpoint='pretrained/dino_resnet50_pretrain.pth',
+    #         checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
+    #         prefix=None)),
+
+    # neck=dict(
+    #     type='mmdet.FPN',
+    #     in_channels=[256, 512, 1024, 2048],
+    #     out_channels=_dim_,
+    #     start_level=0,
+    #     add_extra_convs='on_input',
+    #     num_outs=4),
+
     decoder=dict(
         type='GaussTRDecoder',
         num_layers=3,
@@ -48,14 +83,18 @@ model = dict(
             cross_attn_cfg=dict(embed_dims=embed_dims, num_levels=4),
             ffn_cfg=dict(embed_dims=embed_dims, feedforward_channels=2048)),
         post_norm_cfg=None),
+
     gauss_head=dict(
         type='GaussTRHead',
         opacity_head=dict(
             type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'),
         # feature_head=dict(
         #     type='MLP', input_dim=embed_dims, output_dim=feat_dims),
-        # feature_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes-1),
-        feature_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes),
+        feature_head=dict(type='MLP',input_dim=embed_dims,
+                          output_dim=num_classes-1,
+                        #   output_dim=num_classes,
+                          ),
+
 
         scale_head=dict(
             type='MLP',
@@ -76,8 +115,11 @@ model = dict(
             voxel_size=0.4,
             num_classes = num_classes,
             filter_gaussians=True,
-            opacity_thresh=0.6,
-            covariance_thresh=1.5e-2)))
+            opacity_thresh=opacity_thresh,
+            covariance_thresh=1.5e-2))
+
+
+            )
 
 # Data
 dataset_type = 'NuScenesOccDataset' # todo NuScenesOCCDataset
@@ -213,7 +255,7 @@ param_scheduler = [
 
 default_hooks = dict(
     logger=dict(type='LoggerHook', interval=20),
-    checkpoint=dict(type='CheckpointHook', interval=20,max_keep_ckpts=1) # todo 每隔多少个epoch保存一次model
+    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1) # todo 每隔多少个epoch保存一次model
 )
 
 # custom_hooks = [

@@ -149,7 +149,7 @@ class GaussTRHead(BaseModule):
                                  torch.load(text_protos, map_location='cpu')) # todo CLIP类别嵌入 (h_dim,n_class)
 
         self.voxelizer = MODELS.build(voxelizer)
-        self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
+        # self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
 
         if balance_cls_weight:
             if manual_class_weight is not None:
@@ -161,7 +161,7 @@ class GaussTRHead(BaseModule):
             print(self.__class__, self.class_weights)
         else:
             self.class_weights = torch.ones(num_classes)
-
+        self.num_classes = num_classes
 
     def forward(self,
                 x,
@@ -199,7 +199,7 @@ class GaussTRHead(BaseModule):
         # 从高斯查询中，预测高斯属性：透明度、特征向量(代替SH)、缩放因子、旋转四元数
         opacities = self.opacity_head(x).float() # 不透明度、特征和尺度计算
 
-        features = self.feature_head(x).float() # (b,v,300,768)
+        features = self.feature_head(x).float() # (b,v,300,dim)
 
         # todo ------------------------------------#
         # todo： 协方差计算：
@@ -214,30 +214,6 @@ class GaussTRHead(BaseModule):
         rotations = flatten_bsn_forward(rotmat_to_quat, cam2ego[..., :3, :3])
         rotations = rotations.unsqueeze(2).expand(-1, -1, x.size(2), -1) # 协方差和旋转矩阵
 
-        # todo -------------------------------------#
-        K = torch.tensor([
-            [2.5, 0.0, 100.0],
-            [0.0, 2.5, 100.0],
-            [0.0, 0.0, 1.0],
-        ])
-
-        R = torch.tensor([
-            [1.0, 0.0,  0.0],
-            [0.0, 1.0,  0.0],
-            [0.0, 0.0, -1.0],
-        ])  # [3, 3]
-
-        z_centers = -1.0 + (torch.arange(16) + 0.5) * 0.4  # [16]
-
-        T = torch.eye(4).repeat(16, 1, 1)  # [16, 4, 4]
-        T[:, :3, :3] = R
-        T[:, 2, 3] = z_centers
-
-        T = T.to(means3d.device)
-        K = K.unsqueeze(0).repeat(16,1,1).to(means3d.device)
-        H, W = 200,200
-        near = -1.0
-        far  = 5.4
 
         means3d = rearrange(means3d,'b v g c -> b (v g) c') # (b (v g) 3)
         opacities = rearrange(opacities,'b v g c -> b (v g) c') # (b (v g) 1)
@@ -246,33 +222,59 @@ class GaussTRHead(BaseModule):
         rotations = rearrange(rotations,'b v g c -> b (v g) c') # (b (v g) 4)
         covariances = rearrange(covariances,'b v g i j -> b (v g) i j') # (b (v g) 3 3)
 
-        grid_feats = []
-        for i in range(means3d.size(0)):
+        # todo -------------------------------------#
+        # K = torch.tensor([
+        #     [2.5, 0.0, 100.0],
+        #     [0.0, 2.5, 100.0],
+        #     [0.0, 0.0, 1.0],
+        # ])
 
-            means = means3d[i]
-            rot =rotations[i]
-            scale = scales[i]
-            opa = opacities[i].squeeze(-1)
-            feat = features[i]
+        # R = torch.tensor([
+        #     [1.0, 0.0,  0.0],
+        #     [0.0, 1.0,  0.0],
+        #     [0.0, 0.0, -1.0],
+        # ])  # [3, 3]
 
-            rendered_image = rasterization(
-                means, # (n,3)
-                rot, # (n,4)
-                scale, # (n,3)
-                opa, # (n)
-                feat, # (n,c)
-                T, # (v 4 4)
-                K, # (v 3 3)
-                width=H, # 192
-                height=W, # 112
-                near_plane=near,
-                far_plane=far,
-                render_mode='RGB'
-                )[0]
+        # z_centers = -1.0 + (torch.arange(16) + 0.5) * 0.4  # [16]
 
-            rendered_image = rearrange(rendered_image,'D H W C -> H W D C')
-            grid_feats.append(rendered_image)
-        grid_feats = torch.stack(grid_feats, dim=0)
+        # T = torch.eye(4).repeat(16, 1, 1)  # [16, 4, 4]
+        # T[:, :3, :3] = R
+        # T[:, 2, 3] = z_centers
+
+        # T = T.to(means3d.device)
+        # K = K.unsqueeze(0).repeat(16,1,1).to(means3d.device)
+        # H, W = 200,200
+        # near = -1.0
+        # far  = 5.4
+
+        # # 通过rasterization操作得到occ占用
+        # grid_feats = []
+        # for i in range(means3d.size(0)):
+
+        #     means = means3d[i]
+        #     rot =rotations[i]
+        #     scale = scales[i]
+        #     opa = opacities[i].squeeze(-1)
+        #     feat = features[i]
+
+        #     rendered_image = rasterization(
+        #         means, # (n,3)
+        #         rot, # (n,4)
+        #         scale, # (n,3)
+        #         opa, # (n)
+        #         feat, # (n,c)
+        #         T, # (v 4 4)
+        #         K, # (v 3 3)
+        #         width=H, # 192
+        #         height=W, # 112
+        #         near_plane=near,
+        #         far_plane=far,
+        #         render_mode='RGB'
+        #         )[0]
+
+        #     rendered_image = rearrange(rendered_image,'D H W C -> H W D C')
+        #     grid_feats.append(rendered_image)
+        # grid_feats = torch.stack(grid_feats, dim=0)
 
 
         # density, grid_feats = self.voxelizer(
@@ -282,6 +284,14 @@ class GaussTRHead(BaseModule):
         #     scales = scales.flatten(1, 2), # todo 增加的
         #     covariances=covariances.flatten(1, 2)) # 将离散的3D高斯分布转换为occ占据预测网格图
 
+
+
+        density, grid_feats = self.voxelizer(
+            means3d=means3d,
+            opacities=opacities,
+            features=features, # (b n n_class)
+            scales = scales, # todo 增加的
+            covariances=covariances) # 将离散的3D高斯分布转换为occ占据预测网格图
 
         if mode == 'predict':
             # # todo -----------------------------------#
@@ -344,10 +354,9 @@ class GaussTRHead(BaseModule):
         # rendered = rendered[:, :-1] #  ((b v) c h w) -> ((b v) c-1 h w)
 
 
-        # todo ------------------------------#
-        # todo 损失计算 3.2 VFM对齐的自监督学习
+        # # todo ------------------------------#
+        # # todo 损失计算 3.2 VFM对齐的自监督学习
         losses = {}
-
         # depth = torch.where(depth < self.depth_limit, depth,
         #                     1e-3).flatten(0, 1) # todo depth: 视觉基础模型提取的深度图
         # # todo 深度预测监督：结合尺度不变对数和L1损失
@@ -382,10 +391,10 @@ class GaussTRHead(BaseModule):
 
         inputs = torch.softmax(probs, dim=1).transpose(1,2).flatten(0,1)
         target = occ_gts.flatten()
-        ignore = 17
+        ignore = self.num_classes - 1
         valid = (target != ignore)
         probas = inputs[valid]
-        labels = target[valid]
+        labels = target[valid] # todo 前景点的数量是很稀疏的
         losses['loss_lovasz'] = 1.0 * lovasz_softmax_flat(probas,labels)
 
         return losses

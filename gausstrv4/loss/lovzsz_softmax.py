@@ -180,26 +180,27 @@ def lovasz_softmax_flat(probas, labels, classes='present'):
       labels: [P] Tensor, ground truth labels (between 0 and C - 1)
       classes: 'all' for all, 'present' for classes present in labels, or a list of classes to average.
     """
+    # todo lovasz: 直接优化mIOU,对小物体更友好
     if probas.numel() == 0:
         # only void pixels, the gradients should be 0
         return probas * 0.
     C = probas.size(1)
     losses = []
-    class_to_sum = list(range(C)) if classes in ['all', 'present'] else classes
-    for c in class_to_sum:
-        fg = (labels == c).float() # foreground for class c
+    class_to_sum = list(range(C)) if classes in ['all', 'present'] else classes # todo 'present': 只计算GT中出现过的类别
+    for c in class_to_sum: # todo 遍历每个类别C:
+        fg = (labels == c).float() # foreground for class c # todo 构造前景掩码
         if (classes is 'present' and fg.sum() == 0):
-            continue
-        if C == 1:
+            continue # todo 如果该类在GT里没有出现过,跳过
+        if C == 1: # todo 处理二分类的特例
             if len(classes) > 1:
                 raise ValueError('Sigmoid output possible only with 1 class')
             class_pred = probas[:, 0]
         else:
-            class_pred = probas[:, c]
-        errors = (Variable(fg) - class_pred).abs()
-        errors_sorted, perm = torch.sort(errors, 0, descending=True)
-        perm = perm.data
-        fg_sorted = fg[perm]
+            class_pred = probas[:, c] # todo 多分类, 取第c类的概率
+        errors = (Variable(fg) - class_pred).abs() # todo 计算预测误差
+        errors_sorted, perm = torch.sort(errors, 0, descending=True) # todo 按误差从大到小排序 perm: 排序后的索引
+        perm = perm.data # todo 重排GT
+        fg_sorted = fg[perm] # todo fg_sorted和errors_sorted一一对应
         losses.append(torch.dot(errors_sorted, Variable(lovasz_grad(fg_sorted))))
     return mean(losses)
 

@@ -3,6 +3,9 @@ from collections.abc import Iterable
 import numpy as np
 import torch
 import torch.nn as nn
+
+from einops import rearrange
+from torch.cuda.amp import autocast
 from mmengine.model import BaseModel, BaseModule, ModuleList
 from mmdet3d.registry import MODELS
 from .utils import flatten_multi_scale_feats
@@ -31,6 +34,7 @@ class GaussTR(BaseModel):
                  attn_type=None,
                  **kwargs):
         super().__init__(**kwargs)
+
         if backbone is not None:
             # todo ------------------#
             if backbone.type == 'TorchHubModel':
@@ -147,7 +151,7 @@ class GaussTR(BaseModel):
         bs, n = inputs.shape[:2]
 
         # todo ---------------------------------#
-        # todo 使用预训练的VFM进行多视图特征提取
+        # todo 使用预训练的VIT进行多视图特征提取
         if hasattr(self, 'backbone'):
             inputs = inputs.flatten(0, 1) # (b,v,3,h,w) -> ((b v) 3 h w)
             if self.frozen_backbone:
@@ -176,9 +180,10 @@ class GaussTR(BaseModel):
             data_samples['feats'] = x.reshape(bs, n, *x.shape[1:]) # ((b v) c h w) -> (b v c h w)
         if n > data_samples['num_views']:
             x = x.reshape(bs, n, *x.shape[1:])
-            x = x[:, :data_samples['num_views']].flatten(0, 1)
+            x = x[:, :data_samples['num_views']].flatten(0, 1) # todo 这里展平了!
 
-        feats = self.neck(x) # list # todo x: DINO vit提取的特征(无梯度)
+        feats = self.neck(x) # list # todo x: ((b v) 3 36 64) 36=504/14 64=896/14 -> list ((b v) 256 144 256) (72 128) (36 64) (18 32)
+
 
         if hasattr(self, 'encoder'):
             encoder_inputs, decoder_inputs = self.pre_transformer(feats)
@@ -204,6 +209,7 @@ class GaussTR(BaseModel):
                 query[i], reference_points[i], mode=mode, **data_samples)
             for k, v in loss.items():
                 losses[f'{k}/{i}'] = v
+
         return losses
 
     def custom_attn(self, x, attn_type):
@@ -317,7 +323,10 @@ class GaussTR(BaseModel):
     def pre_decoder(self, memory):
         bs, _, c = memory.shape
         query = self.query_embeds.weight.unsqueeze(0).expand(bs, -1, -1) # todo 可学习的特征嵌入
-        reference_points = torch.rand((bs, query.size(1), 2)).to(query) # todo 随机的0-1之间的参考点
+        # todo 初始参考点： 归一化到
+        reference_points = (torch.rand((bs, query.size(1), 2))*0.5 + 0.25).to(query) # todo 随机的0-1之间的参考点
+        # reference_points = torch.rand((bs, query.size(1), 2)).to(query)
+
 
         decoder_inputs_dict = dict(
             query=query, memory=memory, reference_points=reference_points)
@@ -338,3 +347,28 @@ class GaussTR(BaseModel):
         decoder_outputs_dict = dict(
             hidden_states=inter_states, references=list(references))
         return decoder_outputs_dict
+
+
+
+
+
+
+    # def extract_img_feat(self, img, status="train"):
+    #     """Extract features of images."""
+    #     B, N, C, H, W = img.size()
+    #     img = img.view(B * N, C, H, W)
+    #     # if self.use_checkpoint and status != "test":
+    #     #     img_feats = torch.utils.checkpoint.checkpoint(
+    #     #                     self.backbone, img, use_reentrant=False)
+    #     # else:
+    #     #     img_feats = self.backbone(img)
+    #     img_feats = self.backbone(img)
+    #     img_feats = self.neck(img_feats) # BV, C, H, W
+    #     img_feats_reshaped = []
+    #     for img_feat in img_feats:
+    #         _, C, H, W = img_feat.size()
+    #         img_feats_reshaped.append(img_feat.view(B, N, C, H, W)) # todo 这里由(bv c h w) -> (b v c h w)
+
+
+    #     return img_feats_reshaped
+

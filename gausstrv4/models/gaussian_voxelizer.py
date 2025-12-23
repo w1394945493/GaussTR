@@ -45,7 +45,6 @@ class GaussianVoxelizer(nn.Module):
         self.empty_label = num_classes - 1
         self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0) # todo nn.Parameter: 可训练参数
 
-
         self.register_buffer('empty_mean', torch.tensor([center_h, center_w, center_d])[None, :]) # todo register_buffer: 跟着模型走，但不训练的状态量
         self.register_buffer('empty_scale', torch.tensor([range_h, range_w, range_d])[None, :])
         self.register_buffer('empty_rot', torch.tensor([1., 0., 0., 0.])[None, :])
@@ -53,15 +52,15 @@ class GaussianVoxelizer(nn.Module):
         self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, :])
         self.register_buffer('empty_opa', torch.ones(1)[None, :])
 
-
         pc_min = vol_range[:3].tolist()
+        self.pc_min = pc_min
         H,W,D,_ = grid_coords.shape
+        self.voxel_range = [H,W,D]
         import local_aggregate
         self.aggregator = local_aggregate.LocalAggregator(scale_multiplier=scale_multiplier, # todo scale_multiplier: 3 (±3σ范围)
                                                           H=H, W=W, D=D, # todo 体素空间 H:200 W:200 D:16
                                                           pc_min=pc_min, # todo [-40 -40 -1]
                                                           grid_size=voxel_size) # todo 体素尺寸: 0.4
-
 
     @unbatched_forward
     def forward(self,
@@ -93,8 +92,14 @@ class GaussianVoxelizer(nn.Module):
         if self.filter_gaussians:
             mask = opacities.squeeze(1) > self.opacity_thresh
             for i in range(3):
+                # todo 剔除在体素空间范围之外的点
                 mask &= (means3d[:, i] >= self.vol_range[i]) & (
                     means3d[:, i] <= self.vol_range[i + 3])
+                # -------------------------------------------------#
+                # 体素空间范围（float 坐标）避免超出范围
+                voxel_coord = (means3d[:, i] - self.pc_min[i]) / self.voxel_size
+                mask &= (voxel_coord >= 0) & (voxel_coord < self.voxel_range[i])
+
             if self.covariance_thresh > 0:
                 cov_diag = torch.diagonal(covariances, dim1=1, dim2=2)
                 mask &= ((cov_diag.min(1)[0] * 6) > self.covariance_thresh)
@@ -118,20 +123,10 @@ class GaussianVoxelizer(nn.Module):
                     features=None,
                     eps=1e-6):
 
-
-
-
-
-
-
-
-
-
-
         H,W,D = self.grid_shape
         grid_density = torch.zeros((*grid_coords.shape[:-1], 1),
                             device=grid_coords.device)
-        grid_feats = torch.zeros((*grid_coords.shape[:-1],features.size(-1)),
+        grid_feats = torch.zeros((*grid_coords.shape[:-1],self.num_classes),
                         device=grid_coords.device)
 
         features = torch.cat([features,torch.zeros_like(features[...,:1])],dim=-1) # 17 -> 18
@@ -143,6 +138,8 @@ class GaussianVoxelizer(nn.Module):
         covariances = torch.cat([covariances,self.empty_cov],dim=0)
         opacities = torch.cat([opacities,self.empty_opa],dim=0)
         scales = torch.cat([scales,self.empty_scale],dim=0)
+
+
 
         if means3d.size(0) == 0:
             return grid_density, grid_feats
@@ -157,32 +154,29 @@ class GaussianVoxelizer(nn.Module):
         grid_feats = rearrange(semantics,"(H W D) dim -> H W D dim",H=H,W=W,D=D) # todo (200 200 16 n_classes)
         return grid_density, grid_feats
 
-        # grid_density = torch.zeros((*grid_coords.shape[:-1], 1),
-        #                            device=grid_coords.device)
-        # if features is not None:
-        #     grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
-        #                              device=grid_coords.device) # (x,y,z,n_cls)
+        # sigmas = torch.sqrt(covariances.diagonal(dim1=-2, dim2=-1))
+        # factors = 3 * torch.tensor([-1, 1]).to(sigmas.device).view(2, 1).expand(2, means3d.size(0)).T
+        # bounds_all = means3d[:, None, :] + factors[:, :, None] * sigmas[:, None, :]
 
+
+        # bounds_all = bounds_all.clamp(vol_range[:3], vol_range[3:])  # (N,2,3)
+        # bounds_indices = ((bounds_all - vol_range[:3]) / voxel_size).long()
+        # covariances_inv = covariances.inverse()
         # for g in range(means3d.size(0)):
-        #     sigma = torch.sqrt(torch.diag(covariances[g]))
-        #     factor = 3 * torch.tensor([-1, 1])[:, None].to(sigma)
-        #     bounds = means3d[g, None] + factor * sigma[None]
+        #     bounds = bounds_all[g] # (2 3)
         #     if not (((bounds > vol_range[None, :3]).max(0).values.min()) and
         #             ((bounds < vol_range[None, 3:]).max(0).values.min())):
         #         continue
-        #     bounds = bounds.clamp(vol_range[:3], vol_range[3:])
-        #     bounds = ((bounds - vol_range[:3]) / voxel_size).int().tolist()
-        #     slices = tuple([slice(lo, hi + 1) for lo, hi in zip(*bounds)])
+        #     bounds = bounds_indices[g].int().tolist() # (2 3) -> list[[x_start y_start z_start] [x_end y_end z_end]]
+        #     slices = tuple([slice(lo, hi + 1) for lo, hi in zip(*bounds)]) # slices: 三元组：((x_start,x_end,None),(y_start,y_end,None),(z_start,z_end,None)) None表示默认步长为1
 
         #     diff = grid_coords[slices] - means3d[g]
-        #     maha_dist = (diff.unsqueeze(-2) @ covariances[g].inverse()
-        #                  @ diff.unsqueeze(-1)).squeeze(-1)
+        #     cov_inv = covariances_inv[g] # (3 3)
+        #     maha_dist = (diff.unsqueeze(-2) @ cov_inv
+        #                 @ diff.unsqueeze(-1)).squeeze(-1) # (x y z 1 3) @ (3 3) @ (x y z 3 1)
         #     density = opacities[g] * torch.exp(-0.5 * maha_dist)
         #     grid_density[slices] += density
-        #     if features is not None:
-        #         grid_feats[slices] += density * features[g]
+        #     grid_feats[slices] += density * features[g]
 
-        # if features is None:
-        #     return grid_density
         # grid_feats /= grid_density.clamp(eps)
         # return grid_density, grid_feats

@@ -256,7 +256,7 @@
             "name": "debug nuscenes surround occ",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/lianghao/wangyushen/Projects/GaussTR/gaussianformer/datasets/nuscenes_surroundocc.py",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/gaussianformer/datasets/surroundocc/nuscenes_surroundocc.py",
             "console": "integratedTerminal",
             "justMyCode": false,
         },

@@ -1,7 +1,7 @@
 from mmdet3d.registry import MODELS
-from mmengine.model import BaseModule
+from mmengine.model import BaseModel, BaseModule, ModuleList
 
-class CustomBaseSegmentor(BaseModule):
+class CustomBaseSegmentor(BaseModel):
 
     def __init__(
         self,

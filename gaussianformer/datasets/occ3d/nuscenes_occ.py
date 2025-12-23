@@ -168,7 +168,7 @@ if __name__=='__main__':
         **shared_dataset_cfg,
     )
 
-    from transforms import *
+    from gaussianformer.datasets.transforms import *
     from mmengine.registry import init_default_scope
 
     init_default_scope('mmdet3d')

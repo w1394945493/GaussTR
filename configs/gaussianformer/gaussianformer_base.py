@@ -142,14 +142,17 @@ model = dict(
     )
 )
 
+
+
+
 # todo 指标评估
 val_evaluator = dict(
     type='OccMetric',
     class_indices = list(range(1, 17)),
     empty_label = 17,
-    label_str = ['barrier', 'bicycle', 'bus', 'car', 'construction_vehicle',
+    label_str = ['barrier', 'bicycle', 'bus', 'car', 'cons.veh',
          'motorcycle', 'pedestrian', 'traffic_cone', 'trailer', 'truck',
-         'driveable_surface', 'other_flat', 'sidewalk', 'terrain', 'manmade',
+         'drive.surf', 'other_flat', 'sidewalk', 'terrain', 'manmade',
          'vegetation'],
     dataset_empty_label = 17,
     filter_minmax = False,
@@ -157,12 +160,12 @@ val_evaluator = dict(
 
 test_evaluator = val_evaluator
 
-max_epochs = 24
+max_epochs = 20
+
 base_lr = 2e-4
 min_lr_ratio = 0.1
 warmup_iters = 500
-iters_per_epoch = 81
-# train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
+
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=max_epochs, val_interval=1)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
@@ -218,10 +221,24 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=20),
+    logger=dict(type='LoggerHook',
+                interval=20, # todo 管理 训练 loss / metrics 的间隔
+                ),
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 
-custom_hooks = [
-    dict(type='DumpResultHook',),
-]  #
+# custom_hooks = [
+#     dict(type='DumpResultHook',),
+# ]  #
+
+# from mmengine.visualization import Visualizer
+
+vis_backends = [
+    dict(type='LocalVisBackend'), # 本地保存（默认，生成 scalars.json）
+    dict(type='TensorboardVisBackend') # 调用 TensorBoard
+]
+visualizer = dict(
+    type='Visualizer',
+    vis_backends=vis_backends,
+    name='visualizer'
+)

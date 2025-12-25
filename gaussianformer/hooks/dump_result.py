@@ -10,11 +10,9 @@ def cyan(text: str) -> str:
 class DumpResultHook(Hook):
 
     def before_val_epoch(self, runner, **kwargs):
-        print(cyan(f'occ metrics reset!'))
-        runner.val_evaluator.metrics[0].reset()
+        pass
 
     def before_test_epoch(self, runner,**kwargs):
-        print(cyan(f'occ metrics reset!'))
-        runner.val_evaluator.metrics[0].reset()
+        pass
 
 

@@ -80,12 +80,9 @@ class CosineLRScheduler(_ParamScheduler):
                 lrs = [self.warmup_lr_init] * len(self.optimizer.param_groups)
             else:
                 lrs = [group[self.param_name] for group in self.optimizer.param_groups]
-
         elif t <= self.warmup_t:
-            # todo 预热阶段
             lrs = [self.warmup_lr_init + t * s for s in self.warmup_steps]
         else:
-            # todo 余弦退火
             i = t // self.total_iters
             t_i = self.total_iters
             t_curr = t - (self.total_iters * i)

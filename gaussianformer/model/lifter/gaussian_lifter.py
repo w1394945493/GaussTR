@@ -66,8 +66,8 @@ class GaussianLifter(BaseLifter):
         )
 
     def init_weights(self):
-        # self.anchor.data = self.anchor.data.new_tensor(self.anchor_init) #! 导致设备不一致
-        self.anchor.data = torch.as_tensor(self.anchor_init,device=self.anchor.device,dtype=self.anchor.data.dtype)
+        self.anchor.data = self.anchor.data.new_tensor(self.anchor_init).to(self.anchor.device)
+        # self.anchor.data = torch.as_tensor(self.anchor_init,device=self.anchor.device,dtype=self.anchor.data.dtype)
         if self.instance_feature.requires_grad:
             torch.nn.init.xavier_uniform_(self.instance_feature.data, gain=1)
 
@@ -76,6 +76,7 @@ class GaussianLifter(BaseLifter):
         instance_feature = torch.tile( # todo torch.title: 复制张量
             self.instance_feature[None], (batch_size, 1, 1)
         ) # todo (b N 128) eg. N=25600
+
         # todo --------------------------------#
         # todo 高斯点初始化
         if self.pts_init and metas is not None: # todo False

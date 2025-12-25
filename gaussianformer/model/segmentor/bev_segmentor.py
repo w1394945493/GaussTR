@@ -43,6 +43,7 @@ class BEVSegmentor(CustomBaseSegmentor):
         freeze_img_neck=False,
         freeze_lifter=False,
         img_backbone_out_indices=[1, 2, 3],
+
         lovasz_ignore = 17,
         num_classes = 18,
         balance_cls_weight = True,
@@ -147,18 +148,21 @@ class BEVSegmentor(CustomBaseSegmentor):
                 }]
             return outputs
 
-        # loss
+        # loss ----------------------------------------------#
         occ_mask = results['occ_mask'].flatten(1) # (b 640000)
         semantics = results['pred_occ'][0] # (b 18 640000)
         sampled_label = results['sampled_label']
 
         sampled_label = sampled_label[occ_mask][None]
+
+
         loss_dict = {}
 
         semantics = semantics.transpose(1, 2)[occ_mask][None].transpose(1, 2)
         loss_dict['loss_voxel_ce'] = 10.0 * \
             CE_ssc_loss(semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
-        lovasz_input = torch.softmax(semantics, dim=1)
+
+        lovasz_input = torch.softmax(semantics, dim=1) # todo (b num_classes g)
         loss_dict['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
             lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
 

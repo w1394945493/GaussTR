@@ -14,6 +14,7 @@ from .utils import get_img2global, get_lidar2global
 
 @DATASETS.register_module()
 class NuScenesSurroundOccDataset(Dataset):
+
     def __init__(self,
                  data_root=None,
                  imageset=None,
@@ -37,6 +38,8 @@ class NuScenesSurroundOccDataset(Dataset):
                     "token",
                  ],
                  **kwargs):
+
+
         self.data_path = data_root
         data = mmengine.load(imageset)
         self.scene_infos = data['infos']

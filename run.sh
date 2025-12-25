@@ -149,8 +149,23 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test
 
+PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test \
+    -C /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
+
+
 # todo 训练：
-export CUDA_VISIBLE_DEVICES=3
+# todo --resume: 恢复训练
+# todo --load-from: 仅加载权重
+export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
     -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
+    --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
+
+
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
+    --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \

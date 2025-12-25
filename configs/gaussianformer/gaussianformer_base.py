@@ -24,22 +24,25 @@ semantic_dim = 17
 
 model = dict(
     img_backbone_out_indices=[0, 1, 2, 3],
+
     img_backbone=dict(
         _delete_=True,
         type='mmdet.ResNet',
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=1, # todo 冻结：
         norm_cfg=dict(type='BN2d', requires_grad=False),
-        norm_eval=True,
+        norm_eval=True, # todo BN使用eval模式(不更新均值方差)
         style='caffe',
         with_cp = True,
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
-        stage_with_dcn=(False, False, True, True)),
+        stage_with_dcn=(False, False, True, True),),
+
     img_neck=dict(
         type='mmdet.FPN',
-        start_level=1),
+        start_level=1), # todo 主干网络
+
     lifter=dict(
         type='GaussianLifter',
         num_anchor=25600,
@@ -139,24 +142,7 @@ model = dict(
     )
 )
 
-
-train_ann_file='nuscenes_mini_infos_val.pkl'
-val_ann_file='nuscenes_mini_infos_val.pkl'
-
-
-train_dataloader = dict(
-    dataset=dict(
-        ann_file=train_ann_file,
-    )
-)
-val_dataloader = dict(
-    dataset=dict(
-        ann_file=val_ann_file,
-    )
-)
-test_dataloader = val_dataloader
-
-# todo 指标评估器
+# todo 指标评估
 val_evaluator = dict(
     type='OccMetric',
     class_indices = list(range(1, 17)),
@@ -171,23 +157,64 @@ val_evaluator = dict(
 
 test_evaluator = val_evaluator
 
-
-
-# Optimizer
-optim_wrapper = dict(
-    # type='AmpOptimWrapper',
-    type='OptimWrapper',   # 避免混合精度(AMP)
-    optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
-    clip_grad=dict(max_norm=35, norm_type=2))
-
+max_epochs = 24
+base_lr = 2e-4
+min_lr_ratio = 0.1
+warmup_iters = 500
+iters_per_epoch = 81
 # train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=max_epochs, val_interval=1)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
+# optim_wrapper = dict(
+#     type='AmpOptimWrapper',
+#     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
+#     clip_grad=dict(max_norm=35, norm_type=2))
+
+# param_scheduler = [
+#     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
+#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+# ]
+
+# Optimizer
+optim_wrapper = dict(
+    type='OptimWrapper',   # 避免混合精度(AMP)
+    optimizer = dict(type="AdamW", lr=base_lr, weight_decay=0.01,),
+    paramwise_cfg=dict(custom_keys={'img_backbone': dict(lr_mult=0.1)}),
+    clip_grad=dict(max_norm=35, norm_type=2))
+
+# param_scheduler = [
+#     dict(type='LinearLR', start_factor=1e-6 / base_lr, begin=0, end=500, by_epoch=False),
+#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+# ]
+
+# param_scheduler = [
+#     dict(
+#         # type='CosineLRScheduler',
+#         type = 'LinearLR',
+#         start_factor=1e-6 / base_lr,
+#         begin=0,
+#         end=warmup_iters,
+#         by_epoch=False,
+#     ),
+#     dict(
+#         type='CosineAnnealingLR',
+#         eta_min=base_lr * min_lr_ratio,
+#         begin=warmup_iters,
+#         # end=max_epochs * iters_per_epoch, # todo 无需定义，by_epoch = False/True，会自动补该参数为max_iters/max_epochs
+#         by_epoch=False,
+#     )
+# ]
+
 param_scheduler = [
-    dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
-    dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+    dict(
+        type='CosineLR',
+        lr_min = base_lr * min_lr_ratio,
+        warmup_t = 500,
+        warmup_lr_init = 1e-6,
+        by_epoch=False,
+    ),
 ]
 
 default_hooks = dict(
@@ -195,3 +222,6 @@ default_hooks = dict(
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 
+custom_hooks = [
+    dict(type='DumpResultHook',),
+]  #

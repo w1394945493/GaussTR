@@ -1,5 +1,5 @@
 from torch import nn
-
+from torch.cuda.amp import autocast
 
 def CE_ssc_loss(pred, target, class_weights=None, ignore_index=255):
     """
@@ -9,7 +9,8 @@ def CE_ssc_loss(pred, target, class_weights=None, ignore_index=255):
     criterion = nn.CrossEntropyLoss(
         weight=class_weights, ignore_index=ignore_index, reduction="mean"
     )
-    loss = criterion(pred, target.long())
+    with autocast(False):
+        loss = criterion(pred, target.long())
 
     return loss
 

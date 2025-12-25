@@ -2,14 +2,9 @@ data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' 
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
 occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录
 
-train_ann_file='nuscenes_mini_infos_train.pkl'
-val_ann_file='nuscenes_mini_infos_val.pkl'
-
 dataset_type = 'NuScenesSurroundOccDataset'
 
-img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True
-)
+img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
 train_pipeline = [
     dict(type="CustomLoadMultiViewImageFromFiles", to_float32=True),
@@ -20,7 +15,6 @@ train_pipeline = [
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
 ]
-
 
 test_pipeline = [
     dict(type="CustomLoadMultiViewImageFromFiles", to_float32=True),
@@ -57,6 +51,7 @@ val_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
     # imageset=anno_root + "nuscenes_infos_val_sweeps_occ.pkl",
+    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
     imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=test_pipeline,

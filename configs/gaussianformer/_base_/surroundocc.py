@@ -10,7 +10,7 @@ train_pipeline = [
     dict(type="CustomLoadMultiViewImageFromFiles", to_float32=True),
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
-    dict(type="PhotoMetricDistortionMultiViewImage"),
+    # dict(type="PhotoMetricDistortionMultiViewImage"), # todo
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
@@ -61,11 +61,19 @@ val_dataset_config = dict(
     # phase='train',
 )
 
+seed = 42
+
+# import mmengine.dataset.sampler
 train_dataloader = dict(
     batch_size=1,
     num_workers=0,
     persistent_workers=False,
     pin_memory=True,
+    # sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
+    sampler=None,
+    # shuffle=True, # todo
+    shuffle=False,
+    # worker_init_fn = None, # todo 不可以设置None
     collate_fn=dict(type='custom_collate_fn_temporal'),
     dataset=train_dataset_config)
 
@@ -75,8 +83,18 @@ val_dataloader = dict(
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,
-    sampler=dict(type='DefaultSampler', shuffle=False),
+    # sampler=dict(type='DefaultSampler', shuffle=False, seed=seed), # todo
+    sampler=None,
+    shuffle=False, # todo
+    # worker_init_fn = None, # todo
     collate_fn=dict(type='custom_collate_fn_temporal'),
     dataset=val_dataset_config)
 
 test_dataloader = val_dataloader
+
+randomness = dict(
+    seed=seed,
+    # deterministic=False,
+    # deterministic=True, # todo 是否开启确定性计算，默认False
+    # diff_rank_seed=False, # todo 默认False
+) # todo 随机数种子设置

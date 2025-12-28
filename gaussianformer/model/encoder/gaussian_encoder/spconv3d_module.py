@@ -1,12 +1,13 @@
 from mmdet3d.registry import MODELS
 from mmengine.model import BaseModule
-import spconv.pytorch as spconv
+import spconv.pytorch as spconv 
 import torch.nn as nn, torch
 from functools import partial
 from .utils import spherical2cartesian, cartesian
 
+# from spconv.pytorch import SparseConv3d #! 避免与此重复
 
-@MODELS.register_module()
+@MODELS.register_module(name='CustomSparseConv3D')
 class SparseConv3D(BaseModule):
     def __init__(
         self,
@@ -35,7 +36,7 @@ class SparseConv3D(BaseModule):
                 nn.LayerNorm(embed_channels),
                 nn.ReLU(True),
             )
-        else: # todo -------------------------------------------#
+        else: # todo -------------------------------------------# 
             self.layer = spconv.SubMConv3d(
                 in_channels,
                 embed_channels,

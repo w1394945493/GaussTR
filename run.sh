@@ -154,7 +154,7 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test \
     -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train/epoch_24.pth \
 
-
+# !---------------------------------------------------------------------------#
 # todo 训练：
 # todo --resume: 恢复训练
 # todo --load-from: 仅加载权重
@@ -169,3 +169,13 @@ PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/config
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
+
+# todo gaussianformer 自定义的train： 效果更差
+export CUDA_VISIBLE_DEVICES=0
+python /home/lianghao/wangyushen/Projects/GaussTR/gaussianformer/train.py \
+    --py-config \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base_custom.py \
+    --load-from \
+    /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
+    --work-dir \
+    /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train_custom \

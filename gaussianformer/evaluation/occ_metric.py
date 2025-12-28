@@ -112,6 +112,8 @@ class OccMetric(BaseMetric):
             ious.append(cur_iou)
             table_columns.append([f'{cur_iou:.4f}'])
 
+            ret_dict[self.label_str[i]] = cur_iou * 100
+
         miou = np.nanmean(ious)
         iou = total_correct[-1] / (total_seen[-1] + total_positive[-1] - total_correct[-1])
 

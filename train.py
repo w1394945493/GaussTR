@@ -6,6 +6,7 @@ setproctitle("wys")
 import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 # os.environ['RANK'] = '0'
+# os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import argparse
 
 
@@ -34,6 +35,7 @@ def parse_args():
         help='If specify checkpoint path, resume from it, while if not '
         'specify, try to auto resume from the latest checkpoint '
         'in the work directory.')
+    parser.add_argument('--load-from',default=None, help='checkpoint file')
     parser.add_argument(
         '--launcher',
         choices=['none', 'pytorch', 'slurm', 'mpi'],
@@ -59,6 +61,7 @@ def main():
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
 
+    cfg.load_from = args.load_from
     if args.resume == 'auto':
         cfg.resume = True
         cfg.load_from = None

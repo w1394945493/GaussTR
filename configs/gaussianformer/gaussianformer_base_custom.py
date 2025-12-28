@@ -3,7 +3,7 @@ _base_ = [
     './_base_/model.py',
     './_base_/surroundocc.py',
 ]
-# import mmdet3d
+
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
@@ -31,9 +31,9 @@ model = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1, # todo 冻结：
+        frozen_stages=1, 
         norm_cfg=dict(type='BN2d', requires_grad=False),
-        norm_eval=True, # todo BN使用eval模式(不更新均值方差)
+        norm_eval=True, 
         style='caffe',
         with_cp = True,
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
@@ -41,7 +41,7 @@ model = dict(
 
     img_neck=dict(
         type='mmdet.FPN',
-        start_level=1), # todo 主干网络
+        start_level=1), 
 
     lifter=dict(
         type='GaussianLifter',
@@ -98,8 +98,7 @@ model = dict(
         ),
         spconv_layer=dict(
             _delete_=True,
-            # type="SparseConv3D", #! mmdet3d中已注册SparseConv3D
-            type='CustomSparseConv3D', 
+            type="SparseConv3D",
             in_channels=embed_dims,
             embed_channels=embed_dims,
             pc_range=pc_range,
@@ -167,86 +166,20 @@ base_lr = 2e-4
 min_lr_ratio = 0.1
 warmup_iters = 500
 
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=max_epochs, val_interval=1)
-val_cfg = dict(type='ValLoop')
-test_cfg = dict(type='TestLoop')
-
-# optim_wrapper = dict(
-#     type='AmpOptimWrapper',
-#     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
-#     clip_grad=dict(max_norm=35, norm_type=2))
-
-# param_scheduler = [
-#     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
-#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
-# ]
+grad_max_norm = 35
+print_freq = 20
 
 # Optimizer
-optim_wrapper = dict(
-    type='OptimWrapper',   # 避免混合精度(AMP)
+optimizer = dict(
     optimizer = dict(type="AdamW", lr=base_lr, weight_decay=0.01,),
-    paramwise_cfg=dict(custom_keys={'img_backbone': dict(lr_mult=0.1)}),
-    clip_grad=dict(max_norm=35, norm_type=2))
-
-# param_scheduler = [
-#     dict(type='LinearLR', start_factor=1e-6 / base_lr, begin=0, end=500, by_epoch=False),
-#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
-# ]
-
-# param_scheduler = [
-#     dict(
-#         # type='CosineLRScheduler',
-#         type = 'LinearLR',
-#         start_factor=1e-6 / base_lr,
-#         begin=0,
-#         end=warmup_iters,
-#         by_epoch=False,
-#     ),
-#     dict(
-#         type='CosineAnnealingLR',
-#         eta_min=base_lr * min_lr_ratio,
-#         begin=warmup_iters,
-#         # end=max_epochs * iters_per_epoch, # todo 无需定义，by_epoch = False/True，会自动补该参数为max_iters/max_epochs
-#         by_epoch=False,
-#     )
-# ]
-
-param_scheduler = [
-    dict(
-        type='CosineLR',
-        lr_min = base_lr * min_lr_ratio,
-        warmup_t = 500,
-        warmup_lr_init = 1e-6,
-        by_epoch=False,
-    ),
-]
-
-default_hooks = dict(
-    logger=dict(type='LoggerHook',
-                interval=1, # todo 管理 训练 loss / metrics 的间隔
-                ),
-    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
-)
-
-log_processor = dict(
-    type='LogProcessor', window_size=50, by_epoch=True,
-    # mean_pattern=r'.*(loss|time|data_time|grad_norm).*',
-    mean_pattern=r'.*(time|data_time).*', # todo 对匹配成功的指标做滑动平均
+    paramwise_cfg=dict(
+        custom_keys={
+            'img_backbone': dict(lr_mult=0.1)}
+            ),
     )
-# custom_hooks = [
-#     dict(type='DumpResultHook',),
-# ]  #
 
-# from mmengine.visualization import Visualizer
 
-vis_backends = [
-    dict(type='LocalVisBackend'), # 本地保存（默认，生成 scalars.json）
-    dict(type='TensorboardVisBackend') # 调用 TensorBoard
-]
-visualizer = dict(
-    type='Visualizer',
-    vis_backends=vis_backends,
-    name='visualizer'
-)
+
+
 
 

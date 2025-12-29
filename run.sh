@@ -160,7 +160,7 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
 # todo --load-from: 仅加载权重
 export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    -G 1 \
+    -G 2 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
@@ -169,6 +169,26 @@ PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/config
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
+
+# todo ------------------------------------------
+export CUDA_VISIBLE_DEVICES=6
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
+    --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
+
+
+export CUDA_VISIBLE_DEVICES=0
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
+    --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
+
+
+
+
 
 # todo gaussianformer 自定义的train： 效果更差
 export CUDA_VISIBLE_DEVICES=0

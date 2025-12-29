@@ -231,7 +231,7 @@ default_hooks = dict(
 log_processor = dict(
     type='LogProcessor', window_size=50, by_epoch=True,
     # mean_pattern=r'.*(loss|time|data_time|grad_norm).*',
-    mean_pattern=r'.*(time|data_time).*', # todo 对匹配成功的指标做滑动平均
+    mean_pattern=r'.*(time|data_time).*', # todo 对指定指标做滑动平均
     )
 # custom_hooks = [
 #     dict(type='DumpResultHook',),

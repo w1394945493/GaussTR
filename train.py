@@ -5,6 +5,8 @@ setproctitle("wys")
 import argparse
 import logging
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 import os.path as osp
 
 from mmengine.config import Config, DictAction
@@ -124,6 +126,8 @@ def main():
                                '"auto_scale_lr.base_batch_size" in your'
                                ' configuration file.')
 
+    
+    cfg.load_from = args.load_from # todo 加载预训练权重
     # resume is determined in this priority: resume from > auto_resume
     if args.resume == 'auto':
         cfg.resume = True
@@ -131,7 +135,6 @@ def main():
     elif args.resume is not None:
         cfg.resume = True
         cfg.load_from = args.resume
-    cfg.load_from = args.load_from # todo 仅加载权重
 
     # build the runner from config
     if 'runner_type' not in cfg:

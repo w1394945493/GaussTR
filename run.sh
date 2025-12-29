@@ -149,10 +149,19 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test
 
+export CUDA_VISIBLE_DEVICES=0
 PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test \
     -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train/epoch_24.pth \
+
+
+export CUDA_VISIBLE_DEVICES=0
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
+    /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test \
+
 
 # !---------------------------------------------------------------------------#
 # todo 训练：
@@ -170,11 +179,10 @@ PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/config
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
 
-# todo ------------------------------------------
-export CUDA_VISIBLE_DEVICES=6
+# todo -------------------------------------------------------
+export CUDA_VISIBLE_DEVICES=5
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
@@ -182,20 +190,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
 
 
-
-
-
-# todo gaussianformer 自定义的train： 效果更差
-export CUDA_VISIBLE_DEVICES=0
-python /home/lianghao/wangyushen/Projects/GaussTR/gaussianformer/train.py \
-    --py-config \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base_custom.py \
-    --load-from \
-    /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
-    --work-dir \
-    /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train_custom \

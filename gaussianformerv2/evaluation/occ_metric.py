@@ -46,6 +46,8 @@ class OccMetric(BaseMetric):
         self.dataset_empty_label = dataset_empty_label
         self.label_str = label_str
         self.filter_minmax = filter_minmax
+        
+        self.test_step_outputs = {}
 
         self.reset()
 
@@ -75,6 +77,24 @@ class OccMetric(BaseMetric):
                                                 & (outputs != self.empty_label)).item() # todo 预测对的非空数(TP)
             self.total_positive[-1] += torch.sum(outputs != self.empty_label).item() # todo 预测为非空类的数(TP+FP)
 
+        rgb = rearrange(data_samples[0]['img_pred'],'b v c h w -> (b v) c h w')
+        rgb_gt = rearrange(data_samples[0]['img_gt'],'b v c h w -> (b v) c h w')
+        if f"psnr" not in self.test_step_outputs:
+            self.test_step_outputs[f"psnr"] = []
+        if f"ssim" not in self.test_step_outputs:
+            self.test_step_outputs[f"ssim"] = []
+        if f"lpips" not in self.test_step_outputs:
+            self.test_step_outputs[f"lpips"] = []        
+        self.test_step_outputs[f"psnr"].append(
+            compute_psnr(rgb_gt, rgb).mean().item()
+        )
+        self.test_step_outputs[f"ssim"].append(
+            compute_ssim(rgb_gt, rgb).mean().item()
+        )
+        self.test_step_outputs[f"lpips"].append(
+            compute_lpips(rgb_gt, rgb).mean().item()
+        )
+                
     def compute_metrics(self, results):
 
         if dist.is_initialized():
@@ -89,14 +109,13 @@ class OccMetric(BaseMetric):
             self.format_results(results)
             return None
 
+        ret_dict = dict()
+        # todo -----------------------------#
+        # todo occ占用预测评估结果打印
         total_seen = self.total_seen.cpu().numpy()
         total_correct = self.total_correct.cpu().numpy()
         total_positive = self.total_positive.cpu().numpy()
-
-
-        ret_dict = dict()
         ious = []
-
         header = ['classes']
         for i in range(len(self.label_str)):
             header.append(self.label_str[i])
@@ -129,9 +148,22 @@ class OccMetric(BaseMetric):
 
         ret_dict['miou'] = miou * 100
         ret_dict['iou'] = iou * 100
-
         self.reset()
+        
+        header = ['metric name']
+        table_columns = ['results']
+        for metric_name, metric_scores in self.test_step_outputs.items():
+            avg_scores = sum(metric_scores) / len(metric_scores)
+            ret_dict[metric_name] = avg_scores
+            header.append(metric_name)
+            table_columns.append(f'{avg_scores:.4f}')
 
+        table_data = [header,table_columns]
+        table = AsciiTable(table_data)
+        table.inner_footing_row_border = True
+        print_log('\n' + table.table, logger=logger)        
+        self.test_step_outputs = {}
+        
         return ret_dict
 
 

@@ -10,6 +10,8 @@ from mmdet3d.registry import MODELS
 from .base_segmentor import CustomBaseSegmentor
 from ...loss import CE_ssc_loss,lovasz_softmax
 from ...geometry import sample_image_grid,get_world_rays
+from ..decoder import rasterize_gaussians
+
 from colorama import Fore
 
 
@@ -41,6 +43,8 @@ nusc_class_frequencies = np.array([
 class BEVSegmentor(CustomBaseSegmentor):
     def __init__(
         self,
+        pixel_gs = None,
+        loss_lpips = None,
         freeze_img_backbone=False,
         freeze_img_neck=False,
         freeze_lifter=False,
@@ -58,6 +62,9 @@ class BEVSegmentor(CustomBaseSegmentor):
     ):
         super().__init__(**kwargs)
 
+        self.pixel_gs = MODELS.build(pixel_gs)
+        self.loss_lpips = MODELS.build(loss_lpips)
+        
         self.freeze_img_backbone = freeze_img_backbone
         self.freeze_img_neck = freeze_img_neck
         self.img_backbone_out_indices = img_backbone_out_indices
@@ -155,13 +162,44 @@ class BEVSegmentor(CustomBaseSegmentor):
                 cam2img = metas['cam2img'],
                 img_aug_mat = metas['img_aug_mat'],
                 cam2lidar = metas['cam2lidar'],)  
+
+        means3d = pixel_gaussians.means
+        harmonics = pixel_gaussians.harmonics # (b n c d_sh) | (b n c), c=rgb
+        opacities = pixel_gaussians.opacities
+        scales = pixel_gaussians.scales
+        rotations = pixel_gaussians.rotations
+        covariances = pixel_gaussians.covariances
+                
+        cam2img = metas['cam2img'] # (b v 4 4)
+        img_aug_mat = metas['img_aug_mat'] # (b v 4 4)
+        cam2lidar = metas['cam2lidar'] # (b v 4 4)
+        bs, n = cam2img.shape[:2] 
         
+        rgb_gt = metas['img_gt']
+        depth = metas['depth']
         
+        h, w = rgb_gt.shape[-2:]        
+
+        intrinsics =  (img_aug_mat @ cam2img)[...,:3,:3] # (b v 3 3)
+        extrinsics = cam2lidar # (b v 4 4)
         
+        colors, rendered_depth = rasterize_gaussians(
+            extrinsics=extrinsics,
+            intrinsics=intrinsics,
+            image_shape = (h,w),
+            means3d=means3d,
+            rotations=rotations,
+            scales=scales,
+            covariances=covariances,
+            opacities=opacities,
+            colors=harmonics, # todo (b n c d_sh)
+            use_sh=False,
+
+            near_plane=0.1,
+            far_plane=1000.,
         
-        
-        
-        
+            render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
+            channel_chunk=32)               
         
         # todo --------------------------#
         # todo occ 占用预测相关工作
@@ -176,6 +214,8 @@ class BEVSegmentor(CustomBaseSegmentor):
                     'occ_pred': results['final_occ'], # (b (h w d))
                     'occ_gt': results['sampled_label'], # (b (h w d))
                     'occ_mask': results['occ_mask'].flatten(1), # (b (h w d))
+                    'img_pred': colors,
+                    'img_gt': rgb_gt / 255.,
                 }]
             return outputs
 
@@ -187,14 +227,37 @@ class BEVSegmentor(CustomBaseSegmentor):
         sampled_label = sampled_label[occ_mask][None]
 
 
-        loss_dict = {}
+        losses = {}
 
         semantics = semantics.transpose(1, 2)[occ_mask][None].transpose(1, 2)
-        loss_dict['loss_voxel_ce'] = 10.0 * \
+        losses['loss_voxel_ce'] = 10.0 * \
             CE_ssc_loss(semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
 
         lovasz_input = torch.softmax(semantics, dim=1) # todo (b num_classes g)
-        loss_dict['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
+        losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
             lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
 
-        return loss_dict
+        rendered_depth = rendered_depth.flatten(0,1)
+        depth = depth.flatten(0,1)
+        losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth,criterion='l1')
+        
+        rgb = colors.flatten(0,1)
+        rgb_gt = rgb_gt.flatten(0,1) / 255.
+        reg_loss = (rgb - rgb_gt) ** 2
+        losses['loss_l2'] = reg_loss.mean()
+        losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
+        
+        return losses
+    
+    def depth_loss(self, pred, target, criterion='silog_l1'):
+        loss = 0
+        if 'silog' in criterion: # todo 这个没有用到
+            loss += self.silog_loss(pred, target)
+        if 'l1' in criterion: # todo 只是用了l1 loss
+            target = target.flatten()
+            pred = pred.flatten()[target != 0]
+            l1_loss = F.l1_loss(pred, target[target != 0])
+            if loss != 0:
+                l1_loss *= 0.2
+            loss += l1_loss
+        return loss

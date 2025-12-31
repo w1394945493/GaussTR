@@ -38,7 +38,10 @@ far = 1000.
 
 model = dict(
     img_backbone_out_indices=[0, 1, 2, 3],
-    
+    loss_lpips=dict(
+        type='LossLpips',
+        weight = 0.05,
+    ),    
     pixel_gs=dict(
         type="PixelGaussian",
         use_checkpoint=use_checkpoint,

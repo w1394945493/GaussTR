@@ -110,3 +110,36 @@ def build_covariance(
         @ rearrange(scale, "... i j -> ... j i") # 转置
         @ rearrange(rotation, "... i j -> ... j i")
     )
+
+def unbatched_forward(func):
+
+    def wrapper(*args, **kwargs):
+        bs = None
+        for arg in list(args) + list(kwargs.values()):
+            if isinstance(arg, torch.Tensor):
+                if bs is None:
+                    bs = arg.size(0)
+                else:
+                    assert bs == arg.size(0)
+
+        outputs = []
+        for i in range(bs):
+            output = func(
+                *[
+                    arg[i] if isinstance(arg, torch.Tensor) else arg
+                    for arg in args
+                ], **{
+                    k: v[i] if isinstance(v, torch.Tensor) else v
+                    for k, v in kwargs.items()
+                })
+            outputs.append(output)
+
+        if isinstance(outputs[0], tuple):
+            return tuple([
+                torch.stack([out[i] for out in outputs])
+                for i in range(len(outputs[0]))
+            ])
+        else:
+            return torch.stack(outputs)
+
+    return wrapper

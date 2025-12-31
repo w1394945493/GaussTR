@@ -194,3 +194,11 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
 
 
+# !---------------------------------------------------------------------------#
+# todo gaussianformerv2
+# todo 训练：
+export CUDA_VISIBLE_DEVICES=5
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train \
+    --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \

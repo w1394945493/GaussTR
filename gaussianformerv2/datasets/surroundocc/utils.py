@@ -2,7 +2,7 @@ import numpy as np
 from pyquaternion import Quaternion
 import torch
 
-from mmengine.registry import FUNCTIONS
+from mmengine.registry import FUNCTIONS # todo 函数注册
 
 def get_rm(angle, axis, deg=False):
     if deg:

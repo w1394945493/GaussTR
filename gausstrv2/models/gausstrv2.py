@@ -179,7 +179,7 @@ class GaussTRV2(BaseModel):
         extrinsics = rearrange(extrinsics, "b v i j -> b v () () () i j")
         intrinsics = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
 
-        xy_ray, _ = sample_image_grid((h, w), device) # [0.1]网格点
+        xy_ray, _ = sample_image_grid((h, w), device) # [0,1]网格点
         coordinates = repeat(xy_ray, "h w xy -> b v (h w) () () xy",b=bs,v=n)
         origins, directions = get_world_rays(coordinates, extrinsics, intrinsics) # (b v (h w) 1 1 3) (b v (h w) 1 1 3)
 
@@ -199,6 +199,10 @@ class GaussTRV2(BaseModel):
                 directions, # torch.Size([1, 6, 112, 192, 3])
                 intrinsics = data_samples['cam2img'][...,:3,:3], # data_samples['cam2img'][...,:3,:3].shape torch.Size([1, 6, 3, 3])
                 extrinsics = data_samples['cam2ego'],)  # data_samples['cam2ego'].shape torch.Size([1, 6, 4, 4])
+        
+        
+        
+        
         '''
         import numpy as np
         # means3d = rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",)[0]

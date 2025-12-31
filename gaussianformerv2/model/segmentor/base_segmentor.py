@@ -6,6 +6,7 @@ class CustomBaseSegmentor(BaseModel):
     def __init__(
         self,
         img_backbone=None,
+        pixel_gs = None,
         img_neck=None,
         lifter=None,
         encoder=None,
@@ -15,6 +16,7 @@ class CustomBaseSegmentor(BaseModel):
     ):
         super().__init__(init_cfg)
         self.img_backbone = MODELS.build(img_backbone)
+        self.pixel_gs = MODELS.build(pixel_gs)
         self.img_neck = MODELS.build(img_neck)
         self.lifter = MODELS.build(lifter)
         self.encoder = MODELS.build(encoder)

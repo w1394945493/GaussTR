@@ -22,9 +22,56 @@ include_opa = True
 semantics = True
 semantic_dim = 17
 
+
+# ----------------------------
+# pixel_gauss
+use_checkpoint = True
+num_cams = 6
+
+_dim_ = 128
+num_heads = 8
+num_layers = 1
+patch_sizes=[8, 8, 4, 2]
+
+near = 0.1
+far = 1000.
+
 model = dict(
     img_backbone_out_indices=[0, 1, 2, 3],
+    
+    pixel_gs=dict(
+        type="PixelGaussian",
+        use_checkpoint=use_checkpoint,
+        down_block=dict(
+            type='MVDownsample2D',
+            num_layers=num_layers,
+            resnet_act_fn="silu",
+            resnet_groups=32,
+            num_attention_heads=num_heads,
+            num_views=num_cams),
+        up_block=dict(
+            type='MVUpsample2D',
+            num_layers=num_layers,
+            resnet_act_fn="silu",
+            resnet_groups=32,
+            num_attention_heads=num_heads,
+            num_views=num_cams),
+        mid_block=dict(
+            type='MVMiddle2D',
+            num_layers=num_layers,
+            resnet_act_fn="silu",
+            resnet_groups=32,
+            num_attention_heads=num_heads,
+            num_views=num_cams),
+        patch_sizes=patch_sizes,
+        in_embed_dim=_dim_,
+        out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
+        num_cams=num_cams,
+        near=near,
+        far=far,
 
+        ),
+    
     img_backbone=dict(
         _delete_=True,
         type='mmdet.ResNet',

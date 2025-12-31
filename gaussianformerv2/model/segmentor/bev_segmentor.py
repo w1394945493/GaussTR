@@ -3,14 +3,16 @@ from collections.abc import Iterable
 import numpy as np
 import torch
 import torch.nn.functional as F
-
+from einops import rearrange,repeat
 
 from mmdet3d.registry import MODELS
 
 from .base_segmentor import CustomBaseSegmentor
 from ...loss import CE_ssc_loss,lovasz_softmax
-
+from ...geometry import sample_image_grid,get_world_rays
 from colorama import Fore
+
+
 def cyan(text: str) -> str:
     return f"{Fore.CYAN}{text}{Fore.RESET}"
 
@@ -119,7 +121,17 @@ class BEVSegmentor(CustomBaseSegmentor):
         metas = data
         results = self(imgs, metas, mode=mode)
         return results
-
+    
+    def plucker_embedder(
+        self,
+        rays_o,
+        rays_d
+    ):
+        rays_o = rays_o.permute(0, 1, 4, 2, 3)
+        rays_d = rays_d.permute(0, 1, 4, 2, 3)
+        plucker = torch.cat([torch.cross(rays_o, rays_d, dim=2), rays_d], dim=2)
+        return plucker
+    
     def forward(self,
                 imgs,
                 metas,
@@ -132,8 +144,27 @@ class BEVSegmentor(CustomBaseSegmentor):
             'points': points
         }
         results.update(kwargs)
-        outs = self.extract_img_feat(**results) # todo 提取多尺度图像特征图outs:{'ms_img_feats'}: (1, 6, 128, 108, 200) (54 100) (27 50) (14 25) 4个尺度的特征图
+        outs = self.extract_img_feat(**results) # todo 提取多尺度图像特征图outs:{'ms_img_feats'}: (b v c h w)  1/8 1/16 1/32 1/64 4个尺度的特征图        
         results.update(outs)
+        
+        # todo --------------------------#
+        # todo 使用第1个特征图进行视图渲染
+        pixel_gaussians = self.pixel_gs(
+                img_feats=rearrange(outs['ms_img_feats'][0], "b v c h w -> (b v) c h w"),                 
+                depths_in=metas['depth'], # (b v h w)
+                cam2img = metas['cam2img'],
+                img_aug_mat = metas['img_aug_mat'],
+                cam2lidar = metas['cam2lidar'],)  
+        
+        
+        
+        
+        
+        
+        
+        
+        # todo --------------------------#
+        # todo occ 占用预测相关工作
         outs = self.lifter(**results)
         results.update(outs)
         outs = self.encoder(**results)

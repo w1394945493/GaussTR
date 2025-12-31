@@ -103,7 +103,7 @@ class GaussianOccEncoder(BaseEncoder):
                 # todo 图像交叉注意力模块：用于聚合视觉信息
                 instance_feature = self.layers[i](
                     instance_feature,
-                    anchor, # todo 初始的28维的锚框
+                    anchor, # todo 初始的28维的高斯属性
                     anchor_embed, # todo 编码后的锚框: 128维
                     feature_maps, # todo 多尺度特征图
                     metas, # todo metas: 元数据：

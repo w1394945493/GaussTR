@@ -6,7 +6,8 @@ import mmcv
 from PIL import Image
 import math
 from copy import deepcopy
-
+import torch.nn.functional as F
+import cv2
 from mmdet3d.registry import TRANSFORMS
 
 
@@ -59,7 +60,7 @@ class DefaultFormatBundle(object):
 class NuScenesAdaptor(object):
     def __init__(self, num_cams, use_ego=False):
         self.num_cams = num_cams
-        self.projection_key = 'ego2img' if use_ego else 'lidar2img'
+        self.projection_key = 'ego2img' if use_ego else 'lidar2img' # todo 'lidar2img'
 
     def __call__(self, input_dict):
         input_dict["projection_mat"] = np.float32(
@@ -81,6 +82,7 @@ class ResizeCropFlipImage(object):
         imgs = results["img"]
         N = len(imgs)
         new_imgs = []
+        # img_aug_mat = []
         for i in range(N):
             img = Image.fromarray(np.uint8(imgs[i]))
             img, ida_mat = self._img_transform(
@@ -94,13 +96,19 @@ class ResizeCropFlipImage(object):
 
             #!----------------------------------------------------#
             mat = np.eye(4)
-            mat[:3, :3] = ida_mat
+            mat[:3, :3] = ida_mat # todo 
             new_imgs.append(np.array(img).astype(np.float32))
-            results["lidar2img"][i] = mat @ results["lidar2img"][i]
+            # todo (wys 12.30)
+            # img_aug_mat.append(mat) # todo img2img' 矩阵
+            results["lidar2img"][i] = mat @ results["lidar2img"][i] # todo 已经都做过变换了
             results["ego2img"][i] = mat @ results["ego2img"][i]
 
+        
         results["img"] = new_imgs
         results["img_shape"] = [x.shape[:2] for x in new_imgs]
+        # todo (wys 12.30)
+        # results["img_aug_mat"] = np.array(img_aug_mat)
+        
         return results
 
     def _get_rot(self, h):
@@ -110,21 +118,21 @@ class ResizeCropFlipImage(object):
                 [-np.sin(h), np.cos(h)],
             ]
         )
-
+    # todo 对图像做2D增强，并计算“像素坐标系 -> 增强后像素坐标系” 的仿射变换举证
     def _img_transform(self, img, resize, resize_dims, crop, flip, rotate):
-        ida_rot = torch.eye(2)
-        ida_tran = torch.zeros(2)
+        ida_rot = torch.eye(2) # todo 2x2 仿射线性部分
+        ida_tran = torch.zeros(2) # todo 平移
         # adjust image
         img = img.resize(resize_dims)
-        img = img.crop(crop)
+        img = img.crop(crop) # todo 裁剪窗口左上角(crop_w,crop_h)
         if flip:
             img = img.transpose(method=Image.FLIP_LEFT_RIGHT)
         img = img.rotate(rotate)
 
         # post-homography transformation
         ida_rot *= resize
-        ida_tran -= torch.Tensor(crop[:2])
-        if flip:
+        ida_tran -= torch.Tensor(crop[:2]) # todo 平移 (x,y) -> (x-crop_w,y-crop_h)
+        if flip: # todo 反转平移和旋转更新
             A = torch.Tensor([[-1, 0], [0, 1]])
             b = torch.Tensor([crop[2] - crop[0], 0])
             ida_rot = A.matmul(ida_rot)
@@ -137,7 +145,81 @@ class ResizeCropFlipImage(object):
         ida_mat = torch.eye(3)
         ida_mat[:2, :2] = ida_rot
         ida_mat[:2, 2] = ida_tran
+        
         return img, ida_mat
+
+
+@TRANSFORMS.register_module()
+class LoadFeatMaps(ResizeCropFlipImage):
+
+    def __init__(self, data_root, key,final_dims=[112,200]):
+        self.data_root = data_root
+        self.key = key
+        self.final_dims = final_dims
+
+
+    def __call__(self, results):
+        aug_configs = results.get("aug_configs")
+        resize, resize_dims, crop, flip, rotate = aug_configs
+        
+        feats = []
+        img_gt = []
+        img_aug_mat = []
+        
+        if self.final_dims:
+            fh, fw = self.final_dims
+        
+        for i, filename in enumerate(results['filename']):
+            feat = np.load(
+                os.path.join(self.data_root,
+                             filename.split('/')[-1].split('.')[0] + '.npy'))
+            feat = Image.fromarray(feat)
+            feat, ida_mat = self._img_transform(
+                feat,
+                resize=resize,
+                resize_dims=resize_dims,
+                crop=crop,
+                flip=flip,
+                rotate=rotate,
+            )
+            img = Image.fromarray(np.uint8(results['img'][i]))
+            
+            if self.final_dims:
+                cur_w, cur_h = feat.size
+                s = torch.eye(3)
+                s[0] *= fw / cur_w
+                s[1] *= fh / cur_h
+                ida_mat = s @ ida_mat
+                feat = feat.resize(self.final_dims[::-1])
+                img = img.resize(self.final_dims[::-1])
+            
+            
+            mat = np.eye(4)
+            mat[:3, :3] = ida_mat
+            
+            feats.append(np.array(feat).astype(np.float32))
+            img_gt.append(np.array(img).astype(np.float32))  
+            img_aug_mat.append(mat)
+                  
+        
+        results[self.key] = torch.from_numpy(
+            np.ascontiguousarray(
+                np.stack(feats,axis=0)))
+    
+        results["img_gt"] = torch.from_numpy(
+            np.ascontiguousarray(
+                np.stack(
+                    [img.transpose(2, 0, 1) for img in img_gt],axis=0))) 
+         
+        results["img_aug_mat"] = np.array(img_aug_mat,dtype=np.float32)
+        
+        return results
+        
+        
+    def __repr__(self):
+        """str: Return a string that describes the module."""
+        repr_str = self.__class__.__name__
+        return repr_str
 
 
 @TRANSFORMS.register_module()
@@ -330,7 +412,7 @@ class CustomLoadMultiViewImageFromFiles(object):
             img = img[:self.crop_size[0], :self.crop_size[1]]
         if self.to_float32:
             img = img.astype(np.float32)
-        results['filename'] = filename
+        results['filename'] = filename # todo img_path
         # unravel to list, see `DefaultFormatBundle` in formatting.py
         # which will transpose each image separately and then stack into array
         results['img'] = [img[..., i] for i in range(img.shape[-1])]
@@ -356,7 +438,7 @@ class CustomLoadMultiViewImageFromFiles(object):
 
 
 @TRANSFORMS.register_module()
-class LoadPointFromFile(object):
+class LoadPointFromFile(object): # todo 
 
     def __init__(self, pc_range, num_pts, use_ego=False):
         self.use_ego = use_ego
@@ -410,7 +492,7 @@ class LoadPointFromFile(object):
 
 
 @TRANSFORMS.register_module()
-class LoadPseudoPointFromFile(object):
+class LoadPseudoPointFromFile(object): # todo 
 
     def __init__(self, datapath, pc_range, num_pts, is_ego=True, use_ego=False):
         self.datapath = datapath
@@ -586,3 +668,6 @@ class LoadOccupancyKITTI360(object):
         """str: Return a string that describes the module."""
         repr_str = self.__class__.__name__
         return repr_str
+
+
+

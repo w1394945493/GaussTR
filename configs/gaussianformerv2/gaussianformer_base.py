@@ -10,7 +10,7 @@ _base_ = [
 custom_imports = dict(imports=['gaussianformerv2']) # todo
 
 # ========= custom hooks ===============
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/outputs/vis3'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/outputs/vis4'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -249,7 +249,8 @@ val_evaluator = dict(
 
 test_evaluator = val_evaluator
 
-max_epochs = 20
+# max_epochs = 20
+max_epochs = 24
 
 base_lr = 2e-4
 min_lr_ratio = 0.1

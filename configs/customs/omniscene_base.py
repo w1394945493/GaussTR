@@ -1,11 +1,11 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/outputs/vis25' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/omniscene/outputs/vis' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
-custom_imports = dict(imports=['gausstrv2']) # todo
+custom_imports = dict(imports=['omniscene']) # todo
 
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
@@ -25,29 +25,20 @@ custom_hooks = [
          std  = std,
          save_dir = os.path.join(work_dir,'vis'),
          save_vis = save_vis,
-         save_occ = True,
-        #  save_occ = False,
          save_depth = True,
-         save_sem_seg = True,
-        #  save_img = False,
          save_img = True,
          ),
-    dict(type='CustomHook',
-        #  val_occ_epoch = 20, # todo 指定epoch之后进行occ预测及评估
-        val_occ_epoch = 0,
-         )
 ]  # 保存结果
 
-input_size = (112,192)
-resize_lim=[0.1244, 0.12]  #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
+input_size = (112,200)
 ori_image_shape = (900,1600)
 
 near = 0.1
 # far = 100.
 far = 1000.
 
-train_ann_file='nuscenes_mini_infos_train.pkl'
-# train_ann_file='nuscenes_mini_infos_val.pkl'
+# train_ann_file='nuscenes_mini_infos_train.pkl'
+train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
 use_checkpoint = True
@@ -62,7 +53,7 @@ patch_sizes=[8, 8, 4, 2]
 
 
 model = dict(
-    type = 'GaussTRV2',
+    type = 'OmniScene',
 
     near = near,
     far = far,
@@ -99,10 +90,6 @@ model = dict(
         add_extra_convs='on_input',
         num_outs=4),
 
-
-
-
-
     pixel_gs=dict(
         type="PixelGaussian",
         use_checkpoint=use_checkpoint,
@@ -137,16 +124,7 @@ model = dict(
         ),
 
     gauss_head=dict(
-        type='GaussTRV2Head',
-        voxelizer=dict(
-            type='GaussianVoxelizer',
-            vol_range=[-40, -40, -1, 40, 40, 5.4],
-            voxel_size=0.4,
-            filter_gaussians=True,
-            opacity_thresh=0.6,
-            # covariance_thresh=1.5e-2,
-            covariance_thresh=0,
-            ),
+        type='OmniSceneHead',
         loss_lpips=dict(
             type='LossLpips',
             weight = 0.05,
@@ -182,7 +160,6 @@ train_pipeline = [
     dict(
         type='ImageAug3D', # todo 对图像数据进行缩放
         final_dim=input_size,
-        resize_lim=resize_lim,
         # is_train=True # todo 训练时，先只做缩放，其他均不考虑
 
         ),
@@ -225,7 +202,6 @@ test_pipeline = [
     # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
     dict(type='ImageAug3D',
          final_dim=input_size,
-         resize_lim=resize_lim,
          ),
     dict(
         type='LoadFeatMaps',
@@ -268,9 +244,6 @@ shared_dataset_cfg = dict(
 
 train_dataloader = dict(
     batch_size=1,
-    # num_workers=4,
-    # num_workers=1,
-    # persistent_workers=True,
     num_workers=0,
     persistent_workers=False,
     pin_memory=True,
@@ -283,9 +256,6 @@ train_dataloader = dict(
         **shared_dataset_cfg))
 val_dataloader = dict(
     batch_size=1,
-    # num_workers=4,
-    # num_workers=1,
-    # persistent_workers=True,
     num_workers=0,
     persistent_workers=False,
     pin_memory=True,
@@ -300,11 +270,7 @@ val_dataloader = dict(
 test_dataloader = val_dataloader
 
 # todo 指标评估器
-val_evaluator = dict(
-    type='OccMetric',
-    num_classes=18, # todo 类别： 17(Occ3D) + 1(1：天空类)
-    use_lidar_mask=False,
-    use_image_mask=True)
+val_evaluator = dict(type='ImgMetric')
 test_evaluator = val_evaluator
 
 

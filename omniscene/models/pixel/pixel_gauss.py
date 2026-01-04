@@ -11,7 +11,7 @@ from mmdet3d.registry import MODELS
 import warnings
 from einops import rearrange, einsum,repeat
 
-from ...geometry import sample_image_grid,get_world_rays
+from ...geometry import sample_image_grid, get_world_rays
 
 from ..encoder.common.gaussians import build_covariance
 from ..utils.types import Gaussians
@@ -33,7 +33,6 @@ class PixelGaussian(BaseModule):
                 #  scale_max = 1.5,
                  scale_min = 0.08,
                  scale_max = 0.64,
-                 num_classes = 17,
                  use_checkpoint=False,
                  **kwargs,
                  ):
@@ -124,12 +123,6 @@ class PixelGaussian(BaseModule):
         self.rot_act = lambda x: F.normalize(x, dim=-1)
         self.rgb_act = torch.sigmoid
 
-        # todo 预测高斯相应的语义
-        self.num_classes = num_classes
-        self.to_semantics = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(out_embed_dims[0], num_classes, 1),
-        )
     @property
     def device(self):
         return next(self.parameters()).device
@@ -223,14 +216,6 @@ class PixelGaussian(BaseModule):
         gaussians = self.to_gaussians(features) # todo: 高斯参数预测：(bs*v,128,h,w) -> (bs*v,14,h,w) 网络输出14维度向量
         gaussians = rearrange(gaussians, "(b v) (n c) h w -> b (v h w n) c",
                               b=bs, v=self.num_cams, n=1, c=self.gs_channels)
-        # todo-----------------------------#
-        # todo 语义预测：(bs*v,128,h,w) -> (bs*v,num_classes,h,w)
-        semantics = self.to_semantics(features) # todo semantics.shape: ((bs v),num_classes,112,192)
-        semantics = rearrange(semantics, "(b v) (n c) h w -> b (v h w n) c",
-                              b=bs, v=self.num_cams, n=1, c=self.num_classes)
-
-        semantics = F.softplus(semantics) # todo (b g 17) -> (b g 17)
-
 
         offsets = gaussians[..., :3] # offsets: 每个高斯点相对射线采样点的偏移
         opacities = self.opt_act(gaussians[..., 3:4]) # opactites：透明度 # todo Sigmoid操作
@@ -277,7 +262,6 @@ class PixelGaussian(BaseModule):
             means=means, # (b N 3)
             covariances=covariances, # (b N 3 3)
             harmonics=rgbs, # (b N 3)
-            semantics=semantics, # (b N 18)
             scales=scales, # (b N 3)
             rotations=rotations, # (b N 4)
             opacities=opacities.squeeze(-1), # (b N 1) -> (b N)

@@ -1,7 +1,7 @@
 import torch
 from gsplat import rasterization
 from math import isqrt
-from gausstrv2.models.utils import unbatched_forward
+from omniscene.models.utils import unbatched_forward
 
 
 @unbatched_forward

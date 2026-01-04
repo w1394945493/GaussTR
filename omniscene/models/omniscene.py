@@ -14,10 +14,7 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from gausstrv2.geometry import sample_image_grid,get_world_rays
-from vggt.models.vggt import VGGT
-from vggt.utils.pose_enc import pose_encoding_to_extri_intri
-
+from omniscene.geometry import sample_image_grid,get_world_rays
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -29,7 +26,7 @@ def cyan(text: str) -> str:
 # from mmdet3d.models.data_preprocessors import Det3DDataPreprocessor
 
 @MODELS.register_module()
-class GaussTRV2(BaseModel):
+class OmniScene(BaseModel):
 
     def __init__(self,
                 backbone,
@@ -41,7 +38,6 @@ class GaussTRV2(BaseModel):
                 d_sh,
                 ori_image_shape,
                 use_checkpoint,
-                patch_size = 14,
                  **kwargs):
         super().__init__(**kwargs)
 
@@ -200,9 +196,6 @@ class GaussTRV2(BaseModel):
                 intrinsics = data_samples['cam2img'][...,:3,:3], # data_samples['cam2img'][...,:3,:3].shape torch.Size([1, 6, 3, 3])
                 extrinsics = data_samples['cam2ego'],)  # data_samples['cam2ego'].shape torch.Size([1, 6, 4, 4])
         
-        
-        
-        
         '''
         import numpy as np
         # means3d = rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz",)[0]
@@ -210,11 +203,10 @@ class GaussTRV2(BaseModel):
         # 保存为 numpy
         np.save("means3d_gausstrv2_4.npy.npy", means3d.cpu().numpy())
         '''
-
         return self.gauss_head(
             pixel_gaussians = pixel_gaussians,
             inputs = inputs,
-            image_shape=(h,w),
+            image_shape=(h, w),
             near = near, far = far,
             mode=mode,
             **data_samples)

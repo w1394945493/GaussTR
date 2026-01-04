@@ -19,7 +19,7 @@ from mmdet3d.registry import MODELS,METRICS,HOOKS
 from mmengine.runner.runner import Runner
 from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 from gausstr import *
-from gausstrv2 import *
+from omniscene import *
 
 def main(args):
     cfg = Config.fromfile(args.py_config)

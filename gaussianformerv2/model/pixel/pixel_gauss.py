@@ -250,10 +250,11 @@ class PixelGaussian(BaseModule):
         means = origins + directions * depths_in[..., None] # todo: 射线起点 + 深度 × 方向 得到空间位置
         means = rearrange(means, "b r n c -> b (r n) c")
         means = means + offsets # todo：再加上网络预测的offsets偏移量 在三维空间下的偏移量
+        
         # todo ----------------------------#
         # todo 协方差计算(参照MonoSplat中的计算)
         covariances = build_covariance(scales, rotations) # todo shape: (b (v h w) 3 3)
-        covariances = rearrange(covariances,"b (v h w) i j -> b v h w i j",v=self.num_cams,h=h,w=w)
+        covariances = rearrange(covariances, "b (v h w) i j -> b v h w i j", v=self.num_cams, h=h, w=w)
         c2w_rotations = extrinsics[..., :3, :3] # todo 相机外参cam2ego (b v 3 3)
         c2w_rotations = rearrange(c2w_rotations,"b v i j -> b v () () i j")
         covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # todo 转换到自车坐标系下
@@ -262,10 +263,6 @@ class PixelGaussian(BaseModule):
 
         # todo-----------------------------#
         # todo 6.整合输出
-        # gaussians = torch.cat([means, rgbs, opacities, rotations, scales], dim=-1) # todo：gaussians：每个点的几何与外观属性
-        # features = rearrange(features, "(b v) c h w -> b (v h w) c", b=bs, v=self.num_cams) # todo：features：对应点的高维语义特征
-        # features = features.unsqueeze(2) # b v*h*w n c
-        # features = rearrange(features, "b r n c -> b (r n) c")
         pixel_gaussians = Gaussians(
             means=means, # (b N 3)
             covariances=covariances, # (b N 3 3)

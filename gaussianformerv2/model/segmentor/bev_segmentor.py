@@ -47,7 +47,6 @@ class BEVSegmentor(CustomBaseSegmentor):
         pixel_gs = None,
         loss_lpips = None,
         
-        
         freeze_img_backbone=False,
         freeze_img_neck=False,
         freeze_lifter=False,
@@ -150,11 +149,13 @@ class BEVSegmentor(CustomBaseSegmentor):
                 points = None,
                 mode = 'loss',
                 **kwargs,):
+        
         results = {
             'imgs': imgs, # (b v 3 h w)
             'metas': metas,
             'points': points
         }
+        
         results.update(kwargs)
         outs = self.extract_img_feat(**results) # todo 提取多尺度图像特征图outs:{'ms_img_feats'}: (b v c h w)  1/8 1/16 1/32 1/64 4个尺度的特征图        
         results.update(outs)
@@ -183,16 +184,11 @@ class BEVSegmentor(CustomBaseSegmentor):
         rotations = pixel_gaussians.rotations
         covariances = pixel_gaussians.covariances
                 
-
-
-        
         rgb_gt = metas['img_gt']
         depth = metas['depth']
         
         h, w = rgb_gt.shape[-2:]        
 
-
-        
         colors, rendered_depth = rasterize_gaussians(
             extrinsics=extrinsics,
             intrinsics=intrinsics,
@@ -231,7 +227,7 @@ class BEVSegmentor(CustomBaseSegmentor):
                 }]
             return outputs
 
-        # loss ----------------------------------------------#
+        # todo loss ----------------------------------------------#
         losses = {}
         
         

@@ -31,7 +31,8 @@ test_pipeline = [
 
 # input_shape = (1600, 864)
 # input_shape = (800, 448)
-input_shape = (1600, 896)
+input_shape = (200,112)
+# input_shape = (1600, 896)
 data_aug_conf = {
     # "resize_lim": (1.0, 1.0),
     "final_dim": input_shape[::-1], # todo 对图像进行缩放
@@ -51,7 +52,8 @@ train_dataset_config = dict(
     imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
-    phase='train',
+    # phase='train',
+    phase='val',
 )
 
 val_dataset_config = dict(
@@ -79,7 +81,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    num_workers=4,
+    # num_workers=4,
+    num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,

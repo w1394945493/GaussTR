@@ -200,6 +200,7 @@ class NuScenesSurroundOccDataset(Dataset):
             # todo 缩放
             # resize = np.random.uniform(*self.data_aug_conf["resize_lim"])
             # resize_dims = (int(W * resize), int(H * resize))
+            
             resize = max(fH / H, fW / W) # todo 取较大的缩放比例：保证newH >= fH, newW >= fW
             resize_dims = (int(W * resize), int(H * resize)) # todo 缩放后的尺寸
                    

@@ -159,7 +159,7 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
 export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test \
 
 
@@ -202,3 +202,9 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
+
+export CUDA_VISIBLE_DEVICES=0
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train/epoch_17.pth \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \

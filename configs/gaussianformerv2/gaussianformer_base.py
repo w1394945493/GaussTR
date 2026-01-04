@@ -9,6 +9,16 @@ _base_ = [
 
 custom_imports = dict(imports=['gaussianformerv2']) # todo
 
+# ========= custom hooks ===============
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/outputs/vis3'
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir,
+         save_img=True,
+         save_depth=True,         
+        ),
+]  #
+
 # ========= model config ===============
 embed_dims = 128
 num_decoder = 4
@@ -41,7 +51,51 @@ model = dict(
     loss_lpips=dict(
         type='LossLpips',
         weight = 0.05,
-    ),    
+    ),   
+    
+    # img_backbone=dict(
+    #     _delete_=True,
+    #     type='mmdet.ResNet',
+    #     depth=101,
+    #     num_stages=4,
+    #     out_indices=(0, 1, 2, 3),
+    #     frozen_stages=1, # todo 冻结：
+    #     norm_cfg=dict(type='BN2d', requires_grad=False),
+    #     norm_eval=True, # todo BN使用eval模式(不更新均值方差)
+    #     style='caffe',
+    #     with_cp = True,
+    #     dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
+    #     stage_with_dcn=(False, False, True, True),),
+    # img_neck=dict(
+    #     type='mmdet.FPN',
+    #     start_level=1), # todo 主干网络
+    
+    img_backbone=dict(
+        type='mmdet.ResNet',
+        depth=50,
+        in_channels=3,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=-1,
+        norm_cfg=dict(type='BN', requires_grad=False),
+        norm_eval=True,
+        style='pytorch',
+        init_cfg=dict(
+            type='Pretrained',
+            # checkpoint='pretrained/dino_resnet50_pretrain.pth',
+            checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
+            prefix=None)),
+    
+    
+
+    img_neck=dict(
+        type='mmdet.FPN',
+        in_channels=[256, 512, 1024, 2048],
+        out_channels=_dim_,
+        start_level=0,
+        add_extra_convs='on_input',
+        num_outs=4),    
+    
     pixel_gs=dict(
         type="PixelGaussian",
         use_checkpoint=use_checkpoint,
@@ -75,23 +129,7 @@ model = dict(
 
         ),
     
-    img_backbone=dict(
-        _delete_=True,
-        type='mmdet.ResNet',
-        depth=101,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=1, # todo 冻结：
-        norm_cfg=dict(type='BN2d', requires_grad=False),
-        norm_eval=True, # todo BN使用eval模式(不更新均值方差)
-        style='caffe',
-        with_cp = True,
-        dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
-        stage_with_dcn=(False, False, True, True),),
 
-    img_neck=dict(
-        type='mmdet.FPN',
-        start_level=1), # todo 主干网络
 
     lifter=dict(
         type='GaussianLifter',
@@ -221,55 +259,34 @@ train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=max_epochs, val_interval
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
+# Optimizer
+optim_wrapper = dict(
+    # type='AmpOptimWrapper',
+    type='OptimWrapper',   # 避免混合精度(AMP)
+    optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
+    clip_grad=dict(max_norm=35, norm_type=2))
+
+param_scheduler = [
+    dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
+    dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+]
+
+# Optimizer
 # optim_wrapper = dict(
-#     type='AmpOptimWrapper',
-#     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
+#     type='OptimWrapper',   # 避免混合精度(AMP)
+#     optimizer = dict(type="AdamW", lr=base_lr, weight_decay=0.01,),
+#     paramwise_cfg=dict(custom_keys={'img_backbone': dict(lr_mult=0.1)}),
 #     clip_grad=dict(max_norm=35, norm_type=2))
 
 # param_scheduler = [
-#     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
-#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
-# ]
-
-# Optimizer
-optim_wrapper = dict(
-    type='OptimWrapper',   # 避免混合精度(AMP)
-    optimizer = dict(type="AdamW", lr=base_lr, weight_decay=0.01,),
-    paramwise_cfg=dict(custom_keys={'img_backbone': dict(lr_mult=0.1)}),
-    clip_grad=dict(max_norm=35, norm_type=2))
-
-# param_scheduler = [
-#     dict(type='LinearLR', start_factor=1e-6 / base_lr, begin=0, end=500, by_epoch=False),
-#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
-# ]
-
-# param_scheduler = [
 #     dict(
-#         # type='CosineLRScheduler',
-#         type = 'LinearLR',
-#         start_factor=1e-6 / base_lr,
-#         begin=0,
-#         end=warmup_iters,
+#         type='CosineLR',
+#         lr_min = base_lr * min_lr_ratio,
+#         warmup_t = 500,
+#         warmup_lr_init = 1e-6,
 #         by_epoch=False,
 #     ),
-#     dict(
-#         type='CosineAnnealingLR',
-#         eta_min=base_lr * min_lr_ratio,
-#         begin=warmup_iters,
-#         # end=max_epochs * iters_per_epoch, # todo 无需定义，by_epoch = False/True，会自动补该参数为max_iters/max_epochs
-#         by_epoch=False,
-#     )
 # ]
-
-param_scheduler = [
-    dict(
-        type='CosineLR',
-        lr_min = base_lr * min_lr_ratio,
-        warmup_t = 500,
-        warmup_lr_init = 1e-6,
-        by_epoch=False,
-    ),
-]
 
 default_hooks = dict(
     logger=dict(type='LoggerHook',

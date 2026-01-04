@@ -91,15 +91,15 @@ class PixelGaussian(BaseModule):
         self.far = far
         self.num_surfaces = 1
 
-        # self.upsampler = nn.Sequential(
-        #     nn.Conv2d(in_embed_dim, out_embed_dims[0], 3, 1, 1),
-        #     nn.Upsample(
-        #         scale_factor=4,
-        #         mode="bilinear",
-        #         align_corners=True,
-        #     ),
-        #     nn.GELU(),
-        # )
+        self.upsampler = nn.Sequential(
+            nn.Conv2d(in_embed_dim, out_embed_dims[0], 3, 1, 1),
+            nn.Upsample(
+                scale_factor=4,
+                mode="bilinear",
+                align_corners=True,
+            ),
+            nn.GELU(),
+        )
 
         gs_channels = 3 + 1 + 3 + 4 + 3 # todo offset, opacity, scale, rotation, rgb
         self.gs_channels = gs_channels
@@ -145,24 +145,19 @@ class PixelGaussian(BaseModule):
     def forward(self,
                 img_feats,
                 depths_in,
-                cam2img,
-                img_aug_mat,
-                cam2lidar=None,
-                cam2ego=None,
+                intrinsics,
+                extrinsics,
                 status="train"):
         """Forward training function."""
-        h,w = img_feats.shape[-2:]
-        bs, n = cam2img.shape[:2]
-        device =cam2img.device
+        h,w = depths_in.shape[-2:]
+        bs, n = intrinsics.shape[:2]
+        device = intrinsics.device
         # todo-----------------------------#
-        # todo 0. 计算射线原点和方向        
-        intrinsics = (img_aug_mat @ cam2img)[...,:3,:3]
-        extrinsics = cam2lidar
-        
+        # todo 0. 计算射线原点和方向                
         extrinsics_ = rearrange(extrinsics, "b v i j -> b v () () () i j")
         intrinsics_ = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
                 
-        xy_ray, _ = sample_image_grid((h, w), device,normal=False)
+        xy_ray, _ = sample_image_grid((h, w), device, normal=False)
         coordinates = repeat(xy_ray, "h w xy -> b v (h w) () () xy",b=bs,v=n)
         origins, directions = get_world_rays(coordinates, extrinsics_, intrinsics_) # (b v (h w) 1 1 3) (b v (h w) 1 1 3)
         origins = rearrange(origins,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
@@ -170,9 +165,9 @@ class PixelGaussian(BaseModule):
         pluckers = self.plucker_embedder(origins,directions)          
         
         # todo-----------------------------#
-        # todo 1. 特征融合与嵌入
+        # todo 1. 特征编码
         # upsample 4x downsampled img features to original size
-        # img_feats = self.upsampler(img_feats) # todo (bv c h/4 w/4) -> (bv c h w)
+        img_feats = self.upsampler(img_feats) # todo (bv c h/4 w/4) -> (bv c h w)
         img_feats = rearrange(img_feats, "(b v) c h w -> b v h w c", b=bs, v=self.num_cams) # todo (b v h w c)
         pluckers = rearrange(pluckers, "b v c h w -> b v h w c") # Pluckers: 射线的Plücker 坐标嵌入，编码几何方向
         plucker_embeds = self.plucker_to_embed(pluckers) # todo 全连接：编码 6 -> 128
@@ -280,5 +275,8 @@ class PixelGaussian(BaseModule):
             opacities=opacities.squeeze(-1), # (b N 1) -> (b N)
 
         )
+        if torch.isnan(means).any():
+            a=1
+        
         return pixel_gaussians
 

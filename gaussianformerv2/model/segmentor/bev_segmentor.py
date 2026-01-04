@@ -43,8 +43,11 @@ nusc_class_frequencies = np.array([
 class BEVSegmentor(CustomBaseSegmentor):
     def __init__(
         self,
+        
         pixel_gs = None,
         loss_lpips = None,
+        
+        
         freeze_img_backbone=False,
         freeze_img_neck=False,
         freeze_lifter=False,
@@ -104,6 +107,8 @@ class BEVSegmentor(CustomBaseSegmentor):
         img_feats = []
         for idx in self.img_backbone_out_indices:
             img_feats.append(img_feats_backbone[idx])
+        
+        
         img_feats = self.img_neck(img_feats) # todo FPN
         if isinstance(img_feats, dict):
             secondfpn_out = img_feats["secondfpn_out"][0]
@@ -153,15 +158,23 @@ class BEVSegmentor(CustomBaseSegmentor):
         results.update(kwargs)
         outs = self.extract_img_feat(**results) # todo 提取多尺度图像特征图outs:{'ms_img_feats'}: (b v c h w)  1/8 1/16 1/32 1/64 4个尺度的特征图        
         results.update(outs)
+
+        cam2img = metas['cam2img'] # (b v 4 4)
+        img_aug_mat = metas['img_aug_mat'] # (b v 4 4)
+        
+        intrinsics =  (img_aug_mat @ cam2img)[...,:3,:3] # (b v 3 3)
+        # extrinsics = metas['cam2lidar'] # (b v 4 4)        
+        extrinsics = metas['cam2ego']
+        
         
         # todo --------------------------#
         # todo 使用第1个特征图进行视图渲染
         pixel_gaussians = self.pixel_gs(
                 img_feats=rearrange(outs['ms_img_feats'][0], "b v c h w -> (b v) c h w"),                 
                 depths_in=metas['depth'], # (b v h w)
-                cam2img = metas['cam2img'],
-                img_aug_mat = metas['img_aug_mat'],
-                cam2lidar = metas['cam2lidar'],)  
+                intrinsics = intrinsics,
+                extrinsics = extrinsics,
+                )  
 
         means3d = pixel_gaussians.means
         harmonics = pixel_gaussians.harmonics # (b n c d_sh) | (b n c), c=rgb
@@ -170,18 +183,15 @@ class BEVSegmentor(CustomBaseSegmentor):
         rotations = pixel_gaussians.rotations
         covariances = pixel_gaussians.covariances
                 
-        cam2img = metas['cam2img'] # (b v 4 4)
-        img_aug_mat = metas['img_aug_mat'] # (b v 4 4)
-        cam2lidar = metas['cam2lidar'] # (b v 4 4)
-        bs, n = cam2img.shape[:2] 
+
+
         
         rgb_gt = metas['img_gt']
         depth = metas['depth']
         
         h, w = rgb_gt.shape[-2:]        
 
-        intrinsics =  (img_aug_mat @ cam2img)[...,:3,:3] # (b v 3 3)
-        extrinsics = cam2lidar # (b v 4 4)
+
         
         colors, rendered_depth = rasterize_gaussians(
             extrinsics=extrinsics,
@@ -201,41 +211,43 @@ class BEVSegmentor(CustomBaseSegmentor):
             render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
             channel_chunk=32)               
         
-        # todo --------------------------#
-        # todo occ 占用预测相关工作
-        outs = self.lifter(**results)
-        results.update(outs)
-        outs = self.encoder(**results)
-        results.update(outs)
-        outs = self.head(**results)
-        results.update(outs)
+        # # todo --------------------------#
+        # # todo occ 占用预测相关工作
+        # outs = self.lifter(**results)
+        # results.update(outs)
+        # outs = self.encoder(**results)
+        # results.update(outs)
+        # outs = self.head(**results)
+        # results.update(outs)
+        
         if mode == 'predict':
             outputs = [{
-                    'occ_pred': results['final_occ'], # (b (h w d))
-                    'occ_gt': results['sampled_label'], # (b (h w d))
-                    'occ_mask': results['occ_mask'].flatten(1), # (b (h w d))
+                    # 'occ_pred': results['final_occ'], # (b (h w d))
+                    # 'occ_gt': results['sampled_label'], # (b (h w d))
+                    # 'occ_mask': results['occ_mask'].flatten(1), # (b (h w d))
+                    
                     'img_pred': colors,
-                    'img_gt': rgb_gt / 255.,
+                    'depth_pred': rendered_depth,
                 }]
             return outputs
 
         # loss ----------------------------------------------#
-        occ_mask = results['occ_mask'].flatten(1) # (b 640000)
-        semantics = results['pred_occ'][0] # (b 18 640000)
-        sampled_label = results['sampled_label']
-
-        sampled_label = sampled_label[occ_mask][None]
-
-
         losses = {}
+        
+        
+        # occ_mask = results['occ_mask'].flatten(1) # (b 640000)
+        # semantics = results['pred_occ'][0] # (b 18 640000)
+        # sampled_label = results['sampled_label']
 
-        semantics = semantics.transpose(1, 2)[occ_mask][None].transpose(1, 2)
-        losses['loss_voxel_ce'] = 10.0 * \
-            CE_ssc_loss(semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
+        # sampled_label = sampled_label[occ_mask][None]
 
-        lovasz_input = torch.softmax(semantics, dim=1) # todo (b num_classes g)
-        losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
-            lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
+        # semantics = semantics.transpose(1, 2)[occ_mask][None].transpose(1, 2)
+        # losses['loss_voxel_ce'] = 10.0 * \
+        #     CE_ssc_loss(semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
+
+        # lovasz_input = torch.softmax(semantics, dim=1) # todo (b num_classes g)
+        # losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
+        #     lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
 
         rendered_depth = rendered_depth.flatten(0,1)
         depth = depth.flatten(0,1)

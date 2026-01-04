@@ -174,6 +174,7 @@ class LoadFeatMaps(ResizeCropFlipImage):
                 os.path.join(self.data_root,
                              filename.split('/')[-1].split('.')[0] + '.npy'))
             feat = Image.fromarray(feat)
+            
             feat, ida_mat = self._img_transform(
                 feat,
                 resize=resize,
@@ -184,13 +185,17 @@ class LoadFeatMaps(ResizeCropFlipImage):
             )
             img = Image.fromarray(np.uint8(results['img'][i]))
             
-            if self.final_dims:
+            
+            if self.final_dims: 
+                
                 cur_w, cur_h = feat.size
                 s = torch.eye(3)
                 s[0] *= fw / cur_w
                 s[1] *= fh / cur_h
+                
                 ida_mat = s @ ida_mat
                 feat = feat.resize(self.final_dims[::-1])
+                
                 img = img.resize(self.final_dims[::-1])
             
             
@@ -201,16 +206,16 @@ class LoadFeatMaps(ResizeCropFlipImage):
             img_gt.append(np.array(img).astype(np.float32))  
             img_aug_mat.append(mat)
                   
-        
         results[self.key] = torch.from_numpy(
             np.ascontiguousarray(
                 np.stack(feats,axis=0)))
     
+        # todo 注意将通道由bgr调整为rgb
         results["img_gt"] = torch.from_numpy(
             np.ascontiguousarray(
                 np.stack(
-                    [img.transpose(2, 0, 1) for img in img_gt],axis=0))) 
-         
+                    [img[...,::-1].transpose(2, 0, 1) for img in img_gt],axis=0))) # (bgr) -> (rgb) (h w 3) -> (3 h w)
+         # todo 计算了输入的增强矩阵，
         results["img_aug_mat"] = np.array(img_aug_mat,dtype=np.float32)
         
         return results
@@ -246,6 +251,7 @@ class NormalizeMultiviewImage(object):
             dict: Normalized results, 'img_norm_cfg' key is added into
                 result dict.
         """
+        # todo 先把BGR -> RGB 
         results["img"] = [
             mmcv.imnormalize(img, self.mean, self.std, self.to_rgb)
             for img in results["img"]

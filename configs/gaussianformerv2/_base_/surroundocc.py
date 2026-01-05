@@ -8,34 +8,33 @@ dataset_type = 'NuScenesSurroundOccDataset'
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
 train_pipeline = [
-    dict(type="CustomLoadMultiViewImageFromFiles", to_float32=True),
+    dict(type="BEVLoadMultiViewImageFromFiles", to_float32=True),
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
-    dict(type='LoadFeatMaps',data_root=depth_path,key='depth'), #
-    dict(type="PhotoMetricDistortionMultiViewImage"), # todo
+    dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
+    # dict(type="PhotoMetricDistortionMultiViewImage"), # todo
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
 ]
 
 test_pipeline = [
-    dict(type="CustomLoadMultiViewImageFromFiles", to_float32=True),
+    dict(type="BEVLoadMultiViewImageFromFiles", to_float32=True),
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
     # dict(type="PhotoMetricDistortionMultiViewImage"),
-    dict(type='LoadFeatMaps',data_root=depth_path,key='depth'), #
+    dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
 ]
 
-# input_shape = (1600, 864)
-# input_shape = (800, 448)
-input_shape = (200,112)
-# input_shape = (1600, 896)
+
+
+final_dim = (112,200)
+
 data_aug_conf = {
-    # "resize_lim": (1.0, 1.0),
-    "final_dim": input_shape[::-1], # todo 对图像进行缩放
+    "final_dim": final_dim,
     "bot_pct_lim": (0.0, 0.0),
     "rot_lim": (0.0, 0.0),
     "H": 900,
@@ -48,8 +47,8 @@ train_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
     # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
-    imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
-    # imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
+    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
     # phase='train',

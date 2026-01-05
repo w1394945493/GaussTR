@@ -272,8 +272,6 @@ class PixelGaussian(BaseModule):
             opacities=opacities.squeeze(-1), # (b N 1) -> (b N)
 
         )
-        if torch.isnan(means).any():
-            a=1
         
         return pixel_gaussians
 

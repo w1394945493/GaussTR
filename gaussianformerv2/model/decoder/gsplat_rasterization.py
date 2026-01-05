@@ -15,8 +15,8 @@ def rasterize_gaussians(
     covariances,
     opacities,
     colors, # 颜色
-    use_sh = True,
-    normalize = True,
+    use_sh = False,
+    denormalize = False,
     **kwargs):
 
     # cam2world to world2cam
@@ -33,7 +33,8 @@ def rasterize_gaussians(
     H,W = image_shape
     
     cam2imgs = intrinsics.clone()    
-    if normalize:
+    
+    if denormalize:
         # Denormalize the intrinsics into standred format
         cam2imgs[:,0] = cam2imgs[:,0] * W
         cam2imgs[:,1] = cam2imgs[:,1] * H

@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .utils import get_img2global, get_lidar2global
+# from utils import get_img2global, get_lidar2global
 
 @DATASETS.register_module()
 class NuScenesSurroundOccDataset(Dataset):
@@ -45,9 +46,8 @@ class NuScenesSurroundOccDataset(Dataset):
                     "cam2ego",
                     "cam2lidar",
                     
-                    
-                    "depth", # todo (wys 12.30) 深度图
                     "img_gt",
+                    "depth", # todo (wys 12.30) 深度图
                     "img_aug_mat",
                     
                     "scene_token",
@@ -134,7 +134,7 @@ class NuScenesSurroundOccDataset(Dataset):
         ego2global[:3, 3] = np.asarray(info['data']['LIDAR_TOP']['pose']['translation']).T
 
         for cam_type in self.sensor_types:
-            image_paths.append(os.path.join(self.data_path, info['data'][cam_type]['filename']))
+            
 
             img2global = get_img2global(info['data'][cam_type]['calib'], info['data'][cam_type]['pose'])
             lidar2img = np.linalg.inv(img2global) @ lidar2global
@@ -144,30 +144,42 @@ class NuScenesSurroundOccDataset(Dataset):
 
             img2lidar = np.linalg.inv(lidar2global) @ img2global
             
-            # todo --------------------------------------------------#
-            # todo (wys 12.30) 相机内参cam2img: 相对于原始尺寸(900x1600)的 
+
             intrinsic = info['data'][cam_type]['calib']['camera_intrinsic']
             viewpad = np.eye(4)
-            viewpad[:3, :3] = intrinsic
-            cam2imgs.append(viewpad)
+            viewpad[:3, :3] = np.array(intrinsic)
+            
+            cam_position = img2lidar @ viewpad @ np.array([0., 0., 0., 1.]).reshape([4, 1])
+            cam_positions.append(cam_position.flatten()[:3])
+            focal_position = img2lidar @ viewpad @ np.array([0., 0., f, 1.]).reshape([4, 1])
+            focal_positions.append(focal_position.flatten()[:3])
             
             # todo --------------------------------------------------#
-            # todo (wys 12.30) 相机外参cam2ego
+            # todo (wys 12.30) 输入图像路径            
+            image_paths.append(os.path.join(self.data_path, info['data'][cam_type]['filename']))
+            # todo --------------------------------------------------#
+            # todo (wys 12.30) 输入图像相机内参cam2img: 相对于原始尺寸(900x1600)的 
+            cam2imgs.append(viewpad)
+            # todo --------------------------------------------------#
+            # todo (wys 12.30) 输入图像相机外参cam2ego
             cam2ego = np.eye(4)
             cam2ego[:3, :3] = Quaternion(info['data'][cam_type]['calib']['rotation']).rotation_matrix
             cam2ego[:3, 3] = np.asarray(info['data'][cam_type]['calib']['translation']).T 
             cam2egos.append(cam2ego)
             
             # todo --------------------------------------------------#
-            # todo (wys 12.30) 相机外参cam2lidar      
+            # todo (wys 12.30) 输入图像相机外参cam2lidar      
             cam2lidar = ego2lidar @ cam2ego
             cam2lidars.append(cam2lidar)
             
+            # todo --------------------------------------------------#
+            # todo (wys 12.30) 输出图像 
+            # output_image_paths = image_paths.copy()
+            # output_cam2imgs = cam2imgs.copy()
+            # output_cam2egos = output_cam2egos.copy()
+            # output_cam2lidars = output_cam2lidars.copy()
             
-            cam_position = img2lidar @ viewpad @ np.array([0., 0., 0., 1.]).reshape([4, 1])
-            cam_positions.append(cam_position.flatten()[:3])
-            focal_position = img2lidar @ viewpad @ np.array([0., 0., f, 1.]).reshape([4, 1])
-            focal_positions.append(focal_position.flatten()[:3])
+            
 
         input_dict =dict(
             scene_token = info['scene_token'],
@@ -183,9 +195,15 @@ class NuScenesSurroundOccDataset(Dataset):
             cam_positions=np.asarray(cam_positions), # todo 
             focal_positions=np.asarray(focal_positions),
             
+            
             cam2img = np.array(cam2imgs, dtype=np.float32), # todo 内参
             cam2ego = np.array(cam2egos, dtype=np.float32), # todo 外参
             cam2lidar = np.array(cam2lidars, dtype=np.float32), # todo 外参
+            
+            # output_img_files = output_image_paths,
+            # output_cam2img = np.array(output_cam2imgs, dtype=np.float32), # todo 内参
+            # output_cam2ego = np.array(output_cam2egos, dtype=np.float32), # todo 外参
+            # output_cam2lidar = np.array(output_cam2lidars, dtype=np.float32), # todo 外参            
             
             
             ) # todo 
@@ -194,46 +212,28 @@ class NuScenesSurroundOccDataset(Dataset):
 
     def _sample_augmentation(self):
         H, W = self.data_aug_conf["H"], self.data_aug_conf["W"] # todo 原图大小
-        fH, fW = self.data_aug_conf["final_dim"]  # todo 目标大小(网络期望输入)
-        if not self.test_mode:
-            # todo 训练时：确保能裁剪出fH x fW, 对尺度和裁剪位置做有约束的随机采样
-            # todo 缩放
-            # resize = np.random.uniform(*self.data_aug_conf["resize_lim"])
-            # resize_dims = (int(W * resize), int(H * resize))
-            
-            resize = max(fH / H, fW / W) # todo 取较大的缩放比例：保证newH >= fH, newW >= fW
-            resize_dims = (int(W * resize), int(H * resize)) # todo 缩放后的尺寸
-                   
-            newW, newH = resize_dims
-            crop_h = (
-                int(
-                    (1 - np.random.uniform(*self.data_aug_conf["bot_pct_lim"]))
-                    * newH
-                )
-                - fH
-            )
-            crop_w = int(np.random.uniform(0, max(0, newW - fW)))
-            crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
-            # todo 随机翻转
-            flip = False
-            if self.data_aug_conf["rand_flip"] and np.random.choice([0, 1]):
-                flip = True
-            # todo 旋转
-            rotate = np.random.uniform(*self.data_aug_conf["rot_lim"])
-        else:
-            resize = max(fH / H, fW / W) # todo 取较大的缩放比例：保证newH >= fH, newW >= fW
-            resize_dims = (int(W * resize), int(H * resize)) # todo 缩放后的尺寸
-            
-            newW, newH = resize_dims
-            crop_h = (
-                int((1 - np.mean(self.data_aug_conf["bot_pct_lim"])) * newH)
-                - fH
-            ) # todo 上下方向偏下裁剪： 裁剪区域的下边界位置：偏向图像底部，多保留路面，车辆
-            crop_w = int(max(0, newW - fW) / 2) # todo 左右居中裁剪：
-            crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
-            flip = False
-            rotate = 0
-        return resize, resize_dims, crop, flip, rotate
+        fH, fW = self.data_aug_conf["final_dim"]  # todo 网络输入尺寸
+        
+        resize = [fW/W, fH/H]
+        resize_dims = (fW, fH) # todo fW, fH
+        newW, newH = resize_dims        
+        
+        crop_h = int((1 - np.mean(self.data_aug_conf["bot_pct_lim"])) * newH) - fH
+        
+        crop_w = int(max(0, newW - fW) / 2)
+        crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
+        
+        flip = False
+        rotate = 0    
+        
+        return resize,  resize_dims,  crop,  flip,  rotate
+
+
+
+
+
+
+
 
 if __name__=='__main__':
     from transform_3d import *
@@ -252,23 +252,21 @@ if __name__=='__main__':
     )
 
     pipeline = [
-        dict(type="CustomLoadMultiViewImageFromFiles", to_float32=True),
+        dict(type="BEVLoadMultiViewImageFromFiles", to_float32=True),
         dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
         dict(type="ResizeCropFlipImage"),
-        dict(type='LoadFeatMaps',data_root=depth_path,key='depth'), #
-        dict(type="PhotoMetricDistortionMultiViewImage"), # todo
+        dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), 
         dict(type="NormalizeMultiviewImage", **img_norm_cfg),
         dict(type="DefaultFormatBundle"),
         dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
     ]
 
-    input_shape = (1600, 896)
+    final_dim = (112,200)
     data_aug_conf = {
-        # "resize_lim": (1.0, 1.0),
-        "final_dim": input_shape[::-1], # todo 对图像进行缩放
+        "final_dim": final_dim, # todo 对图像进行缩放
         "bot_pct_lim": (0.0, 0.0),
         "rot_lim": (0.0, 0.0),
-        "H": 900,
+        "H": 900, 
         "W": 1600,
         "rand_flip": True, # todo 训练时做数据增强
     }

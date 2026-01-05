@@ -58,25 +58,25 @@ class OccMetric(BaseMetric):
 
     def process(self, data_batch, data_samples):
 
-        # preds = data_samples[0]['occ_pred'] # (b,(h w d))
-        # gt_occ = data_samples[0]['occ_gt']
-        # occ_mask = data_samples[0]['occ_mask']
-        # for idx in range(preds.size(0)):
-        #     outputs = preds[idx]
-        #     targets = gt_occ[idx]
-        #     mask = occ_mask[idx]
-        #     outputs = outputs[mask]
-        #     targets = targets[mask]
-        #     for i, c in enumerate(self.class_indices):
-        #         self.total_seen[i] += torch.sum(targets == c).item() # todo GT中某类的voxel数(TP+FN)
-        #         self.total_correct[i] += torch.sum((targets == c)
-        #                                         & (outputs == c)).item() # todo 预测对的voxel数(TP)
-        #         self.total_positive[i] += torch.sum(outputs == c).item() # todo 预测为某类的voxel数(TP+FP)
-        #     # todo 整体occupancy(不管语义)
-        #     self.total_seen[-1] += torch.sum(targets != self.empty_label).item()  # todo GT中非空类的voxel数(TP+FN)
-        #     self.total_correct[-1] += torch.sum((targets != self.empty_label)
-        #                                         & (outputs != self.empty_label)).item() # todo 预测对的非空数(TP)
-        #     self.total_positive[-1] += torch.sum(outputs != self.empty_label).item() # todo 预测为非空类的数(TP+FP)
+        preds = data_samples[0]['occ_pred'] # (b,(h w d))
+        gt_occ = data_samples[0]['occ_gt']
+        occ_mask = data_samples[0]['occ_mask']
+        for idx in range(preds.size(0)):
+            outputs = preds[idx]
+            targets = gt_occ[idx]
+            mask = occ_mask[idx]
+            outputs = outputs[mask]
+            targets = targets[mask]
+            for i, c in enumerate(self.class_indices):
+                self.total_seen[i] += torch.sum(targets == c).item() # todo GT中某类的voxel数(TP+FN)
+                self.total_correct[i] += torch.sum((targets == c)
+                                                & (outputs == c)).item() # todo 预测对的voxel数(TP)
+                self.total_positive[i] += torch.sum(outputs == c).item() # todo 预测为某类的voxel数(TP+FP)
+            # todo 整体occupancy(不管语义)
+            self.total_seen[-1] += torch.sum(targets != self.empty_label).item()  # todo GT中非空类的voxel数(TP+FN)
+            self.total_correct[-1] += torch.sum((targets != self.empty_label)
+                                                & (outputs != self.empty_label)).item() # todo 预测对的非空数(TP)
+            self.total_positive[-1] += torch.sum(outputs != self.empty_label).item() # todo 预测为非空类的数(TP+FP)
         
         # todo -----------------------------#
         # todo 视图渲染评指标
@@ -116,45 +116,45 @@ class OccMetric(BaseMetric):
 
         ret_dict = dict()
         
-        # # todo -----------------------------#
-        # # todo occ占用预测评估结果打印
-        # total_seen = self.total_seen.cpu().numpy()
-        # total_correct = self.total_correct.cpu().numpy()
-        # total_positive = self.total_positive.cpu().numpy()
-        # ious = []
-        # header = ['classes']
-        # for i in range(len(self.label_str)):
-        #     header.append(self.label_str[i])
-        # header.extend(['miou', 'iou'])
-        # table_columns = [['results']]
+        # todo -----------------------------#
+        # todo occ占用预测评估结果打印
+        total_seen = self.total_seen.cpu().numpy()
+        total_correct = self.total_correct.cpu().numpy()
+        total_positive = self.total_positive.cpu().numpy()
+        ious = []
+        header = ['classes']
+        for i in range(len(self.label_str)):
+            header.append(self.label_str[i])
+        header.extend(['miou', 'iou'])
+        table_columns = [['results']]
 
-        # for i in range(self.num_classes): # todo 只计算语义类，不包括非空类
-        #     if self.total_seen[i] == 0: # todo iou & recall
-        #         cur_iou = np.nan
-        #     else:
-        #         cur_iou = total_correct[i] / (total_seen[i] + total_positive[i] - total_correct[i]) # todo iou = TP / (TP + FN + FP)
+        for i in range(self.num_classes): # todo 只计算语义类，不包括非空类
+            if self.total_seen[i] == 0: # todo iou & recall
+                cur_iou = np.nan
+            else:
+                cur_iou = total_correct[i] / (total_seen[i] + total_positive[i] - total_correct[i]) # todo iou = TP / (TP + FN + FP)
 
-        #     ious.append(cur_iou)
-        #     table_columns.append([f'{cur_iou:.4f}'])
+            ious.append(cur_iou)
+            table_columns.append([f'{cur_iou:.4f}'])
 
-        #     ret_dict[self.label_str[i]] = cur_iou * 100
+            ret_dict[self.label_str[i]] = cur_iou * 100
 
-        # miou = np.nanmean(ious)
-        # iou = total_correct[-1] / (total_seen[-1] + total_positive[-1] - total_correct[-1])
+        miou = np.nanmean(ious)
+        iou = total_correct[-1] / (total_seen[-1] + total_positive[-1] - total_correct[-1])
 
-        # table_columns.append([f'{miou:.4f}'])
-        # table_columns.append([f"{iou:.4f}"])
+        table_columns.append([f'{miou:.4f}'])
+        table_columns.append([f"{iou:.4f}"])
 
-        # table_data = [header]
-        # table_rows = list(zip(*table_columns))
-        # table_data += table_rows
-        # table = AsciiTable(table_data)
-        # table.inner_footing_row_border = True
-        # print_log('\n' + table.table, logger=logger)
+        table_data = [header]
+        table_rows = list(zip(*table_columns))
+        table_data += table_rows
+        table = AsciiTable(table_data)
+        table.inner_footing_row_border = True
+        print_log('\n' + table.table, logger=logger)
 
-        # ret_dict['miou'] = miou * 100
-        # ret_dict['iou'] = iou * 100
-        # self.reset()
+        ret_dict['miou'] = miou * 100
+        ret_dict['iou'] = iou * 100
+        self.reset()
 
         # todo -----------------------------#
         # todo 视图渲染评估结果打印

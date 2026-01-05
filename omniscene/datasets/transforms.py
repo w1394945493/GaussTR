@@ -78,14 +78,17 @@ class BEVLoadMultiViewImageFromFiles(LoadMultiViewImageFromFiles):
         # h and w can be different for different views
         img_bytes = [
             get(name, backend_args=self.backend_args) for name in filename
-        ]
+        ] # todo self.backend_args: None  get(): 获取文件原始二进制内容
         imgs = [
             mmcv.imfrombytes(
                 img_byte,
                 flag=self.color_type,
                 backend='pillow',
                 channel_order='rgb') for img_byte in img_bytes
-        ]
+        ] # todo 解码成RGB顺序图像  import cv2 cv2.imwrite("out.png", imgs[0][:, :, ::-1]) cv2默认是bgr格式的
+        
+        
+        
         # handle the image with different shape
         img_shapes = np.stack([img.shape for img in imgs], axis=0)
         img_shape_max = np.max(img_shapes, axis=0)
@@ -99,14 +102,14 @@ class BEVLoadMultiViewImageFromFiles(LoadMultiViewImageFromFiles):
             imgs = [
                 mmcv.impad(img, shape=pad_shape, pad_val=0) for img in imgs
             ]
-        img = np.stack(imgs, axis=-1)
-        if self.to_float32:
+        img = np.stack(imgs, axis=-1) # todo (900,1600,3,6)
+        if self.to_float32: # todo True
             img = img.astype(np.float32)
 
         results['filename'] = filename
         # unravel to list, see `DefaultFormatBundle` in formating.py
         # which will transpose each image separately and then stack into array
-        results['img'] = [img[..., i] for i in range(img.shape[-1])] # (H,W,3) 0-255
+        results['img'] = [img[..., i] for i in range(img.shape[-1])] # (H,W,3) 0-255 # todo 又拆成了列表
         results['img_shape'] = img.shape[:2]
         results['ori_shape'] = img.shape[:2]
         # Set initial values for default meta_keys
@@ -118,8 +121,12 @@ class BEVLoadMultiViewImageFromFiles(LoadMultiViewImageFromFiles):
             mean=np.zeros(num_channels, dtype=np.float32),
             std=np.ones(num_channels, dtype=np.float32),
             to_rgb=False)
-        results['num_views'] = self.num_views
+        results['num_views'] = self.num_views # todo 6
         return results
+
+
+
+
 
 
 @TRANSFORMS.register_module()
@@ -254,17 +261,17 @@ class ImageAug3D(BaseTransform):
         return img, rotation, translation
 
     def transform(self, data):
-        imgs = data['img']
+        imgs = data['img'] # todo list (900,1600,3) rgb格式 import cv2 cv2.imwrite("out.png", imgs[0][:, :, ::-1])
         new_imgs = []
         transforms = []
         for img in imgs:
             resize, resize_dims, crop, flip, rotate = self.sample_augmentation(
-                data)
-            post_rot = torch.eye(2)
-            post_tran = torch.zeros(2)
+                data) # resize: [fh/h,fw/w] resize_dims: (fw,h) crop: (tx,ty,bx,by) flip: True/False rotate:0
+            post_rot = torch.eye(2) # (2,2)
+            post_tran = torch.zeros(2) # (2)
 
-            # todo
-            resize =  torch.diag(torch.tensor(resize, dtype=post_rot.dtype, device=post_rot.device))
+            # todo ----------------------------
+             # todo (2 2)
             new_img, rotation, translation = self.img_transform(
                 img,
                 post_rot,
@@ -281,9 +288,9 @@ class ImageAug3D(BaseTransform):
             new_imgs.append(np.array(new_img).astype(np.float32))
             transforms.append(transform.numpy())
 
-        data['img'] = new_imgs # (H,W,3) 0-255
+        data['img'] = new_imgs # (H,W,3) 0-255 # todo RGB格式
         # update the calibration matrices
-        data['img_aug_mat'] = transforms # todo 变换矩阵
+        data['img_aug_mat'] = transforms # todo 变换矩阵 (4,4)
         return data
 
 
@@ -355,7 +362,7 @@ class LoadFeatMaps(BaseTransform):
             feat = np.load(
                 os.path.join(self.data_root,
                              filename.split('/')[-1].split('.')[0] + '.npy'))
-            feat = torch.from_numpy(feat)
+            feat = torch.from_numpy(feat) # todo (900,1600)
 
             if self.apply_aug and img_aug_mats is not None:
                 post_rot = img_aug_mats[i][:3, :3]
@@ -371,5 +378,5 @@ class LoadFeatMaps(BaseTransform):
                 feat = feat[int(post_tran[1]):, int(-post_tran[0]):]
             feats.append(feat)
 
-        results[self.key] = torch.stack(feats)
+        results[self.key] = torch.stack(feats) # todo (6,112,200)
         return results

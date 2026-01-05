@@ -199,13 +199,9 @@ test_pipeline = [
         color_type='color',
         num_views=6),
     dict(type='LoadOccFromFile'),
-    # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
-    dict(type='ImageAug3D',
-         final_dim=input_size,
-         ),
+    dict(type='ImageAug3D',final_dim=input_size,),
     dict(
         type='LoadFeatMaps',
-        # data_root='data/nuscenes_metric3d', # todo
         data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini',
         key='depth',
         apply_aug=True),
@@ -213,7 +209,6 @@ test_pipeline = [
      # todo 参考gausstr_feature.py
     dict(
         type='LoadFeatMaps',
-        # data_root='data/nuscenes_grounded_sam2', # todo 分割数据集导入
         data_root='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_grounded_sam2/mini',
         key='sem_seg',
         apply_aug=True),

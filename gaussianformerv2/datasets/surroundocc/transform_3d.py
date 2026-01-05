@@ -8,6 +8,7 @@ import math
 from copy import deepcopy
 import torch.nn.functional as F
 import cv2
+from mmengine.fileio import get
 from mmdet3d.registry import TRANSFORMS
 
 
@@ -29,7 +30,8 @@ class DefaultFormatBundle(object):
                        (3)to DataContainer (stack=True)
     """
 
-    def __init__(self, ):
+    def __init__(self, keys = ['img','img_gt']):
+        self.keys = keys
         return
 
     def __call__(self, results):
@@ -42,14 +44,15 @@ class DefaultFormatBundle(object):
             dict: The result dict contains the data that is formatted with
                 default bundle.
         """
-        if 'img' in results:
-            if isinstance(results['img'], list):
-                # process multiple imgs in single frame
-                imgs = [img.transpose(2, 0, 1) for img in results['img']]
-                imgs = np.ascontiguousarray(np.stack(imgs, axis=0))
-            else:
-                imgs = np.ascontiguousarray(results['img'].transpose(2, 0, 1))
-            results['img'] = torch.from_numpy(imgs)
+        for key in self.keys:
+            if key in results:
+                if isinstance(results[key], list):
+                    # process multiple imgs in single frame
+                    imgs = [img.transpose(2, 0, 1) for img in results[key]]
+                    imgs = np.ascontiguousarray(np.stack(imgs, axis=0))
+                else:
+                    imgs = np.ascontiguousarray(results[key].transpose(2, 0, 1))
+                results[key] = torch.from_numpy(imgs)
         return results
 
     def __repr__(self):
@@ -76,13 +79,13 @@ class NuScenesAdaptor(object):
 class ResizeCropFlipImage(object):
     def __call__(self, results):
         aug_configs = results.get("aug_configs")
-        if aug_configs is None:
-            return results
         resize, resize_dims, crop, flip, rotate = aug_configs
+        
         imgs = results["img"]
+        
         N = len(imgs)
         new_imgs = []
-        # img_aug_mat = []
+        transforms = []
         for i in range(N):
             img = Image.fromarray(np.uint8(imgs[i]))
             img, ida_mat = self._img_transform(
@@ -93,13 +96,12 @@ class ResizeCropFlipImage(object):
                 flip=flip,
                 rotate=rotate,
             )
-
             #!----------------------------------------------------#
             mat = np.eye(4)
             mat[:3, :3] = ida_mat # todo 
             new_imgs.append(np.array(img).astype(np.float32))
             # todo (wys 12.30)
-            # img_aug_mat.append(mat) # todo img2img' 矩阵
+            transforms.append(mat) # todo img2img' 矩阵
             results["lidar2img"][i] = mat @ results["lidar2img"][i] # todo 已经都做过变换了
             results["ego2img"][i] = mat @ results["ego2img"][i]
 
@@ -107,7 +109,7 @@ class ResizeCropFlipImage(object):
         results["img"] = new_imgs
         results["img_shape"] = [x.shape[:2] for x in new_imgs]
         # todo (wys 12.30)
-        # results["img_aug_mat"] = np.array(img_aug_mat)
+        results["img_aug_mat"] = np.array(transforms).astype(np.float32)
         
         return results
 
@@ -130,9 +132,10 @@ class ResizeCropFlipImage(object):
         img = img.rotate(rotate)
 
         # post-homography transformation
+        resize =  torch.diag(torch.tensor(resize, dtype=ida_rot.dtype, device=ida_rot.device))
         ida_rot *= resize
-        ida_tran -= torch.Tensor(crop[:2]) # todo 平移 (x,y) -> (x-crop_w,y-crop_h)
-        if flip: # todo 反转平移和旋转更新
+        ida_tran -= torch.Tensor(crop[:2]) 
+        if flip: 
             A = torch.Tensor([[-1, 0], [0, 1]])
             b = torch.Tensor([crop[2] - crop[0], 0])
             ida_rot = A.matmul(ida_rot)
@@ -152,72 +155,34 @@ class ResizeCropFlipImage(object):
 @TRANSFORMS.register_module()
 class LoadFeatMaps(ResizeCropFlipImage):
 
-    def __init__(self, data_root, key,final_dims=[112,200]):
+    def __init__(self, data_root, key, apply_aug=True):
         self.data_root = data_root
         self.key = key
-        self.final_dims = final_dims
-
+        self.apply_aug = apply_aug
 
     def __call__(self, results):
-        aug_configs = results.get("aug_configs")
-        resize, resize_dims, crop, flip, rotate = aug_configs
-        
         feats = []
-        img_gt = []
-        img_aug_mat = []
-        
-        if self.final_dims:
-            fh, fw = self.final_dims
+        img_aug_mats = results.get('img_aug_mat')
         
         for i, filename in enumerate(results['filename']):
             feat = np.load(
                 os.path.join(self.data_root,
                              filename.split('/')[-1].split('.')[0] + '.npy'))
-            feat = Image.fromarray(feat)
-            
-            feat, ida_mat = self._img_transform(
-                feat,
-                resize=resize,
-                resize_dims=resize_dims,
-                crop=crop,
-                flip=flip,
-                rotate=rotate,
-            )
-            img = Image.fromarray(np.uint8(results['img'][i]))
-            
-            
-            if self.final_dims: 
-                
-                cur_w, cur_h = feat.size
-                s = torch.eye(3)
-                s[0] *= fw / cur_w
-                s[1] *= fh / cur_h
-                
-                ida_mat = s @ ida_mat
-                feat = feat.resize(self.final_dims[::-1])
-                
-                img = img.resize(self.final_dims[::-1])
-            
-            
-            mat = np.eye(4)
-            mat[:3, :3] = ida_mat
-            
-            feats.append(np.array(feat).astype(np.float32))
-            img_gt.append(np.array(img).astype(np.float32))  
-            img_aug_mat.append(mat)
-                  
-        results[self.key] = torch.from_numpy(
-            np.ascontiguousarray(
-                np.stack(feats,axis=0)))
-    
-        # todo 注意将通道由bgr调整为rgb
-        results["img_gt"] = torch.from_numpy(
-            np.ascontiguousarray(
-                np.stack(
-                    [img[...,::-1].transpose(2, 0, 1) for img in img_gt],axis=0))) # (bgr) -> (rgb) (h w 3) -> (3 h w)
-         # todo 计算了输入的增强矩阵，
-        results["img_aug_mat"] = np.array(img_aug_mat,dtype=np.float32)
-        
+            feat = torch.from_numpy(feat)
+            if self.apply_aug and img_aug_mats is not None:
+                post_rot = img_aug_mats[i][:3, :3]
+                post_tran = img_aug_mats[i][:3, 3]
+                assert post_rot[0, 1] == post_rot[1, 0] == 0  # noqa
+
+                h, w = feat.shape
+                mode = 'nearest' if torch.all(feat == feat.floor()) else 'bilinear'
+                feat = F.interpolate(
+                    feat[None, None], (int(h * post_rot[1, 1] + 0.5),
+                                        int(w * post_rot[0, 0] + 0.5)),
+                    mode=mode).squeeze()
+                feat = feat[int(post_tran[1]):, int(-post_tran[0]):]
+            feats.append(feat)            
+        results[self.key] = torch.stack(feats)
         return results
         
         
@@ -251,9 +216,19 @@ class NormalizeMultiviewImage(object):
             dict: Normalized results, 'img_norm_cfg' key is added into
                 result dict.
         """
-        # todo 先把BGR -> RGB 
+        
+        if self.to_rgb:
+            results["img_gt"] = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img) for img in results["img"]]
+        else:
+            results["img_gt"] = [img for img in results["img"]]
+        
+        '''
+        import cv2
+        cv2.imwrite('output1.png',results["img_gt"][0][...,::-1].astype(np.uint8))  # RGB -> BGR
+        '''
+        
         results["img"] = [
-            mmcv.imnormalize(img, self.mean, self.std, self.to_rgb)
+            mmcv.imnormalize(img, self.mean, self.std, self.to_rgb) # todo to_rgb == True: bgr -> rgb
             for img in results["img"]
         ]
         results["img_norm_cfg"] = dict(
@@ -375,7 +350,7 @@ class PhotoMetricDistortionMultiViewImage:
 
 
 @TRANSFORMS.register_module()
-class CustomLoadMultiViewImageFromFiles(object):
+class BEVLoadMultiViewImageFromFiles(object):
     """Load multi channel images from a list of separate channel files.
 
     Expects results['img_filename'] to be a list of filenames.
@@ -410,10 +385,28 @@ class CustomLoadMultiViewImageFromFiles(object):
                 - scale_factor (float): Scale factor.
                 - img_norm_cfg (dict): Normalization configuration of images.
         """
+        
         filename = results['img_filename']
         # img is of shape (h, w, c, num_views)
-        img = np.stack(
-            [mmcv.imread(name, self.color_type) for name in filename], axis=-1)
+        # imgs = [mmcv.imread(name, self.color_type) for name in filename]
+        
+        img_bytes = [
+            get(name, backend_args=None) for name in filename
+        ] # todo backend_args: None  get(): 获取文件原始二进制内容
+        imgs = [
+            mmcv.imfrombytes(
+                img_byte,
+                flag=self.color_type, # todo unchanged: 保持bgr
+                backend='pillow',
+                channel_order='rgb') for img_byte in img_bytes
+        ]   
+     
+        '''
+        import cv2
+        cv2.imwrite('output.png',imgs[0][...,::-1].astype(np.uint8)) 
+        '''
+        img = np.stack(imgs, axis=-1)
+        
         if self.crop_size is not None:
             img = img[:self.crop_size[0], :self.crop_size[1]]
         if self.to_float32:
@@ -495,6 +488,9 @@ class LoadPointFromFile(object): # todo
         """str: Return a string that describes the module."""
         repr_str = self.__class__.__name__
         return repr_str
+
+
+
 
 
 @TRANSFORMS.register_module()

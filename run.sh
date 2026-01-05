@@ -197,7 +197,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 # !---------------------------------------------------------------------------#
 # todo gaussianformerv2
 # todo 训练：
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train \
@@ -206,5 +206,5 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
-    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train/epoch_20.pth \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train/epoch_24.pth \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \

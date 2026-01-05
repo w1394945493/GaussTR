@@ -91,7 +91,6 @@ class ResizeCropFlipImage(object):
                 flip=flip,
                 rotate=rotate,
             )
-
             #!----------------------------------------------------#
             mat = np.eye(4)
             mat[:3, :3] = ida_mat

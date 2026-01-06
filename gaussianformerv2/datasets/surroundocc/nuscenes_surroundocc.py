@@ -5,6 +5,8 @@ from copy import deepcopy
 from torch.utils.data import Dataset
 from pyquaternion import Quaternion
 
+from collections import deque
+from typing import Deque, Iterable
 
 from mmdet3d.registry import DATASETS
 import mmengine
@@ -27,9 +29,12 @@ class NuScenesSurroundOccDataset(Dataset):
                  vis_indices=None,
                  num_samples=0,
                  vis_scene_index=-1,
+                 
+                 load_adj_frame = True,
+                 interval=1,
+                 
                  phase='train',
                  return_keys=[
-                    'img',
                     
                     'projection_mat', # todo 'ego2img'或'lidar2img' gaussianformer中使用的'lidar2img'
                     
@@ -42,13 +47,18 @@ class NuScenesSurroundOccDataset(Dataset):
                     'cam_positions', # todo 
                     'focal_positions', # todo 
 
+                    'img',
                     "cam2img", # todo (wys 12.30) 用于视图合成
                     "cam2ego",
                     "cam2lidar",
-                    
-                    "img_gt",
                     "depth", # todo (wys 12.30) 深度图
                     "img_aug_mat",
+                    
+                    'output_img',
+                    "output_cam2img", # todo (wys 12.30) 用于视图合成
+                    "output_cam2ego",
+                    "output_cam2lidar",
+                    "output_img_aug_mat",
                     
                     "scene_token",
                     "token",                      
@@ -63,6 +73,9 @@ class NuScenesSurroundOccDataset(Dataset):
         self.keyframes = sorted(self.keyframes, key=lambda x: x[0] + "{:0>3}".format(str(x[1])))
 
         self.data_aug_conf = data_aug_conf
+        self.load_adj_frame = load_adj_frame
+        self.interval = interval 
+        
         self.test_mode = (phase != 'train')
 
         self.pipeline = []
@@ -94,11 +107,12 @@ class NuScenesSurroundOccDataset(Dataset):
         return len(self.keyframes)
 
     def __getitem__(self, index: int) -> dict:
-        scene_token, sample_idx = self.keyframes[index]
-        info = deepcopy(self.scene_infos[scene_token][sample_idx])
+        scene_token, sample_idx = self.keyframes[index] # todo 关键帧数据
+        info = deepcopy(self.scene_infos[scene_token][sample_idx]) # todo 以场景为单位的数据
 
         input_dict = self.get_data_info(info)
-
+        
+                
         if self.data_aug_conf is not None:
             input_dict["aug_configs"] = self._sample_augmentation()
 
@@ -108,18 +122,27 @@ class NuScenesSurroundOccDataset(Dataset):
         return_dict = {k: input_dict[k] for k in self.return_keys}
         return return_dict
 
-
+    
+    
+    
     def get_data_info(self, info):
         f = 0.0055
         image_paths = []
+        cam2imgs = []
+        cam2egos = []
+        cam2lidars = []
+
+        output_image_paths = []
+        output_cam2imgs = []
+        output_cam2egos = []
+        output_cam2lidars = []
+                
         lidar2img_rts = []
         ego2image_rts = []
         cam_positions = []
         focal_positions = []
         
-        cam2imgs = []
-        cam2egos = []
-        cam2lidars = []
+
         
 
         lidar2ego_r = Quaternion(info['data']['LIDAR_TOP']['calib']['rotation']).rotation_matrix # (3 3)
@@ -173,14 +196,12 @@ class NuScenesSurroundOccDataset(Dataset):
             cam2lidars.append(cam2lidar)
             
             # todo --------------------------------------------------#
-            # todo (wys 12.30) 输出图像 
-            # output_image_paths = image_paths.copy()
-            # output_cam2imgs = cam2imgs.copy()
-            # output_cam2egos = output_cam2egos.copy()
-            # output_cam2lidars = output_cam2lidars.copy()
+            # todo (wys 12.30) 获取输出图像相关数据
+            output_image_paths.append(os.path.join(self.data_path, info['data'][cam_type]['filename']))
+            output_cam2imgs.append(viewpad)
+            output_cam2egos.append(cam2ego)
+            output_cam2lidars.append(cam2lidar)
             
-            
-
         input_dict =dict(
             scene_token = info['scene_token'],
             token = info['token'],
@@ -200,10 +221,10 @@ class NuScenesSurroundOccDataset(Dataset):
             cam2ego = np.array(cam2egos, dtype=np.float32), # todo 外参
             cam2lidar = np.array(cam2lidars, dtype=np.float32), # todo 外参
             
-            # output_img_files = output_image_paths,
-            # output_cam2img = np.array(output_cam2imgs, dtype=np.float32), # todo 内参
-            # output_cam2ego = np.array(output_cam2egos, dtype=np.float32), # todo 外参
-            # output_cam2lidar = np.array(output_cam2lidars, dtype=np.float32), # todo 外参            
+            output_img_filename = output_image_paths,
+            output_cam2img = np.array(output_cam2imgs, dtype=np.float32), # todo 内参
+            output_cam2ego = np.array(output_cam2egos, dtype=np.float32), # todo 外参
+            output_cam2lidar = np.array(output_cam2lidars, dtype=np.float32), # todo 外参            
             
             
             ) # todo 
@@ -224,9 +245,13 @@ class NuScenesSurroundOccDataset(Dataset):
         crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
         
         flip = False
-        rotate = 0    
-        
-        return resize,  resize_dims,  crop,  flip,  rotate
+        rotate = 0   
+    
+        out_h, out_w = self.data_aug_conf['output_dim']
+        output_resize = [out_w/W, out_h/H]
+        output_dims = (out_w, out_h)
+        output_crop = (0, 0, out_w, out_h)
+        return resize,  resize_dims,  crop,  flip,  rotate, output_resize, output_dims, output_crop
 
 
 
@@ -252,23 +277,25 @@ if __name__=='__main__':
     )
 
     pipeline = [
-        dict(type="BEVLoadMultiViewImageFromFiles", to_float32=True),
+        dict(type="BEVLoadMultiViewImageFromFiles", to_float32=True), # todo 加载图像
         dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
-        dict(type="ResizeCropFlipImage"),
+        dict(type="ResizeCropFlipImage"), # todo 做resize,crop,flip,rotate等预处理
         dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), 
-        dict(type="NormalizeMultiviewImage", **img_norm_cfg),
-        dict(type="DefaultFormatBundle"),
+        dict(type="NormalizeMultiviewImage", **img_norm_cfg), # todo BGR -> RGB mean和std
+        dict(type="DefaultFormatBundle"), # todo 将图像由(h w c) -> (c h w)
         dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
     ]
 
-    final_dim = (112,200)
+    final_dim = (896,1600)
+    output_dim = (112,200)
     data_aug_conf = {
-        "final_dim": final_dim, # todo 对图像进行缩放
+        "final_dim": final_dim, # todo 网络输入
         "bot_pct_lim": (0.0, 0.0),
         "rot_lim": (0.0, 0.0),
         "H": 900, 
         "W": 1600,
         "rand_flip": True, # todo 训练时做数据增强
+        "output_dim": output_dim, # todo 渲染图像尺寸
     }
 
 

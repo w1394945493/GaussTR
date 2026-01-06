@@ -81,7 +81,7 @@ class OccMetric(BaseMetric):
         # todo -----------------------------#
         # todo 视图渲染评指标
         rgb = rearrange(data_samples[0]['img_pred'],'b v c h w -> (b v) c h w')
-        rgb_gt = rearrange(data_batch['img_gt']/255.,'b v c h w -> (b v) c h w').to(rgb.device)
+        rgb_gt = rearrange(data_batch['output_img']/255.,'b v c h w -> (b v) c h w').to(rgb.device)
         
         if f"psnr" not in self.test_step_outputs:
             self.test_step_outputs[f"psnr"] = []

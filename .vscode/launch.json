@@ -278,6 +278,14 @@
             "justMyCode": false,
         },
         {
+            "name": "debug nuscenes surround occ pkl",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/scripts/debug_surroundocc_pkl.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
             "name": "run test omniscene",
             "type": "debugpy",
             "request": "launch",
@@ -308,5 +316,6 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
+
     ]
 }

@@ -1,5 +1,6 @@
 import os
 import torchvision
+import torch.nn.functional as F
 from mmengine.hooks import Hook
 from mmdet3d.registry import HOOKS
 
@@ -44,52 +45,52 @@ class DumpResultHook(Hook):
             cols = n       
         if self.save_img and outputs[0]['img_pred'] is not None:        
             img_pred  = outputs[0]['img_pred']
+            img_gt  = data_batch['output_img'] / 255.
             for i in range(bs):
                 imgs = img_pred[i].clamp(min=0.,max=1.)
-                # imgs = imgs[:, [2, 1, 0], :, :]
                 grid = torchvision.utils.make_grid(
                     imgs,
                     nrow=cols,
                     padding=2
                 )                
-            save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.png"
-            save_path = os.path.join(self.dir_img, save_name)
-            torchvision.utils.save_image(grid, save_path)     
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_img_pred.png"
+                save_path = os.path.join(self.dir_img, save_name)
+                torchvision.utils.save_image(grid, save_path)     
             
-            img_gt  = data_batch['img_gt'] / 255.
-            for i in range(bs):
                 imgs = img_gt[i].clamp(min=0.,max=1.)
-                # imgs = imgs[:, [2, 1, 0], :, :]
                 grid = torchvision.utils.make_grid(
                     imgs,
                     nrow=cols,
                     padding=2
                 )                
-            save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_gt.png"
-            save_path = os.path.join(self.dir_img, save_name)
-            torchvision.utils.save_image(grid, save_path) 
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_img_gt.png"
+                save_path = os.path.join(self.dir_img, save_name)
+                torchvision.utils.save_image(grid, save_path) 
         
         if self.save_depth and outputs[0]['depth_pred'] is not None:                       
             
             for i in range(bs):
                 depth_pred = outputs[0]['depth_pred'][i]
+                f_h,f_w = depth_pred.shape[-2:]
+                
                 depth_pred = depth_pred.unsqueeze(1)
                 max_val = float(depth_pred.max())
                 depth_pred /= (max_val + 1e-6)                  
                 
                 grid = torchvision.utils.make_grid(depth_pred, nrow=cols, padding=2)
-                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.png"
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_pred.png"
                 save_path = os.path.join(self.dir_depth, save_name)
                 torchvision.utils.save_image(grid, save_path)                
                 
                 
                 depth_gt = data_batch['depth'][i]
                 depth_gt = depth_gt.unsqueeze(1)
+                depth_gt = F.interpolate(depth_gt,size=(f_h,f_w),mode='bilinear',align_corners=False)
                 max_val = float(depth_gt.max())
                 depth_gt /= (max_val + 1e-6)                
                 
                 grid = torchvision.utils.make_grid(depth_gt, nrow=cols, padding=2)
-                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_gt.png"
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_gt.png"
                 save_path = os.path.join(self.dir_depth, save_name)
                 torchvision.utils.save_image(grid, save_path)
         return

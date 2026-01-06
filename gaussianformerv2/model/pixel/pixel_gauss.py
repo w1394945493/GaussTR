@@ -149,7 +149,7 @@ class PixelGaussian(BaseModule):
                 extrinsics,
                 status="train"):
         """Forward training function."""
-        h,w = depths_in.shape[-2:]
+        h,w = img_feats.shape[-2:]
         bs, n = intrinsics.shape[:2]
         device = intrinsics.device
         # todo-----------------------------#
@@ -167,7 +167,7 @@ class PixelGaussian(BaseModule):
         # todo-----------------------------#
         # todo 1. 特征编码
         # upsample 4x downsampled img features to original size
-        img_feats = self.upsampler(img_feats) # todo (bv c h/4 w/4) -> (bv c h w)
+        # img_feats = self.upsampler(img_feats) # todo (bv c h/4 w/4) -> (bv c h w)
         img_feats = rearrange(img_feats, "(b v) c h w -> b v h w c", b=bs, v=self.num_cams) # todo (b v h w c)
         pluckers = rearrange(pluckers, "b v c h w -> b v h w c") # Pluckers: 射线的Plücker 坐标嵌入，编码几何方向
         plucker_embeds = self.plucker_to_embed(pluckers) # todo 全连接：编码 6 -> 128

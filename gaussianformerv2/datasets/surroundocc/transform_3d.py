@@ -30,7 +30,7 @@ class DefaultFormatBundle(object):
                        (3)to DataContainer (stack=True)
     """
 
-    def __init__(self, keys = ['img','output_img']):
+    def __init__(self, keys = ['img','output_img']): #!
         self.keys = keys
         return
 

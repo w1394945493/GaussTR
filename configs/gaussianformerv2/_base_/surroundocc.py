@@ -76,8 +76,8 @@ seed = 42
 # import mmengine.dataset.sampler
 train_dataloader = dict(
     batch_size=1,
-    # num_workers=4,
-    num_workers=0,
+    num_workers=4,
+    # num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
@@ -86,8 +86,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    # num_workers=4,
-    num_workers=0,
+    num_workers=4,
+    # num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,

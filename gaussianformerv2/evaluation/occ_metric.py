@@ -72,7 +72,7 @@ class OccMetric(BaseMetric):
                 self.total_correct[i] += torch.sum((targets == c)
                                                 & (outputs == c)).item() # todo 预测对的voxel数(TP)
                 self.total_positive[i] += torch.sum(outputs == c).item() # todo 预测为某类的voxel数(TP+FP)
-            # todo 整体occupancy(不管语义)
+            # todo 整体occupancy(iou)
             self.total_seen[-1] += torch.sum(targets != self.empty_label).item()  # todo GT中非空类的voxel数(TP+FN)
             self.total_correct[-1] += torch.sum((targets != self.empty_label)
                                                 & (outputs != self.empty_label)).item() # todo 预测对的非空数(TP)

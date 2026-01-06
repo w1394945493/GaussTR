@@ -10,7 +10,7 @@ _base_ = [
 custom_imports = dict(imports=['gaussianformerv2']) # todo
 
 # ========= custom hooks ===============
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/outputs/vis8'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/outputs/vis9'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,

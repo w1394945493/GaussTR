@@ -253,7 +253,7 @@ class NuScenesSurroundOccDataset(Dataset):
                 flip = True
             rotate = np.random.uniform(*self.data_aug_conf["rot_lim"])
            
-    
+        
         out_h, out_w = self.data_aug_conf['output_dim']
         output_resize = [out_w/W, out_h/H]
         output_dims = (out_w, out_h)

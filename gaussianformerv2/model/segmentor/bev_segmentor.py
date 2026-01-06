@@ -199,8 +199,7 @@ class BEVSegmentor(CustomBaseSegmentor):
         # todo --------------------------------------#       
         # todo 内参
         output_imgs = metas['output_img']
-        rgb_gt = output_imgs
-        output_h,output_w = output_imgs.shape[-2:]
+        output_h, output_w = output_imgs.shape[-2:]
         output_img_aug_mat = metas['output_img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵(注意：仅缩放)
         output_intrinsics =  (output_img_aug_mat @ metas['output_cam2img'])[...,:3,:3] # (b v 3 3) # todo 相对于原图的内外参        
         
@@ -210,7 +209,7 @@ class BEVSegmentor(CustomBaseSegmentor):
         colors, rendered_depth = rasterize_gaussians(
             extrinsics=output_extrinsics,
             intrinsics=output_intrinsics,
-            image_shape = (output_h,output_w),
+            image_shape = (output_h, output_w),
             means3d=means3d,
             rotations=rotations,
             scales=scales,
@@ -264,10 +263,12 @@ class BEVSegmentor(CustomBaseSegmentor):
             lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
 
         rendered_depth = rendered_depth.flatten(0,1)
-        depth = depth.flatten(0,1)
-        losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth,criterion='l1')
+        depth_gt = metas['output_depth']
+        depth_gt = depth_gt.flatten(0,1)
+        losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth_gt, criterion='l1')
         
         rgb = colors.flatten(0,1)
+        rgb_gt = metas['output_img']
         rgb_gt = rgb_gt.flatten(0,1) / 255.
         reg_loss = (rgb - rgb_gt) ** 2
         losses['loss_l2'] = reg_loss.mean()

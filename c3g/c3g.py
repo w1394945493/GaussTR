@@ -175,7 +175,6 @@ class C3G(BaseModel):
             gaussians = self.gaussian_adapter.forward(
                 pts_all.unsqueeze(-2),
                 depths,
-                # self.map_pdf_to_opacity(densities, global_step), #
                 densities,
                 rearrange(gaussians[..., 1:], "b n srf c -> b n srf () c"),
                 features = gaussian_feature,
@@ -194,7 +193,6 @@ class C3G(BaseModel):
 
                 rearrange(xy_ray, "b v r srf xy -> b v r srf () xy"),
                 depths,
-                # self.map_pdf_to_opacity(densities, global_step),
                 densities,
                 rearrange(gaussians[..., 1:], "b v r srf c -> b v r srf () c"),
                 (h, w),

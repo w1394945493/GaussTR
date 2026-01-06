@@ -170,7 +170,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
 export CUDA_VISIBLE_DEVICES=6
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
     -G 2 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train2 \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
 
@@ -197,6 +197,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 # !---------------------------------------------------------------------------#
 # todo gaussianformerv2
 # todo 训练：
+# ! 使用mmdet.ResNet101作为主干时，记着加载预训练权重！！！
 export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \

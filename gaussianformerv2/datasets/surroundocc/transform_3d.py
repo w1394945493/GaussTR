@@ -189,27 +189,51 @@ class LoadFeatMaps(ResizeCropFlipImage):
     def __call__(self, results):
         #! 加载输入图像的深度图 跟着输入图像的预处理对深度图进行处理！
         feats = [] 
-        img_aug_mats = results.get('img_aug_mat')
-        
+        # img_aug_mats = results.get('img_aug_mat')
+        aug_configs = results.get("aug_configs")
+        resize, resize_dims, crop, flip, rotate, output_resize, output_dims, output_crop = aug_configs
+
         for i, filename in enumerate(results['filename']):
             feat = np.load(
                 os.path.join(self.data_root,
                              filename.split('/')[-1].split('.')[0] + '.npy'))
-            feat = torch.from_numpy(feat)
-            if self.apply_aug and img_aug_mats is not None:
-                post_rot = img_aug_mats[i][:3, :3]
-                post_tran = img_aug_mats[i][:3, 3]
-                assert post_rot[0, 1] == post_rot[1, 0] == 0  # noqa
+            '''
+            import cv2
+            cv2.imwrite('depth_0.png',feat.astype(np.uint8))
+            '''
+            feat = Image.fromarray(feat)
+            feat, ida_mat = self._img_transform(
+                feat,
+                resize=resize,
+                resize_dims=resize_dims,
+                crop=crop,
+                flip=flip,
+                rotate=rotate,
+            )     
+            feat = np.array(feat).astype(np.float32)       
+            feats.append(feat)
+            '''
+            import cv2
+            cv2.imwrite('depth_1.png',feat.astype(np.uint8))
+            '''
+            # feat = torch.from_numpy(feat)
+           
+            # if self.apply_aug and img_aug_mats is not None:
+            #     post_rot = img_aug_mats[i][:3, :3]
+            #     post_tran = img_aug_mats[i][:3, 3]
+            #     assert post_rot[0, 1] == post_rot[1, 0] == 0  # noqa
 
-                h, w = feat.shape
-                mode = 'nearest' if torch.all(feat == feat.floor()) else 'bilinear'
-                feat = F.interpolate(
-                    feat[None, None], (int(h * post_rot[1, 1] + 0.5),
-                                        int(w * post_rot[0, 0] + 0.5)),
-                    mode=mode).squeeze()
-                feat = feat[int(post_tran[1]):, int(-post_tran[0]):]
-            feats.append(feat)            
-        results[self.key] = torch.stack(feats)
+            #     h, w = feat.shape
+            #     mode = 'nearest' if torch.all(feat == feat.floor()) else 'bilinear'
+            #     feat = F.interpolate(
+            #         feat[None, None], (int(h * post_rot[1, 1] + 0.5),
+            #                             int(w * post_rot[0, 0] + 0.5)),
+            #         mode=mode).squeeze()
+            #     feat = feat[int(post_tran[1]):, int(-post_tran[0]):]
+            # feats.append(feat)            
+            
+        # results[self.key] = torch.stack(feats)
+        results[self.key] = np.array(feats,dtype=np.float32)
         return results
         
         
@@ -638,7 +662,7 @@ class LoadOccupancySurroundOcc(object):
 
     def __call__(self, results):
         label_file = os.path.join(self.occ_path, results['pts_filename'].split('/')[-1]+'.npy')
-        if os.path.exists(label_file):
+        if os.path.exists(label_file): # todo True
             label = np.load(label_file)
 
             new_label = np.ones((200, 200, 16), dtype=np.int64) * 17

@@ -12,7 +12,7 @@ train_pipeline = [
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
     dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
-    # dict(type="PhotoMetricDistortionMultiViewImage"), # todo
+    dict(type="PhotoMetricDistortionMultiViewImage"), # todo
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
@@ -36,11 +36,13 @@ output_dim = (112,200)
 
 data_aug_conf = {
     "final_dim": final_dim,
+    
     "bot_pct_lim": (0.0, 0.0),
     "rot_lim": (0.0, 0.0),
     "H": 900,
     "W": 1600,
     "rand_flip": True, # todo 训练时做数据增强
+    
     "output_dim": output_dim,
 }
 
@@ -53,8 +55,8 @@ train_dataset_config = dict(
     imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
-    # phase='train',
-    phase='val',
+    phase='train',
+    # phase='val',
 )
 
 val_dataset_config = dict(
@@ -73,8 +75,8 @@ seed = 42
 # import mmengine.dataset.sampler
 train_dataloader = dict(
     batch_size=1,
-    num_workers=4,
-    # num_workers=0,
+    # num_workers=4,
+    num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
@@ -83,8 +85,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    num_workers=4,
-    # num_workers=0,
+    # num_workers=4,
+    num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,

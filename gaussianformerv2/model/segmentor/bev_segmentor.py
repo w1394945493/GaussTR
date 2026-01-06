@@ -161,62 +161,64 @@ class BEVSegmentor(CustomBaseSegmentor):
         outs = self.extract_img_feat(**results) # todo 提取多尺度图像特征图outs:{'ms_img_feats'}: (b v c h w)  1/8 1/16 1/32 1/64 4个尺度的特征图        
         results.update(outs)
 
-        # todo --------------------------#
-        # todo 使用第1个特征图进行视图渲染        
-        img_feats = outs['ms_img_feats'][0]
-        input_h, input_w = imgs.shape[-2:] # todo 网络输入尺寸
-        f_h, f_w = img_feats.shape[-2:] # todo 特征图尺寸
-        # todo 内参
-        img_aug_mat = metas['img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵
-        intrinsics =  (img_aug_mat @ metas['cam2img'])[...,:3,:3] # (b v 3 3) # todo 相对于原图的内外参        
-        intrinsics[...,0,:] *= f_w / input_w
-        intrinsics[...,1,:] *= f_h / input_h
-        # todo 外参
-        extrinsics = metas['cam2lidar']
+        # # todo --------------------------#
+        # # todo 使用第1个特征图进行视图渲染        
+        # img_feats = outs['ms_img_feats'][0]
+        # input_h, input_w = imgs.shape[-2:] # todo 网络输入尺寸
+        # f_h, f_w = img_feats.shape[-2:] # todo 特征图尺寸
+        # # todo 内参
+        # # todo 这里逻辑应该进行修改，img_aug_mat应该作用于
+        # img_aug_mat = metas['img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵
+        # intrinsics =  (img_aug_mat @ metas['cam2img'])[...,:3,:3] # (b v 3 3) # todo 相对于原图的内外参        
+        
+        # intrinsics[...,0,:] *= f_w / input_w
+        # intrinsics[...,1,:] *= f_h / input_h
+        # # todo 外参
+        # extrinsics = metas['cam2lidar']
               
-        depth = metas['depth']
-        depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
+        # depth = metas['depth']
+        # depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
         
-        pixel_gaussians = self.pixel_gs(
-                img_feats=rearrange(img_feats, "b v c h w -> (b v) c h w"),                 
-                depths_in=depth, # (b v h w)
-                intrinsics = intrinsics,
-                extrinsics = extrinsics,
-                )  
+        # pixel_gaussians = self.pixel_gs(
+        #         img_feats=rearrange(img_feats, "b v c h w -> (b v) c h w"),                 
+        #         depths_in=depth, # (b v h w)
+        #         intrinsics = intrinsics,
+        #         extrinsics = extrinsics,
+        #         )  
 
-        means3d = pixel_gaussians.means
-        harmonics = pixel_gaussians.harmonics # (b n c d_sh) | (b n c), c=rgb
-        opacities = pixel_gaussians.opacities
-        scales = pixel_gaussians.scales
-        rotations = pixel_gaussians.rotations
-        covariances = pixel_gaussians.covariances
-        # todo --------------------------------------#       
-        # todo 内参
-        output_imgs = metas['output_img']
-        rgb_gt = output_imgs
-        output_h,output_w = output_imgs.shape[-2:]
-        output_img_aug_mat = metas['output_img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵
-        output_intrinsics =  (output_img_aug_mat @ metas['output_cam2img'])[...,:3,:3] # (b v 3 3) # todo 相对于原图的内外参        
-        # todo 外参
-        output_extrinsics = metas['output_cam2lidar']
+        # means3d = pixel_gaussians.means
+        # harmonics = pixel_gaussians.harmonics # (b n c d_sh) | (b n c), c=rgb
+        # opacities = pixel_gaussians.opacities
+        # scales = pixel_gaussians.scales
+        # rotations = pixel_gaussians.rotations
+        # covariances = pixel_gaussians.covariances
+        # # todo --------------------------------------#       
+        # # todo 内参
+        # output_imgs = metas['output_img']
+        # rgb_gt = output_imgs
+        # output_h,output_w = output_imgs.shape[-2:]
+        # output_img_aug_mat = metas['output_img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵
+        # output_intrinsics =  (output_img_aug_mat @ metas['output_cam2img'])[...,:3,:3] # (b v 3 3) # todo 相对于原图的内外参        
+        # # todo 外参
+        # output_extrinsics = metas['output_cam2lidar']
 
-        colors, rendered_depth = rasterize_gaussians(
-            extrinsics=output_extrinsics,
-            intrinsics=output_intrinsics,
-            image_shape = (output_h,output_w),
-            means3d=means3d,
-            rotations=rotations,
-            scales=scales,
-            covariances=covariances,
-            opacities=opacities,
-            colors=harmonics, # todo (b n c d_sh)
-            use_sh=False,
-            denormalize = False, # todo 
-            near_plane=0.1,
-            far_plane=1000.,
+        # colors, rendered_depth = rasterize_gaussians(
+        #     extrinsics=output_extrinsics,
+        #     intrinsics=output_intrinsics,
+        #     image_shape = (output_h,output_w),
+        #     means3d=means3d,
+        #     rotations=rotations,
+        #     scales=scales,
+        #     covariances=covariances,
+        #     opacities=opacities,
+        #     colors=harmonics, # todo (b n c d_sh)
+        #     use_sh=False,
+        #     denormalize = False, # todo 
+        #     near_plane=0.1,
+        #     far_plane=1000.,
         
-            render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
-            channel_chunk=32)               
+        #     render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
+        #     channel_chunk=32)               
         
         # todo --------------------------#
         # todo occ 占用预测
@@ -233,8 +235,8 @@ class BEVSegmentor(CustomBaseSegmentor):
                     'occ_gt': results['sampled_label'], # (b (h w d))
                     'occ_mask': results['occ_mask'].flatten(1), # (b (h w d))
                     
-                    'img_pred': colors,
-                    'depth_pred': rendered_depth,
+                    # 'img_pred': colors,
+                    # 'depth_pred': rendered_depth,
                 }]
             return outputs
 
@@ -256,15 +258,15 @@ class BEVSegmentor(CustomBaseSegmentor):
         losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
             lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
 
-        rendered_depth = rendered_depth.flatten(0,1)
-        depth = depth.flatten(0,1)
-        losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth,criterion='l1')
+        # rendered_depth = rendered_depth.flatten(0,1)
+        # depth = depth.flatten(0,1)
+        # losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth,criterion='l1')
         
-        rgb = colors.flatten(0,1)
-        rgb_gt = rgb_gt.flatten(0,1) / 255.
-        reg_loss = (rgb - rgb_gt) ** 2
-        losses['loss_l2'] = reg_loss.mean()
-        losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
+        # rgb = colors.flatten(0,1)
+        # rgb_gt = rgb_gt.flatten(0,1) / 255.
+        # reg_loss = (rgb - rgb_gt) ** 2
+        # losses['loss_l2'] = reg_loss.mean()
+        # losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
         
         return losses
     

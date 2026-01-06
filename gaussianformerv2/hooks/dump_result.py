@@ -43,7 +43,7 @@ class DumpResultHook(Hook):
             cols = n // 2
         else:
             cols = n       
-        if self.save_img and outputs[0]['img_pred'] is not None:        
+        if self.save_img and (['img_pred'] in outputs[0]):        
             img_pred  = outputs[0]['img_pred']
             img_gt  = data_batch['output_img'] / 255.
             for i in range(bs):
@@ -67,7 +67,7 @@ class DumpResultHook(Hook):
                 save_path = os.path.join(self.dir_img, save_name)
                 torchvision.utils.save_image(grid, save_path) 
         
-        if self.save_depth and outputs[0]['depth_pred'] is not None:                       
+        if self.save_depth and (['depth_pred'] in outputs[0]):                       
             
             for i in range(bs):
                 depth_pred = outputs[0]['depth_pred'][i]

@@ -84,7 +84,7 @@ def draw_bev_global_only(ego2global, cam2egos, sensor_names, trajectory, canvas_
 data_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini'
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/"
 imageset = anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl"
-output_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/scene_videos2'
+output_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/scene_videos'
 os.makedirs(output_dir, exist_ok=True)
 
 if __name__ == '__main__':
@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
             
             # --- 1. 更新或继承位姿数据 ---
-            if is_key_frame:
+            if is_key_frame: # todo 仅 is_key_frame=True的帧包含'LIDAR_TOP'信息
                 # 关键帧：提取新位姿
                 ego_pos = np.asarray(info['data']['LIDAR_TOP']['pose']['translation'])
                 trajectory.append(ego_pos[:2])
@@ -143,7 +143,7 @@ if __name__ == '__main__':
                 current_cam2egos = []
                 current_names = []
                 for cam_type in [s for row in sensor_layout for s in row]:
-                    c2e = np.eye(4)
+                    c2e = np.eye(4) # todo 相机到自车的位置
                     c2e[:3, :3] = Quaternion(info['data'][cam_type]['calib']['rotation']).rotation_matrix
                     c2e[:3, 3] = np.asarray(info['data'][cam_type]['calib']['translation'])
                     current_cam2egos.append(c2e)

@@ -245,7 +245,13 @@ class NuScenesSurroundOccDataset(Dataset):
         crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
         
         flip = False
-        rotate = 0   
+        rotate = 0
+        
+        if not self.test_mode:
+            if self.data_aug_conf["rand_flip"] and np.random.choice([0, 1]):
+                flip = True
+            rotate = np.random.uniform(*self.data_aug_conf["rot_lim"])
+           
     
         out_h, out_w = self.data_aug_conf['output_dim']
         output_resize = [out_w/W, out_h/H]

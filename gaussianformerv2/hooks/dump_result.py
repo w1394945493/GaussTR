@@ -43,7 +43,7 @@ class DumpResultHook(Hook):
             cols = n // 2
         else:
             cols = n       
-        if self.save_img and (['img_pred'] in outputs[0]):        
+        if self.save_img and ('img_pred' in outputs[0]):        
             img_pred  = outputs[0]['img_pred']
             img_gt  = data_batch['output_img'] / 255.
             for i in range(bs):
@@ -66,8 +66,10 @@ class DumpResultHook(Hook):
                 save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_img_gt.png"
                 save_path = os.path.join(self.dir_img, save_name)
                 torchvision.utils.save_image(grid, save_path) 
+                
+                
         
-        if self.save_depth and (['depth_pred'] in outputs[0]):                       
+        if self.save_depth and ('depth_pred' in outputs[0]):                       
             
             for i in range(bs):
                 depth_pred = outputs[0]['depth_pred'][i]
@@ -83,7 +85,7 @@ class DumpResultHook(Hook):
                 torchvision.utils.save_image(grid, save_path)                
                 
                 
-                depth_gt = data_batch['depth'][i]
+                depth_gt = data_batch['output_depth'][i]
                 depth_gt = depth_gt.unsqueeze(1)
                 depth_gt = F.interpolate(depth_gt,size=(f_h,f_w),mode='bilinear',align_corners=False)
                 max_val = float(depth_gt.max())
@@ -93,6 +95,18 @@ class DumpResultHook(Hook):
                 save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_gt.png"
                 save_path = os.path.join(self.dir_depth, save_name)
                 torchvision.utils.save_image(grid, save_path)
+                
+                depth_input = data_batch['depth'][i]
+                depth_input = depth_input.unsqueeze(1)
+                depth_input = F.interpolate(depth_input,size=(f_h,f_w),mode='bilinear',align_corners=False)
+                max_val = float(depth_input.max())
+                depth_input /= (max_val + 1e-6)                
+                
+                grid = torchvision.utils.make_grid(depth_input, nrow=cols, padding=2)
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_input.png"
+                save_path = os.path.join(self.dir_depth, save_name)
+                torchvision.utils.save_image(grid, save_path)
+        
         return
 
 

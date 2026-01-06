@@ -188,11 +188,10 @@ class LoadFeatMaps(ResizeCropFlipImage):
 
     def __call__(self, results):
         #! 加载输入图像的深度图 跟着输入图像的预处理对深度图进行处理！
-        feats = [] 
-        # img_aug_mats = results.get('img_aug_mat')
         aug_configs = results.get("aug_configs")
         resize, resize_dims, crop, flip, rotate, output_resize, output_dims, output_crop = aug_configs
 
+        feats = [] 
         for i, filename in enumerate(results['filename']):
             feat = np.load(
                 os.path.join(self.data_root,
@@ -216,24 +215,38 @@ class LoadFeatMaps(ResizeCropFlipImage):
             import cv2
             cv2.imwrite('depth_1.png',feat.astype(np.uint8))
             '''
-            # feat = torch.from_numpy(feat)
-           
-            # if self.apply_aug and img_aug_mats is not None:
-            #     post_rot = img_aug_mats[i][:3, :3]
-            #     post_tran = img_aug_mats[i][:3, 3]
-            #     assert post_rot[0, 1] == post_rot[1, 0] == 0  # noqa
-
-            #     h, w = feat.shape
-            #     mode = 'nearest' if torch.all(feat == feat.floor()) else 'bilinear'
-            #     feat = F.interpolate(
-            #         feat[None, None], (int(h * post_rot[1, 1] + 0.5),
-            #                             int(w * post_rot[0, 0] + 0.5)),
-            #         mode=mode).squeeze()
-            #     feat = feat[int(post_tran[1]):, int(-post_tran[0]):]
-            # feats.append(feat)            
-            
-        # results[self.key] = torch.stack(feats)
+        
         results[self.key] = np.array(feats,dtype=np.float32)
+        
+        if 'output_filename' in results:
+            feats = [] 
+            for i, filename in enumerate(results['output_filename']): #! 'output_filename'
+                feat = np.load(
+                    os.path.join(self.data_root,
+                                filename.split('/')[-1].split('.')[0] + '.npy'))
+                '''
+                import cv2
+                cv2.imwrite('depth_0.png',feat.astype(np.uint8))
+                '''
+                feat = Image.fromarray(feat)
+                feat, ida_mat = self._img_transform(
+                    feat,
+                    resize=output_resize,
+                    resize_dims=output_dims,
+                    crop=output_crop,
+                    flip=False,
+                    rotate=0,
+                )     
+                feat = np.array(feat).astype(np.float32)       
+                feats.append(feat)
+                '''
+                import cv2
+                cv2.imwrite('depth_1.png',feat.astype(np.uint8))
+                '''
+            
+            results[f'output_{self.key}'] = np.array(feats,dtype=np.float32)        
+        
+        
         return results
         
         

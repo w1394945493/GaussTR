@@ -48,13 +48,14 @@ class NuScenesSurroundOccDataset(Dataset):
                     'focal_positions', # todo 
 
                     'img',
+                    "depth", # todo (wys 12.30) 深度图
                     "cam2img", # todo (wys 12.30) 用于视图合成
                     "cam2ego",
                     "cam2lidar",
-                    "depth", # todo (wys 12.30) 深度图
                     "img_aug_mat",
                     
                     'output_img',
+                    'output_depth',
                     "output_cam2img", # todo (wys 12.30) 用于视图合成
                     "output_cam2ego",
                     "output_cam2lidar",

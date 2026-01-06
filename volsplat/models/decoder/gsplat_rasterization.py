@@ -1,7 +1,7 @@
 import torch
 from gsplat import rasterization
 from math import isqrt
-from gaussianformerv2.model.utils import unbatched_forward
+from omniscene.models.utils import unbatched_forward
 
 
 @unbatched_forward
@@ -15,8 +15,8 @@ def rasterize_gaussians(
     covariances,
     opacities,
     colors, # 颜色
-    use_sh = False,
-    is_normalize = False,
+    use_sh = True,
+    img_aug_mats=None,
     **kwargs):
 
     # cam2world to world2cam
@@ -29,15 +29,12 @@ def rasterize_gaussians(
 
     if intrinsics.shape[-2:] == (4, 4):
         intrinsics = intrinsics[:, :3, :3]
-    
+
     H,W = image_shape
-    
-    cam2imgs = intrinsics.clone()    
-    
-    if is_normalize:
-        # Denormalize the intrinsics into standred format
-        cam2imgs[:,0] = cam2imgs[:,0] * W
-        cam2imgs[:,1] = cam2imgs[:,1] * H
+    # Denormalize the intrinsics into standred format
+    cam2imgs = intrinsics.clone()
+    cam2imgs[:,0] = cam2imgs[:,0] * W
+    cam2imgs[:,1] = cam2imgs[:,1] * H
 
 
     if use_sh:

@@ -67,7 +67,8 @@ val_dataset_config = dict(
     imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=test_pipeline,
-    phase='val',
+    # phase='val',
+    phase='train',
 )
 
 seed = 42

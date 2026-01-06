@@ -9,11 +9,11 @@ import imageio
 from mmengine.model import BaseModule
 from mmdet3d.registry import MODELS
 import warnings
-from einops import rearrange, einsum, repeat
+from einops import rearrange, einsum,repeat
 
 from ...geometry import sample_image_grid, get_world_rays
 
-from ..utils.utils import build_covariance
+from ..encoder.common.gaussians import build_covariance
 from ..utils.types import Gaussians
 
 @MODELS.register_module()
@@ -29,6 +29,10 @@ class PixelGaussian(BaseModule):
                  num_cams=6,
                  near=0.1,
                  far=1000.0,
+                #  scale_min = 0.05,
+                #  scale_max = 1.5,
+                 scale_min = 0.08,
+                 scale_max = 0.64,
                  use_checkpoint=False,
                  **kwargs,
                  ):
@@ -110,12 +114,11 @@ class PixelGaussian(BaseModule):
         )
         self.opt_act = torch.sigmoid
         # todo scales(使用OmniScene中方法，对预测尺度进行处理)
-        self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
-        
+        # self.scale_act = lambda x: torch.exp(x) * 0.01 # todo log对数预测
         # todo MonoSplat/GaussianFormer等工作中的处理
-        # self.scale_act = torch.sigmoid
-        # self.scale_min = scale_min # todo 0.08
-        # self.scale_max = scale_max # todo 0.64
+        self.scale_act = torch.sigmoid
+        self.scale_min = scale_min # todo 0.08
+        self.scale_max = scale_max # todo 0.64
 
         self.rot_act = lambda x: F.normalize(x, dim=-1)
         self.rgb_act = torch.sigmoid
@@ -137,7 +140,6 @@ class PixelGaussian(BaseModule):
         rays_d = rays_d.permute(0, 1, 4, 2, 3)
         plucker = torch.cat([torch.cross(rays_o, rays_d, dim=2), rays_d], dim=2)
         return plucker
-    
     # todo ----------------------------------#
     # todo (wys 10.17): 像素高斯预测
     # 把输入的多视角图像特征 + 几何信息(射线、深度、置信度等)转换为一批高斯点云(Gaussians)和特征表示，用于后续的体渲染或三维场景重建
@@ -145,49 +147,19 @@ class PixelGaussian(BaseModule):
     def forward(self,
                 img_feats,
                 depths_in,
+                # confs_in,
+                pluckers,
+                origins,
+                directions,
                 intrinsics,
                 extrinsics,
-                img_aug_mat = None,
                 status="train"):
         """Forward training function."""
-        h,w = img_feats.shape[-2:]
-        bs, n = intrinsics.shape[:2]
-        device = intrinsics.device
         # todo-----------------------------#
-        # todo 0. 计算射线原点和方向                
-        extrinsics_ = rearrange(extrinsics, "b v i j -> b v () () () i j")
-        intrinsics_ = rearrange(intrinsics, "b v i j -> b v () () () i j") # 归一化的内参
-                
-        xy_ray, _ = sample_image_grid((h, w), device, normal=False) # (h w 2)
-        
-        if img_aug_mat is not None:
-            coordinates = repeat(xy_ray, "h w xy -> b v (h w) xy",b=bs,v=n) # (b v n 2)
-            # 计算得到相对于intrinsics下的坐标
-            # 齐次化 (b, v, n, 3)
-            coordinates = torch.cat([coordinates,  torch.ones_like(coordinates[..., :1])], dim=-1) # (b, v, n, 3)
-            post_rots = img_aug_mat[..., :3, :3] # (b,v,3,3)
-            post_trans = img_aug_mat[..., :3, 3] # (b,v,3)            
-            # 逆平移
-            coordinates = coordinates - post_trans.unsqueeze(-2)
-            # 逆旋转 (b, v, n, 3)
-            coordinates = (torch.inverse(post_rots).unsqueeze(2) @ coordinates.unsqueeze(-1)).squeeze(-1)
-            # 去掉齐次位并对齐维度 (b, v, n, 1, 1, 2)
-            coordinates = rearrange(coordinates[...,:-1], "b v n xy -> b v n () () xy")
-        
-        else:
-            coordinates = repeat(xy_ray, "h w xy -> b v (h w) () () xy",b=bs,v=n) # (b v n 1 1 2)
-        
-        
-        
-        origins, directions = get_world_rays(coordinates, extrinsics_, intrinsics_) # (b v (h w) 1 1 3) (b v (h w) 1 1 3)
-        origins = rearrange(origins,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
-        directions = rearrange(directions,"b v (h w) srf spp c -> b v h w (srf spp c)", h=h,w=w)
-        pluckers = self.plucker_embedder(origins, directions)          
-        
-        # todo-----------------------------#
-        # todo 1. 特征编码
+        # todo 1. 特征融合与嵌入
         # upsample 4x downsampled img features to original size
-        # img_feats = self.upsampler(img_feats) # todo (bv c h/4 w/4) -> (bv c h w)
+        img_feats = self.upsampler(img_feats) # todo (bv c h/4 w/4) -> (bv c h w)
+        bs = origins.shape[0] # todo origins: 射线原点 origins: (b v h w 3); directions: 射线方向 (b v h w 3)
         img_feats = rearrange(img_feats, "(b v) c h w -> b v h w c", b=bs, v=self.num_cams) # todo (b v h w c)
         pluckers = rearrange(pluckers, "b v c h w -> b v h w c") # Pluckers: 射线的Plücker 坐标嵌入，编码几何方向
         plucker_embeds = self.plucker_to_embed(pluckers) # todo 全连接：编码 6 -> 128
@@ -197,7 +169,7 @@ class PixelGaussian(BaseModule):
         # todo-----------------------------#
         # todo 2. 深度与置信度拼接：使网络学习到每个像素点的可靠性与深度信息
         # rearrange pseudo depths and confs
-        depths_in = rearrange(depths_in, "b v h w -> (b v) () h w") # todo 深度图 (b v h w) 这里使用的是度量深度(Metric 3D)！！！
+        depths_in = rearrange(depths_in, "b v h w -> (b v) () h w") # todo 深度图 (b v h w) 这里使用的，就是度量深度(Metric 3D)！！！
 
         #? todo Metric 3D 未提供相应的深度置信度
         # confs_in = rearrange(confs_in, "b v h w -> (b v) () h w") # todo (b v h w)
@@ -249,11 +221,11 @@ class PixelGaussian(BaseModule):
         opacities = self.opt_act(gaussians[..., 3:4]) # opactites：透明度 # todo Sigmoid操作
 
         # todo Omni-Scene中的设计
-        scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
+        # scales = self.scale_act(gaussians[..., 4:7]) # scales：空间尺度(控制体素体积) # todo e^(x) * 0.01
 
         # todo 参考MonoSplat、GaussianFormer中的设计
-        # scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
-        # scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
+        scales = self.scale_act(gaussians[..., 4:7]) # todo sigmoid归一化
+        scales = self.scale_min + (self.scale_max - self.scale_min) * scales # todo 将尺度限制在一定范围内
 
         rotations = self.rot_act(gaussians[..., 7:11]) # rotations：四元数旋转 # todo Normalize归一化操作
         rgbs = self.rgb_act(gaussians[..., 11:14]) # 颜色值 # todo sigmoid 操作
@@ -270,11 +242,10 @@ class PixelGaussian(BaseModule):
         means = origins + directions * depths_in[..., None] # todo: 射线起点 + 深度 × 方向 得到空间位置
         means = rearrange(means, "b r n c -> b (r n) c")
         means = means + offsets # todo：再加上网络预测的offsets偏移量 在三维空间下的偏移量
-        
         # todo ----------------------------#
         # todo 协方差计算(参照MonoSplat中的计算)
         covariances = build_covariance(scales, rotations) # todo shape: (b (v h w) 3 3)
-        covariances = rearrange(covariances, "b (v h w) i j -> b v h w i j", v=self.num_cams, h=h, w=w)
+        covariances = rearrange(covariances,"b (v h w) i j -> b v h w i j",v=self.num_cams,h=h,w=w)
         c2w_rotations = extrinsics[..., :3, :3] # todo 相机外参cam2ego (b v 3 3)
         c2w_rotations = rearrange(c2w_rotations,"b v i j -> b v () () i j")
         covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # todo 转换到自车坐标系下
@@ -283,6 +254,10 @@ class PixelGaussian(BaseModule):
 
         # todo-----------------------------#
         # todo 6.整合输出
+        # gaussians = torch.cat([means, rgbs, opacities, rotations, scales], dim=-1) # todo：gaussians：每个点的几何与外观属性
+        # features = rearrange(features, "(b v) c h w -> b (v h w) c", b=bs, v=self.num_cams) # todo：features：对应点的高维语义特征
+        # features = features.unsqueeze(2) # b v*h*w n c
+        # features = rearrange(features, "b r n c -> b (r n) c")
         pixel_gaussians = Gaussians(
             means=means, # (b N 3)
             covariances=covariances, # (b N 3 3)
@@ -292,6 +267,5 @@ class PixelGaussian(BaseModule):
             opacities=opacities.squeeze(-1), # (b N 1) -> (b N)
 
         )
-        
         return pixel_gaussians
 

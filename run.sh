@@ -183,7 +183,7 @@ PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/config
 export CUDA_VISIBLE_DEVICES=5
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train2 \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
 

@@ -271,7 +271,7 @@ class ImageAug3D(BaseTransform):
             post_tran = torch.zeros(2) # (2)
 
             # todo ----------------------------
-             # todo (2 2)
+            resize =  torch.diag(torch.tensor(resize, dtype=post_rot.dtype, device=post_rot.device)) # todo (2 2)
             new_img, rotation, translation = self.img_transform(
                 img,
                 post_rot,

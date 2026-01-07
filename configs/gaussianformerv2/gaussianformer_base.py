@@ -66,9 +66,7 @@ model = dict(
         with_cp = True,
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
         stage_with_dcn=(False, False, True, True),),
-    img_neck=dict(
-        type='mmdet.FPN',
-        start_level=1), # todo 主干网络
+
     
     # img_backbone=dict(
     #     type='mmdet.ResNet',
@@ -85,7 +83,10 @@ model = dict(
     #         # checkpoint='pretrained/dino_resnet50_pretrain.pth',
     #         checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
     #         prefix=None)),
-    
+
+    img_neck=dict(
+        type='mmdet.FPN',
+        start_level=1), # todo 主干网络    
     
 
     # img_neck=dict(

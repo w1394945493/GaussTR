@@ -1,7 +1,7 @@
 import torch.nn as nn
 from lpips import LPIPS
 from mmdet3d.registry import MODELS
-from omniscene.misc.nn_module_tools import convert_to_buffer
+from ..misc.nn_module_tools import convert_to_buffer
 
 @MODELS.register_module()
 class LossLpips(nn.Module):

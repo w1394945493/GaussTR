@@ -54,17 +54,18 @@ patch_sizes=[8, 8, 4, 2]
 
 model = dict(
     type = 'VolSplat',
-
-    near = near,
-    far = far,
-    d_sh = d_sh,
-    ori_image_shape = ori_image_shape,
-    use_checkpoint = use_checkpoint,
-
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
         mean=mean,
         std=std),
+    
+    ori_image_shape = ori_image_shape,
+    use_checkpoint = use_checkpoint,
+    
+    in_embed_dim=_dim_,
+    out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
+    voxel_resolution = 0.001,
+
 
     backbone=dict(
         type='mmdet.ResNet',
@@ -89,50 +90,24 @@ model = dict(
         start_level=0,
         add_extra_convs='on_input',
         num_outs=4),
-
-    pixel_gs=dict(
-        type="PixelGaussian",
-        use_checkpoint=use_checkpoint,
-        down_block=dict(
-            type='MVDownsample2D',
-            num_layers=num_layers,
-            resnet_act_fn="silu",
-            resnet_groups=32,
-            num_attention_heads=num_heads,
-            num_views=num_cams),
-        up_block=dict(
-            type='MVUpsample2D',
-            num_layers=num_layers,
-            resnet_act_fn="silu",
-            resnet_groups=32,
-            num_attention_heads=num_heads,
-            num_views=num_cams),
-        mid_block=dict(
-            type='MVMiddle2D',
-            num_layers=num_layers,
-            resnet_act_fn="silu",
-            resnet_groups=32,
-            num_attention_heads=num_heads,
-            num_views=num_cams),
-        patch_sizes=patch_sizes,
-        in_embed_dim=_dim_,
-        out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
-        num_cams=num_cams,
-        near=near,
-        far=far,
-
-        ),
-
-    gauss_head=dict(
-        type='VolSplatHead',
-        loss_lpips=dict(
-            type='LossLpips',
-            weight = 0.05,
-        ),
-        near = near,
-        far = far,
-        use_sh = use_sh,
-        renderer_type = renderer_type,
+    
+    sparse_unet=dict(
+        type='SparseUNetWithAttention',
+        in_channels=_dim_, # 128
+        out_channels=_dim_, # 128
+        num_blocks=3,
+        use_attention=False),    
+    
+    sparse_gs=dict(
+        type='SparseGaussianHead',
+        in_channels=_dim_, 
+        out_channels=38),       
+    
+    gaussian_adapter=dict(
+        type='GaussianAdapter_depth',
+        gaussian_scale_min = 1e-10,
+        gaussian_scale_max = 3.0,
+        sh_degree=2,
     )
 )
 

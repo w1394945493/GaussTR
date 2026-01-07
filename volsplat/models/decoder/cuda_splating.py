@@ -91,13 +91,6 @@ def render_cuda(
     images = []
     depths = []
     for i in range(bsn):
-        # Set up a tensor for the gradients of the screen-space means.
-        # mean_gradients = torch.zeros_like(gaussian_means[i], requires_grad=True)
-        # try:
-        #     mean_gradients.retain_grad()
-        # except Exception:
-        #     pass
-
         means2D = torch.zeros_like(gaussian_means[i])
         settings = GaussianRasterizationSettings(
             image_height=h,
@@ -123,8 +116,8 @@ def render_cuda(
             shs=shs[i] if use_sh else None, # None
             colors_precomp=None if use_sh else shs[i, :, 0, :], # (N 3) rgb
             opacities=gaussian_opacities[i, ..., None], # (N 1)
-            scales = gaussian_scales[i], # (N 3)
-            rotations = gaussian_rotations[i], # (N 4)
+            scales = gaussian_scales[i] if gaussian_scales is not None else None, # (N 3)
+            rotations = gaussian_rotations[i] if gaussian_rotations is not None else None, # (N 4)
             cov3D_precomp=gaussian_covariances[i, :, row, col] if gaussian_covariances is not None else None, # (N 3 3)
         )
 

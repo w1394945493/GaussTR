@@ -135,7 +135,8 @@ class DumpResultHook(Hook):
                 save_name = f"{data_sample.scene_token}_{data_sample.token}_gt.png"
                 save_path = os.path.join(self.dir_depth, save_name)
                 torchvision.utils.save_image(grid, save_path)
-
+        
+        return
 
 
 

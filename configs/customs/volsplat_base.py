@@ -1,6 +1,6 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis2' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
@@ -11,10 +11,10 @@ mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
 
-d_sh = None
-use_sh = d_sh is not None
-# renderer_type = "vanilla"
-renderer_type = "gsplat"
+sh_degree = 2
+use_sh = sh_degree is not None
+renderer_type = "vanilla"
+# renderer_type = "gsplat"
 
 # save_vis = False
 save_vis = True
@@ -33,9 +33,9 @@ custom_hooks = [
 input_size = (112,200)
 ori_image_shape = (900,1600)
 
-near = 0.1
-# far = 100.
-far = 1000.
+near = 0.5
+far = 100.
+
 
 # train_ann_file='nuscenes_mini_infos_train.pkl'
 train_ann_file='nuscenes_mini_infos_val.pkl'
@@ -107,7 +107,18 @@ model = dict(
         type='GaussianAdapter_depth',
         gaussian_scale_min = 1e-10,
         gaussian_scale_max = 3.0,
-        sh_degree=2,
+        sh_degree=sh_degree,
+    ),
+    decoder = dict(
+        type='DecoderSplatting',
+        loss_lpips=dict(
+            type='LossLpips',
+            weight = 0.05,
+        ),
+        near = near,
+        far = far,
+        use_sh = use_sh,
+        renderer_type = renderer_type,        
     )
 )
 

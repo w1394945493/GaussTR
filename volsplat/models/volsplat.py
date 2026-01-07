@@ -41,6 +41,7 @@ class VolSplat(BaseModel):
                 sparse_unet,
                 sparse_gs,
                 gaussian_adapter,
+                decoder,
             
                 ori_image_shape,
                 use_checkpoint,
@@ -66,6 +67,8 @@ class VolSplat(BaseModel):
         self.sparse_unet = MODELS.build(sparse_unet)
         self.gaussian_head = MODELS.build(sparse_gs)
         self.gaussian_adapter = MODELS.build(gaussian_adapter)
+        
+        self.decoder = MODELS.build(decoder)
 
         self.ori_image_shape = ori_image_shape
         self.use_checkpoint = use_checkpoint
@@ -287,5 +290,5 @@ class VolSplat(BaseModel):
             rearrange(gaussians.opacities,   "b v r srf spp -> b (v r srf spp)"), #[2, 1, 256000, 1, 1] -> [2, 256000]        
         ) 
                 
-        return
+        return self.decoder(gaussians,image_shape=(h,w),mode=mode,**data_samples)
 

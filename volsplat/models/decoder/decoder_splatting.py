@@ -16,10 +16,10 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from .decoder import rasterize_gaussians,render_cuda
+from . import rasterize_gaussians,render_cuda
 
 @MODELS.register_module()
-class VolSplatHead(BaseModule):
+class DecoderSplatting(BaseModule):
 
     def __init__(self,
                  loss_lpips,
@@ -46,11 +46,8 @@ class VolSplatHead(BaseModule):
         self.renderer_type = renderer_type
 
     def forward(self,
-                pixel_gaussians,
-                inputs,
+                gaussians,
                 image_shape,
-                near,
-                far,
                 rgb_gts,
                 depth,
                 cam2img,
@@ -63,20 +60,24 @@ class VolSplatHead(BaseModule):
                 **kwargs):
 
         bs, n = cam2img.shape[:2] # todo: n: 视角数
+        device = cam2img.device
         h, w = image_shape
 
-        means3d = pixel_gaussians.means
-        harmonics = pixel_gaussians.harmonics # todo (b n c d_sh) | (b n c), c=rgb
-        opacities = pixel_gaussians.opacities
-        scales = pixel_gaussians.scales
-        rotations = pixel_gaussians.rotations
-        covariances = pixel_gaussians.covariances
+        means3d = gaussians.means # todo (b n 3)
+        harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
+        opacities = gaussians.opacities # todo (b n)
+        scales = gaussians.scales
+        rotations = gaussians.rotations
+        covariances = gaussians.covariances
 
         intrinsics = cam2img[...,:3,:3] # (b v 3 3)
         extrinsics = cam2ego # (b v 4 4)
 
         if self.renderer_type == "vanilla":
 
+            near = repeat(torch.tensor([self.near],device=device),"1 -> b v",b=bs,v=n)
+            far = repeat(torch.tensor([self.far],device=device),"1 -> b v",b=bs,v=n)
+            
             colors, rendered_depth = render_cuda(
                 extrinsics=rearrange(extrinsics, "b v i j -> (b v) i j"),
                 intrinsics=rearrange(intrinsics, "b v i j -> (b v) i j"),
@@ -90,8 +91,8 @@ class VolSplatHead(BaseModule):
                     repeat(harmonics, "b g c d_sh -> (b v) g c d_sh", v=n) if self.use_sh else repeat(harmonics, "b g rgb -> (b v) g rgb ()", v=n),
                 gaussian_opacities=repeat(opacities, "b g -> (b v) g", v=n),
 
-                gaussian_scales=repeat(scales, "b g c -> (b v) g c", v=n),
-                gaussian_rotations=repeat(rotations, "b g c -> (b v) g c", v=n),
+                gaussian_scales=repeat(scales, "b g c -> (b v) g c", v=n) if covariances is None else None,
+                gaussian_rotations=repeat(rotations, "b g c -> (b v) g c", v=n) if covariances is None else None,
 
                 gaussian_covariances=repeat(covariances, "b g i j -> (b v) g i j", v=n) if covariances is not None else None,
                 scale_invariant = False,
@@ -110,7 +111,7 @@ class VolSplatHead(BaseModule):
                 scales=scales,
                 covariances=covariances,
                 opacities=opacities.squeeze(-1),
-                colors=harmonics, # todo (b n c d_sh)
+                colors=rearrange(harmonics,"b g c d_sh -> b g d_sh c") if self.use_sh else harmonics, # todo (b n c d_sh)
                 use_sh=self.use_sh,
                 img_aug_mats=img_aug_mat,
 

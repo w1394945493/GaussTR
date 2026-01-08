@@ -42,8 +42,7 @@ class VolSplat(BaseModel):
                 sparse_gs,
                 gaussian_adapter,
                 decoder,
-            
-                ori_image_shape,
+        
                 use_checkpoint,
                 
                 in_embed_dim,
@@ -70,7 +69,6 @@ class VolSplat(BaseModel):
         
         self.decoder = MODELS.build(decoder)
 
-        self.ori_image_shape = ori_image_shape
         self.use_checkpoint = use_checkpoint
         
         self.voxel_resolution = voxel_resolution

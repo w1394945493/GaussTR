@@ -277,8 +277,7 @@ optim_wrapper = dict(
     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
     clip_grad=dict(max_norm=35, norm_type=2))
 
-# train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=30, val_interval=1)
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
 val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')
 
@@ -288,7 +287,11 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-     # todo
+    logger=dict(type='LoggerHook', interval=1,),# todo 管理 训练 loss / metrics 的间隔(每)
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )
 
+log_processor = dict(
+    type='LogProcessor', window_size=50, by_epoch=True,
+    mean_pattern=r'.*(time|data_time).*', # todo 对指定指标做滑动平均，其他则直接记录当前步的结果
+    ) 

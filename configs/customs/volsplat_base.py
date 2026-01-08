@@ -22,7 +22,7 @@ renderer_type = "gsplat"
 near = 0.1
 far = 1000.
 
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis12'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis13'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -31,8 +31,6 @@ custom_hooks = [
         ),
 ]  #  # 保存结果
 
-input_size = (112,200)
-ori_image_shape = (900,1600)
 
 
 
@@ -55,8 +53,7 @@ out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
 
 model = dict(
     type = 'VolSplat',
-    
-    ori_image_shape = ori_image_shape,
+
     use_checkpoint = use_checkpoint,
     
     in_embed_dim=_dim_,
@@ -138,7 +135,7 @@ train_pipeline = [
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
     dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
-    dict(type="PhotoMetricDistortionMultiViewImage"), # todo
+    # dict(type="PhotoMetricDistortionMultiViewImage"), # todo 
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
@@ -176,8 +173,8 @@ train_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
     # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
-    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
-    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
+    # imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
     load_adj_frame = True, # todo 训练时，不引入相邻帧图像
@@ -275,7 +272,13 @@ param_scheduler = [
 
 default_hooks = dict(
     logger=dict(type='LoggerHook', interval=1,),# todo 管理 训练 loss / metrics 的间隔(每)
-    checkpoint=dict(type='CheckpointHook', interval=1, max_keep_ckpts=1)
+    checkpoint=dict(type='CheckpointHook', 
+                    interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。
+                    max_keep_ckpts=1,     # 最大保留数量（不包含“最优”权重）。
+                    save_best='psnr',     # 开启“最优模型”保存机制。
+                    rule='greater',       # 越大越好
+                    published_keys=['psnr', 'ssim', 'lpips']
+                    )
 )
 log_processor = dict(
     type='LogProcessor', window_size=50, by_epoch=True,

@@ -9,13 +9,20 @@ mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
 
-sh_degree = 2 # todo d_sh = (sh_degree + 1)**2
+# sh_degree = 2 # todo d_sh = (sh_degree + 1)**2
+sh_degree = None
 use_sh = sh_degree is not None
-renderer_type = "vanilla"
-# renderer_type = "gsplat"
 
+# renderer_type = "vanilla"
+renderer_type = "gsplat"
 
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis8'
+# near = 0.5
+# far = 100.
+
+near = 0.1
+far = 1000.
+
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis10'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -27,8 +34,8 @@ custom_hooks = [
 input_size = (112,200)
 ori_image_shape = (900,1600)
 
-near = 0.5
-far = 100.
+
+
 
 
 train_ann_file='nuscenes_mini_infos_train.pkl'
@@ -43,7 +50,7 @@ num_heads = 8
 num_layers = 1
 patch_sizes=[8, 8, 4, 2]
 
-
+out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
 
 
 model = dict(
@@ -96,7 +103,7 @@ model = dict(
     sparse_gs=dict(
         type='SparseGaussianHead',
         in_channels=_dim_, 
-        out_channels=38),       
+        out_channels=out_channels),       
     
     gaussian_adapter=dict(
         type='GaussianAdapter_depth',
@@ -197,8 +204,8 @@ seed = 42
 
 train_dataloader = dict(
     batch_size=1,
-    num_workers=4,
-    # num_workers=0,
+    # num_workers=4,
+    num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
@@ -207,8 +214,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    num_workers=4,
-    # num_workers=0,
+    # num_workers=4,
+    num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,
@@ -230,19 +237,42 @@ randomness = dict(
 val_evaluator = dict(type='ImgMetric')
 test_evaluator = val_evaluator
 
-optim_wrapper = dict(
-    type='OptimWrapper',   # 避免混合精度(AMP)
-    optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
-    clip_grad=dict(max_norm=35, norm_type=2))
-
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
 val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')
 
+# optim_wrapper = dict(
+#     type='OptimWrapper',   # 避免混合精度(AMP)
+#     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
+#     clip_grad=dict(max_norm=35, norm_type=2))
+
+# param_scheduler = [
+#     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
+#     dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+# ]
+
+base_lr = 2e-4
+min_lr_ratio = 0.1
+warmup_iters = 500
+
+# Optimizer
+optim_wrapper = dict(
+    type='OptimWrapper',   # 避免混合精度(AMP)
+    optimizer = dict(type="AdamW", lr=base_lr, weight_decay=0.01,),
+    paramwise_cfg=dict(custom_keys={'backbone': dict(lr_mult=0.1)}),
+    clip_grad=dict(max_norm=35, norm_type=2))
+
 param_scheduler = [
-    dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
-    dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+    dict(
+        type='CosineLR',
+        lr_min = base_lr * min_lr_ratio,
+        warmup_t = warmup_iters,
+        warmup_lr_init = 1e-6,
+        by_epoch=False,
+    ),
 ]
+
+
 
 default_hooks = dict(
     logger=dict(type='LoggerHook', interval=1,),# todo 管理 训练 loss / metrics 的间隔(每)

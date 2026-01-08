@@ -221,14 +221,6 @@ class VolSplat(BaseModel):
             voxel_resolution = self.voxel_resolution, # 0.001  
             normal=False,      
         )
-        
-        gaussians = Gaussians(rearrange(gaussians.means,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]
-            rearrange(gaussians.scales,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]
-            rearrange(gaussians.rotations,"b v r srf spp d -> b (v r srf spp) d"), # [b, 1, 256000, 1, 1, 4] -> [b, 256000, 4]                             
-            rearrange(gaussians.covariances,"b v r srf spp i j -> b (v r srf spp) i j",), # [2, 1, 256000, 1, 1, 3, 3] -> [2, 256000, 3, 3]
-            rearrange(gaussians.harmonics, "b v r srf spp c d_sh -> b (v r srf spp) c d_sh"), # [2, 1, 256000, 1, 1, 3, 9] -> [2, 256000, 3, 9]            
-            rearrange(gaussians.opacities,   "b v r srf spp -> b (v r srf spp)"), #[2, 1, 256000, 1, 1] -> [2, 256000]        
-        ) 
-                
+    
         return self.decoder(gaussians,data,mode=mode)
 

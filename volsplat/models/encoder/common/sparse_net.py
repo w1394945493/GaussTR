@@ -7,7 +7,7 @@ from mmdet3d.registry import MODELS
 
 @MODELS.register_module()
 class SparseGaussianHead(nn.Module):
-    def __init__(self, in_channels=164, out_channels=38):
+    def __init__(self, in_channels=128, out_channels=14):
 
         super().__init__()
         

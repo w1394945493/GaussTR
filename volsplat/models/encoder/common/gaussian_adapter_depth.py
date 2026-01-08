@@ -12,15 +12,16 @@ from .gaussians import build_covariance
 from .me_fea import project_features_to_me
 from typing import Tuple, Optional
 
+from ...utils.types import Gaussians
 
-@dataclass
-class Gaussians:
-    means: Float[Tensor, "*batch 3"]
-    covariances: Float[Tensor, "*batch 3 3"]
-    scales: Float[Tensor, "*batch 3"]
-    rotations: Float[Tensor, "*batch 4"]
-    harmonics: Float[Tensor, "*batch 3 _"]
-    opacities: Float[Tensor, " *batch"]
+# @dataclass
+# class Gaussians:
+#     means: Float[Tensor, "*batch 3"]
+#     covariances: Float[Tensor, "*batch 3 3"]
+#     scales: Float[Tensor, "*batch 3"]
+#     rotations: Float[Tensor, "*batch 4"]
+#     harmonics: Float[Tensor, "*batch 3 _"] | Float[Tensor, "*batch 3"]
+#     opacities: Float[Tensor, " *batch"]
 
 
 
@@ -35,20 +36,25 @@ class GaussianAdapter_depth(nn.Module):
         
         self.gaussian_scale_min = gaussian_scale_min
         self.gaussian_scale_max = gaussian_scale_max
+        
+        
         self.sh_degree = sh_degree
 
-        
-        # Create a mask for the spherical harmonics coefficients. This ensures that at
-        # initialization, the coefficients are biased towards having a large DC
-        # component and small view-dependent components.
-        self.register_buffer(
-            "sh_mask",
-            torch.ones((self.d_sh,), dtype=torch.float32), # todo d_sh: 9
-            persistent=False,
-        )
-        for degree in range(1, self.sh_degree + 1):
-            self.sh_mask[degree**2 : (degree + 1) ** 2] = 0.1 * 0.25**degree
-
+        if self.sh_degree:
+            self.d_sh = (self.sh_degree + 1) ** 2
+            # Create a mask for the spherical harmonics coefficients. This ensures that at
+            # initialization, the coefficients are biased towards having a large DC
+            # component and small view-dependent components.
+            self.register_buffer(
+                "sh_mask",
+                torch.ones((self.d_sh,), dtype=torch.float32), # todo d_sh: 9
+                persistent=False,
+            )
+            for degree in range(1, self.sh_degree + 1):
+                self.sh_mask[degree**2 : (degree + 1) ** 2] = 0.1 * 0.25**degree
+        else:
+            self.d_sh = None
+    
     def forward(
         self,
         extrinsics: Tensor,
@@ -70,8 +76,11 @@ class GaussianAdapter_depth(nn.Module):
 
         b, v = batch_dims
 
-        offset_xyz, scales, rotations, sh = raw_gaussians.split((3, 3, 4, 3 * self.d_sh), dim=-1) #[1, 1, N,1, 1,c]
+        # offset_xyz, scales, rotations, sh = raw_gaussians.split((3, 3, 4, 3 * self.d_sh), dim=-1) #[1, 1, N,1, 1,c]
 
+        offset_xyz, scales, rotations, sh = raw_gaussians.split((3, 3, 4, 3 * self.d_sh 
+                                                                 if self.d_sh is not None else 3), dim=-1) #[1, 1, N,1, 1,c]
+        
         scales = torch.clamp(F.softplus(scales - 4.),
             min=self.gaussian_scale_min,
             max=self.gaussian_scale_max,
@@ -80,47 +89,49 @@ class GaussianAdapter_depth(nn.Module):
         # Normalize the quaternion features to yield a valid quaternion.
         rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps)
         
+        if self.d_sh:
+            sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)    # [1, 1, 256000, 1, 1, 3, 9]
+            sh = sh.broadcast_to((*opacities.shape, 3, self.d_sh)) * self.sh_mask
+        else:
+            sh = torch.sigmoid(sh)
         
-        sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)    # [1, 1, 256000, 1, 1, 3, 9]
-        sh = sh.broadcast_to((*opacities.shape, 3, self.d_sh)) * self.sh_mask
-
         # todo ----------------------------------------#
         # todo 从多视图图像投影中得到RGB颜色信息，转换并整合到高斯点云的球谐函数(SH)系数中
-        if input_images is not None :
-            voxel_color, aggregated_points, counts = project_features_to_me(
-                intrinsics = intrinsics,
-                extrinsics = extrinsics,
-                out = input_images,
-                depth =  depth,
-                voxel_resolution = voxel_resolution,
-                b=b,v=v,
-                normal=normal,
-                img_aug_mat=img_aug_mat,
-            )
-            # if torch.equal(coordidate, voxel_color.C):
-            if coordidate.shape == voxel_color.C.shape:
-                colors = voxel_color.F  # [N_total, C]
+        # if input_images is not None :
+        #     voxel_color, aggregated_points, counts = project_features_to_me(
+        #         intrinsics = intrinsics,
+        #         extrinsics = extrinsics,
+        #         out = input_images,
+        #         depth =  depth,
+        #         voxel_resolution = voxel_resolution,
+        #         b=b,v=v,
+        #         normal=normal,
+        #         img_aug_mat=img_aug_mat,
+        #     )
+        #     # if torch.equal(coordidate, voxel_color.C):
+        #     if coordidate.shape == voxel_color.C.shape:
+        #         colors = voxel_color.F  # [N_total, C]
 
-                if sh.shape[0] > 1 and sh.shape[2] != colors.shape[0]:
-                    batch_size = sh.shape[0]
-                    max_voxels = sh.shape[2]
-                    device = colors.device
+        #         if sh.shape[0] > 1 and sh.shape[2] != colors.shape[0]:
+        #             batch_size = sh.shape[0]
+        #             max_voxels = sh.shape[2]
+        #             device = colors.device
 
-                    batched_colors = torch.zeros(batch_size, max_voxels, 3, device=device)
+        #             batched_colors = torch.zeros(batch_size, max_voxels, 3, device=device)
 
-                    for batch_idx in range(batch_size):
-                        mask = voxel_color.C[:, 0] == batch_idx
-                        batch_colors = colors[mask]  # [N_i, 3]
-                        n_voxels = batch_colors.shape[0]
-                        batched_colors[batch_idx, :n_voxels, :] = batch_colors
+        #             for batch_idx in range(batch_size):
+        #                 mask = voxel_color.C[:, 0] == batch_idx
+        #                 batch_colors = colors[mask]  # [N_i, 3]
+        #                 n_voxels = batch_colors.shape[0]
+        #                 batched_colors[batch_idx, :n_voxels, :] = batch_colors
 
-                    sh0 = RGB2SH(batched_colors)  # [b, N_max, 3] # todo 将颜色值从0-1空间映射到球谐系数空间
-                    sh0_expanded = sh0.view(batch_size, 1, max_voxels, 1, 1, 3)  # [b, 1, N_max, 1, 1, 3]
-                else:
-                    sh0 = RGB2SH(colors)
-                    sh0_expanded = sh0.view(1, 1, -1, 1, 1, 3)  # [1,1,N,1,1,3]
+        #             sh0 = RGB2SH(batched_colors)  # [b, N_max, 3] # todo 将颜色值从0-1空间映射到球谐系数空间
+        #             sh0_expanded = sh0.view(batch_size, 1, max_voxels, 1, 1, 3)  # [b, 1, N_max, 1, 1, 3]
+        #         else:
+        #             sh0 = RGB2SH(colors)
+        #             sh0_expanded = sh0.view(1, 1, -1, 1, 1, 3)  # [1,1,N,1,1,3]
 
-                sh[..., 0] = sh0_expanded
+        #         sh[..., 0] = sh0_expanded
 
 
         # Create world-space covariance matrices.
@@ -137,39 +148,49 @@ class GaussianAdapter_depth(nn.Module):
 
         means = xyz + offset_world  # [1,1,N, 1,1,3]
 
-        return Gaussians(
-            means=means,
-            covariances=covariances,
-            harmonics=sh,
-            opacities=opacities,
-            # NOTE: These aren't yet rotated into world space, but they're only used for
-            # exporting Gaussians to ply files. This needs to be fixed...
-            scales=scales,
-            rotations=rotations.broadcast_to((*scales.shape[:-1], 4)),
-        )
+        gaussians = Gaussians(rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]
+            rearrange(scales,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]
+            rearrange(rotations,"b v r srf spp d -> b (v r srf spp) d"), # [b, 1, 256000, 1, 1, 4] -> [b, 256000, 4]                             
+            rearrange(covariances,"b v r srf spp i j -> b (v r srf spp) i j",), # [2, 1, 256000, 1, 1, 3, 3] -> [2, 256000, 3, 3]
+            rearrange(sh,"b v r srf spp c d_sh -> b (v r srf spp) c d_sh",) \
+                if self.d_sh is not None else rearrange(sh,"b v r srf spp rgb -> b (v r srf spp) rgb",),
+            rearrange(opacities,   "b v r srf spp -> b (v r srf spp)"), #[2, 1, 256000, 1, 1] -> [2, 256000]        
+        ) 
+        return gaussians        
+        
+        # return Gaussians(
+        #     means=means,
+        #     covariances=covariances,
+        #     harmonics=sh,
+        #     opacities=opacities,
+        #     # NOTE: These aren't yet rotated into world space, but they're only used for
+        #     # exporting Gaussians to ply files. This needs to be fixed...
+        #     scales=scales,
+        #     rotations=rotations.broadcast_to((*scales.shape[:-1], 4)),
+        # )
 
-    def get_scale_multiplier(
-        self,
-        intrinsics: Float[Tensor, "*#batch 3 3"],
-        pixel_size: Float[Tensor, "*#batch 2"],
-        multiplier: float = 0.1,
-    ) -> Float[Tensor, " *batch"]:
-        xy_multipliers = multiplier * einsum(
-            intrinsics[..., :2, :2].inverse(),
-            pixel_size,
-            "... i j, j -> ... i",
-        )
-        return xy_multipliers.sum(dim=-1)
+    # def get_scale_multiplier(
+    #     self,
+    #     intrinsics: Float[Tensor, "*#batch 3 3"],
+    #     pixel_size: Float[Tensor, "*#batch 2"],
+    #     multiplier: float = 0.1,
+    # ) -> Float[Tensor, " *batch"]:
+    #     xy_multipliers = multiplier * einsum(
+    #         intrinsics[..., :2, :2].inverse(),
+    #         pixel_size,
+    #         "... i j, j -> ... i",
+    #     )
+    #     return xy_multipliers.sum(dim=-1)
 
-    @property
-    def d_sh(self) -> int:
-        return (self.sh_degree + 1) ** 2
+    # @property
+    # def d_sh(self) -> int:
+    #     return (self.sh_degree + 1) ** 2
 
-    @property
-    def d_in(self) -> int:
-        return 7 + 3 * self.d_sh
+    # @property
+    # def d_in(self) -> int:
+    #     return 7 + 3 * self.d_sh
 
 # todo RGB -> 球谐函数的转换
-def RGB2SH(rgb):
-    C0 = 0.28209479177387814
-    return (rgb - 0.5) / C0
+# def RGB2SH(rgb):
+#     C0 = 0.28209479177387814
+#     return (rgb - 0.5) / C0

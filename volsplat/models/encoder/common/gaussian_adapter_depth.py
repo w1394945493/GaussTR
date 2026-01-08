@@ -37,6 +37,7 @@ class GaussianAdapter_depth(nn.Module):
         self.gaussian_scale_max = gaussian_scale_max
         self.sh_degree = sh_degree
 
+        
         # Create a mask for the spherical harmonics coefficients. This ensures that at
         # initialization, the coefficients are biased towards having a large DC
         # component and small view-dependent components.
@@ -52,6 +53,7 @@ class GaussianAdapter_depth(nn.Module):
         self,
         extrinsics: Tensor,
         intrinsics: Tensor | None,
+        img_aug_mat:Tensor | None,
         opacities: Tensor,
         raw_gaussians: Tensor, #[1, 1, N, 37]
         input_images: Tensor | None = None,
@@ -60,6 +62,7 @@ class GaussianAdapter_depth(nn.Module):
         points: Optional[Tensor] = None,
         voxel_resolution: float = 0.01,
         eps: float = 1e-8,
+        normal=False,
     ) :
     #-> Gaussians
 
@@ -67,7 +70,7 @@ class GaussianAdapter_depth(nn.Module):
 
         b, v = batch_dims
 
-        offset_xyz,scales, rotations, sh = raw_gaussians.split((3,3, 4, 3 * self.d_sh), dim=-1) #[1, 1, N,1, 1,c]
+        offset_xyz, scales, rotations, sh = raw_gaussians.split((3, 3, 4, 3 * self.d_sh), dim=-1) #[1, 1, N,1, 1,c]
 
         scales = torch.clamp(F.softplus(scales - 4.),
             min=self.gaussian_scale_min,
@@ -76,9 +79,13 @@ class GaussianAdapter_depth(nn.Module):
 
         # Normalize the quaternion features to yield a valid quaternion.
         rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps)
+        
+        
         sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)    # [1, 1, 256000, 1, 1, 3, 9]
         sh = sh.broadcast_to((*opacities.shape, 3, self.d_sh)) * self.sh_mask
 
+        # todo ----------------------------------------#
+        # todo 从多视图图像投影中得到RGB颜色信息，转换并整合到高斯点云的球谐函数(SH)系数中
         if input_images is not None :
             voxel_color, aggregated_points, counts = project_features_to_me(
                 intrinsics = intrinsics,
@@ -86,7 +93,9 @@ class GaussianAdapter_depth(nn.Module):
                 out = input_images,
                 depth =  depth,
                 voxel_resolution = voxel_resolution,
-                b=b,v=v
+                b=b,v=v,
+                normal=normal,
+                img_aug_mat=img_aug_mat,
             )
             # if torch.equal(coordidate, voxel_color.C):
             if coordidate.shape == voxel_color.C.shape:
@@ -105,7 +114,7 @@ class GaussianAdapter_depth(nn.Module):
                         n_voxels = batch_colors.shape[0]
                         batched_colors[batch_idx, :n_voxels, :] = batch_colors
 
-                    sh0 = RGB2SH(batched_colors)  # [b, N_max, 3]
+                    sh0 = RGB2SH(batched_colors)  # [b, N_max, 3] # todo 将颜色值从0-1空间映射到球谐系数空间
                     sh0_expanded = sh0.view(batch_size, 1, max_voxels, 1, 1, 3)  # [b, 1, N_max, 1, 1, 3]
                 else:
                     sh0 = RGB2SH(colors)
@@ -160,7 +169,7 @@ class GaussianAdapter_depth(nn.Module):
     def d_in(self) -> int:
         return 7 + 3 * self.d_sh
 
-
+# todo RGB -> 球谐函数的转换
 def RGB2SH(rgb):
     C0 = 0.28209479177387814
     return (rgb - 0.5) / C0

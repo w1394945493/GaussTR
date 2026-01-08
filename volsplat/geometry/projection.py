@@ -117,6 +117,7 @@ def get_world_rays(
 def sample_image_grid(
     shape: tuple[int, ...],
     device: torch.device = torch.device("cpu"),
+    normal = True,
 ) -> tuple[
     Float[Tensor, "*shape dim"],  # float coordinates (xy indexing)
     Int64[Tensor, "*shape dim"],  # integer indices (ij indexing)
@@ -130,7 +131,13 @@ def sample_image_grid(
 
     # Each entry is a floating-point coordinate in the range (0, 1). In the 2D case,
     # each entry is an (x, y) coordinate.
-    coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
+    # coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
+    
+    if normal: # todo 0-1之间归一化的坐标
+        coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
+    else: # todo 未归一化的坐标
+        coordinates = [idx + 0.5 for idx in indices]
+
     coordinates = reversed(coordinates)
     coordinates = torch.stack(torch.meshgrid(*coordinates, indexing="xy"), dim=-1)
 

@@ -218,33 +218,34 @@ class LoadFeatMaps(ResizeCropFlipImage):
         
         results[self.key] = np.array(feats,dtype=np.float32)
         
-        if 'output_filename' in results:
-            feats = [] 
-            for i, filename in enumerate(results['output_filename']): #! 'output_filename'
-                feat = np.load(
-                    os.path.join(self.data_root,
-                                filename.split('/')[-1].split('.')[0] + '.npy'))
-                '''
-                import cv2
-                cv2.imwrite('depth_0.png',feat.astype(np.uint8))
-                '''
-                feat = Image.fromarray(feat)
-                feat, ida_mat = self._img_transform(
-                    feat,
-                    resize=output_resize,
-                    resize_dims=output_dims,
-                    crop=output_crop,
-                    flip=False,
-                    rotate=0,
-                )     
-                feat = np.array(feat).astype(np.float32)       
-                feats.append(feat)
-                '''
-                import cv2
-                cv2.imwrite('depth_1.png',feat.astype(np.uint8))
-                '''
+        # todo 非关键帧无深度图
+        # if 'output_filename' in results:
+        #     feats = [] 
+        #     for i, filename in enumerate(results['output_filename']): #! 'output_filename'
+        #         feat = np.load(
+        #             os.path.join(self.data_root,
+        #                         filename.split('/')[-1].split('.')[0] + '.npy'))
+        #         '''
+        #         import cv2
+        #         cv2.imwrite('depth_0.png',feat.astype(np.uint8))
+        #         '''
+        #         feat = Image.fromarray(feat)
+        #         feat, ida_mat = self._img_transform(
+        #             feat,
+        #             resize=output_resize,
+        #             resize_dims=output_dims,
+        #             crop=output_crop,
+        #             flip=False,
+        #             rotate=0,
+        #         )     
+        #         feat = np.array(feat).astype(np.float32)       
+        #         feats.append(feat)
+        #         '''
+        #         import cv2
+        #         cv2.imwrite('depth_1.png',feat.astype(np.uint8))
+        #         '''
             
-            results[f'output_{self.key}'] = np.array(feats,dtype=np.float32)        
+        #     results[f'output_{self.key}'] = np.array(feats,dtype=np.float32)        
         
         
         return results
@@ -513,7 +514,7 @@ class BEVLoadMultiViewImageFromFiles(object):
                     channel_order='rgb') for img_byte in img_bytes
             ]
             results['output_filename'] = filename
-            results['output_img'] = imgs       
+            results['output_img'] = imgs      
         
         return results
 

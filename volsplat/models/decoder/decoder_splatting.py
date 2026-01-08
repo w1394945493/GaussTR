@@ -47,22 +47,31 @@ class DecoderSplatting(BaseModule):
 
     def forward(self,
                 gaussians,
-                image_shape,
-                rgb_gts,
-                depth,
-                cam2img,
-                cam2ego,
-                img_aug_mat=None, # todo (b v 4 4)
-                sem_segs=None,
-                occ_gts=None,
+                data,
                 mode='tensor',
 
                 **kwargs):
 
+        data_samples = data
+        output_imgs = data_samples['output_img']
+        h, w = output_imgs.shape[-2:]
+        
+        img_aug_mat = data_samples['output_img_aug_mat']
+        cam2img = data_samples['output_cam2img']
+        
         bs, n = cam2img.shape[:2] # todo: n: 视角数
         device = cam2img.device
-        h, w = image_shape
-
+        
+        # todo 相对于输出图像的内参
+        intrinsics = (img_aug_mat @ cam2img)[...,:3,:3] # (b v 3 3)
+        # todo 归一化内参
+        intrinsics[...,0,:] /= w
+        intrinsics[...,1,:] /= h
+        
+        
+        extrinsics = data_samples['output_cam2ego'] # (b v 4 4)
+        
+        
         means3d = gaussians.means # todo (b n 3)
         harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
         opacities = gaussians.opacities # todo (b n)
@@ -70,8 +79,7 @@ class DecoderSplatting(BaseModule):
         rotations = gaussians.rotations
         covariances = gaussians.covariances
 
-        intrinsics = cam2img[...,:3,:3] # (b v 3 3)
-        extrinsics = cam2ego # (b v 4 4)
+
 
         if self.renderer_type == "vanilla":
 
@@ -114,7 +122,7 @@ class DecoderSplatting(BaseModule):
                 colors=rearrange(harmonics,"b g c d_sh -> b g d_sh c") if self.use_sh else harmonics, # todo (b n c d_sh)
                 use_sh=self.use_sh,
                 img_aug_mats=img_aug_mat,
-
+                
                 near_plane=self.near,
                 far_plane=self.far,
 
@@ -124,22 +132,22 @@ class DecoderSplatting(BaseModule):
         # todo ---------------------------------------#
         # todo 推理
         if mode == 'predict':
-
             outputs = [{
                 'depth_pred': rendered_depth, # (b v h w)
                 'img_pred': colors, # (b v 3 112 200)
-
             }]
             return outputs
 
         losses = {}
+        # todo ----------------------------------------#
         # todo 深度预测损失：
-        rendered_depth = rendered_depth.flatten(0,1) # todo ((b v) h w) v=6 h=112 w=192
-        depth = depth.flatten(0,1)  # todo ((b v) h w) depth: 来自Metric 3D生成的
-        losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth,criterion='l1')
+        # rendered_depth = rendered_depth.flatten(0,1) # todo ((b v) h w) v=6 h=112 w=192
+        # depth = depth.flatten(0,1)  # todo ((b v) h w) depth: 来自Metric 3D生成的
+        # losses['loss_depth'] = self.depth_loss(rendered_depth, depth)
 
         rgb = colors.flatten(0,1) # todo rgb.shape:torch.Size([6, 3, 112, 192])
-        rgb_gt = rgb_gts.flatten(0,1) / 255. # todo rgb_gt.shape: torch.Size([6, 3, 112, 192])
+        rgb_gt = data_samples['output_img']
+        rgb_gt = rgb_gt.flatten(0,1) / 255. # todo rgb_gt.shape: torch.Size([6, 3, 112, 192])
         
         reg_loss = (rgb - rgb_gt) ** 2
         losses['loss_l2'] = reg_loss.mean()

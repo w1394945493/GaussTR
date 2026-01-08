@@ -1,147 +1,135 @@
 import os
-
-import pickle
-
+import torch
+import torchvision
+import torch.nn.functional as F
 from mmengine.hooks import Hook
-
 from mmdet3d.registry import HOOKS
 
-import torch
-from PIL import Image
-import torchvision
-import numpy as np
+from colorama import Fore
+def cyan(text: str) -> str:
+    return f"{Fore.CYAN}{text}{Fore.RESET}"
 
 @HOOKS.register_module()
 class DumpResultHook(Hook):
-
     def __init__(self,
-                interval=1,
-                mean = [123.675, 116.28, 103.53],
-                std  = [58.395, 57.12, 57.375],
-                save_dir='output/vis',
-                save_vis = False,
-                save_depth=False,
-                save_img=False,
-                ):
-
-        self.interval = interval
-
-
-        self.mean = torch.tensor(mean)
-        self.std = torch.tensor(std)
-
-        self.save_vis = save_vis
-
-        self.save_depth = save_depth
-        self.save_img = save_img
-
-
+                 save_dir='output/vis',
+                 save_img=True,
+                 save_depth=True,                 
+                 ):
         os.makedirs(save_dir,exist_ok=True)
-        self.save_dir = save_dir
-
-        if save_depth:
-            self.dir_depth = os.path.join(save_dir, 'depth_pred')
-            os.makedirs(self.dir_depth,exist_ok=True)
+        self.save_dir = save_dir    
+            
+        self.save_img = save_img
+        self.save_depth = save_depth
+        
         if save_img:
             self.dir_img = os.path.join(save_dir, 'img_pred')
             os.makedirs(self.dir_img,exist_ok=True)
 
-        print(f"Dump results to: {self.save_dir}")
-
-
-
+        if save_depth:
+            self.dir_depth = os.path.join(save_dir, 'depth_pred')
+            os.makedirs(self.dir_depth,exist_ok=True)
+            
+        print(f"Dump results to: {self.save_dir}")        
+        return
+    
     def after_test_iter(self,
                         runner,
                         batch_idx,
                         data_batch=None,
                         outputs=None):
-        if not self.save_vis:
-            return
+        
+        bs, n = data_batch['cam2img'].shape[:2]
+        # if n % 2 == 0:
+        #     cols = n // 2
+        # else:
+        #     cols = n       
+        
+        cols = 3 if n >= 3 else n
+        
+        if self.save_img and ('img_pred' in outputs[0]):
+            
+            img_input = data_batch['img']       
+            img_pred  = outputs[0]['img_pred']
+            img_gt  = data_batch['output_img'] / 255.
+            for i in range(bs):
 
-        outputs = outputs[0]
-
-        b = len(data_batch['data_samples'])
-        n = data_batch['data_samples'][0].cam2img.shape[0]
-        if n % 2 == 0:
-            cols = n // 2
-            rows = 2
-        else:
-            cols = n
-            rows = 1
-
-        # -------- 2) 保存 img_pred --------
-        if self.save_img and outputs['img_pred'] is not None:
-
-            img_pred  = outputs['img_pred']   # (b, n, 3, H, W)
-            # img_pred = img_pred*self.std.view(1,1,3,1,1).to(img_pred.device) + self.mean.view(1,1,3,1,1).to(img_pred.device)
-
-            for i in range(b):
-                data_sample = data_batch['data_samples'][i]
-                # imgs = img_pred[i].float() / 255.0  # 0~1 float，方便save_image
-                imgs = img_pred[i].clamp(min=0.,max=1.)
-
-                # 布局：偶数 → 3×2；奇数 → 1×n
+                imgs = img_input[i]
+                mean = torch.tensor([123.675, 116.28, 103.53]).view(1, 3, 1, 1) / 255.0
+                std = torch.tensor([58.395, 57.12, 57.375]).view(1, 3, 1, 1) / 255.0
+                mean = mean.to(imgs.device)
+                std = std.to(imgs.device)
+                imgs = (imgs * std + mean).clamp(min=0.,max=1.)
                 grid = torchvision.utils.make_grid(
                     imgs,
                     nrow=cols,
                     padding=2
-                )
-                save_name = f"{data_sample.scene_token}_{data_sample.token}.png"
+                )                
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_img_input.png"
                 save_path = os.path.join(self.dir_img, save_name)
-
-                torchvision.utils.save_image(grid, save_path)
-
-                # ------------- 保存 img_gt ----------
-                # data_sample = data_batch['data_samples'][i]
-                imgs_gt = data_sample.img.clamp(0, 255) / 255.0
+                torchvision.utils.save_image(grid, save_path)                
+                
+                
+                imgs = img_pred[i].clamp(min=0.,max=1.)
                 grid = torchvision.utils.make_grid(
-                    imgs_gt,
+                    imgs,
                     nrow=cols,
                     padding=2
-                )
-                save_name = f"{data_sample.scene_token}_{data_sample.token}_gt.png"
+                )                
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_img_pred.png"
                 save_path = os.path.join(self.dir_img, save_name)
-                torchvision.utils.save_image(grid, save_path)
-
-        # -------- 3) 保存 depth_pred --------
-        if self.save_depth and outputs['depth_pred'] is not None:
-
-            depth_pred = outputs['depth_pred'] # (b,n, H, W)
-
-            depth_norm = depth_pred.clone()
-            depth_norm -= depth_norm.min()
-            depth_norm /= (depth_norm.max() + 1e-6)  # 归一化0~1
-
-            for i in range(b):
-
-                data_sample = data_batch['data_samples'][i] # todo 每个batch的数据都放在一个data_samples下
-
-                d = depth_pred[i].unsqueeze(1)  # (n,1,H,W)
-                max_val = float(d.max())
-                d = d / (max_val + 1e-6)
-
-
-                grid = torchvision.utils.make_grid(d, nrow=cols, padding=2)
-                save_name = f"{data_sample.scene_token}_{data_sample.token}.png"
+                torchvision.utils.save_image(grid, save_path)     
+            
+                imgs = img_gt[i].clamp(min=0.,max=1.)
+                grid = torchvision.utils.make_grid(
+                    imgs,
+                    nrow=cols,
+                    padding=2
+                )                
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_img_gt.png"
+                save_path = os.path.join(self.dir_img, save_name)
+                torchvision.utils.save_image(grid, save_path) 
+                
+                
+        
+        if self.save_depth and ('depth_pred' in outputs[0]):                       
+            
+            for i in range(bs):
+                depth_pred = outputs[0]['depth_pred'][i]
+                f_h,f_w = depth_pred.shape[-2:]
+                
+                depth_pred = depth_pred.unsqueeze(1)
+                max_val = float(depth_pred.max())
+                depth_pred /= (max_val + 1e-6)                  
+                
+                grid = torchvision.utils.make_grid(depth_pred, nrow=cols, padding=2)
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_pred.png"
                 save_path = os.path.join(self.dir_depth, save_name)
-
-                torchvision.utils.save_image(grid, save_path)
-
-                depth_gt = data_sample.depth.unsqueeze(1)
-                max_val = float(depth_gt.max())
-                depth_gt /= (max_val + 1e-6)
-
-                grid = torchvision.utils.make_grid(depth_gt, nrow=cols, padding=2)
-                save_name = f"{data_sample.scene_token}_{data_sample.token}_gt.png"
+                torchvision.utils.save_image(grid, save_path)                
+                
+                
+                # depth_gt = data_batch['output_depth'][i]
+                # depth_gt = depth_gt.unsqueeze(1)
+                # depth_gt = F.interpolate(depth_gt,size=(f_h,f_w),mode='bilinear',align_corners=False)
+                # max_val = float(depth_gt.max())
+                # depth_gt /= (max_val + 1e-6)                
+                
+                # grid = torchvision.utils.make_grid(depth_gt, nrow=cols, padding=2)
+                # save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_gt.png"
+                # save_path = os.path.join(self.dir_depth, save_name)
+                # torchvision.utils.save_image(grid, save_path)
+                
+                depth_input = data_batch['depth'][i]
+                depth_input = depth_input.unsqueeze(1)
+                depth_input = F.interpolate(depth_input,size=(f_h,f_w),mode='bilinear',align_corners=False)
+                max_val = float(depth_input.max())
+                depth_input /= (max_val + 1e-6)                
+                
+                grid = torchvision.utils.make_grid(depth_input, nrow=cols, padding=2)
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_input.png"
                 save_path = os.path.join(self.dir_depth, save_name)
                 torchvision.utils.save_image(grid, save_path)
         
         return
-
-
-
-
-
-
 
 

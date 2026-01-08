@@ -66,7 +66,7 @@ if __name__ == '__main__':
     # todo -----------------#
     ann_files = [
         'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl'
-    ]
+    ] # todo 'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl': 仅包含关键帧的数据
     # cfg = Config.fromfile('configs/gausstr_featup.py')
 
     cfg = Config.fromfile('configs/customs/gausstr_featup.py')

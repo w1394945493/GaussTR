@@ -33,9 +33,7 @@ class ImgMetric(BaseMetric):
     def process(self, data_batch, data_samples):
 
         rgb = rearrange(data_samples[0]['img_pred'],'b v c h w -> (b v) c h w')
-        rgb_gt = torch.cat(
-            [d.img for d in data_batch['data_samples']],dim=0) / 255.
-        rgb_gt = rgb_gt.to(rgb.device)
+        rgb_gt = rearrange(data_batch['output_img']/255.,'b v c h w -> (b v) c h w').to(rgb.device)
 
         if f"psnr" not in self.test_step_outputs:
             self.test_step_outputs[f"psnr"] = []

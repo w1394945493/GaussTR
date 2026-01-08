@@ -78,82 +78,6 @@ class VolSplat(BaseModel):
 
         print(cyan(f'successfully init Model!'))
 
-
-
-    def prepare_inputs(self, inputs_dict, data_samples):
-        num_views = data_samples[0].num_views
-        inputs = inputs_dict['imgs']
-
-        cam2img = []
-        cam2ego = []
-        ego2global = []
-        img_aug_mat = []
-        depth = []
-        feats = []
-        sem_segs = []
-
-        rgb_gts = [] # 真实图像
-
-        occ_gts = []
-
-        for i in range(len(data_samples)):
-            data_samples[i].set_metainfo(
-                {'cam2img': data_samples[i].cam2img[:num_views]})
-            # cam2img.append(data_samples[i].cam2img)
-
-            # normalize the standred format into intrinsics
-            ori_h, ori_w = self.ori_image_shape # (900, 1600)
-            intrinsics = data_samples[i].cam2img
-            intrinsics[:, 0, 0] /= ori_w
-            intrinsics[:, 1, 1] /= ori_h
-            intrinsics[:, 0, 2] /= ori_w
-            intrinsics[:, 1, 2] /= ori_h
-            cam2img.append(intrinsics)
-
-            data_samples[i].set_metainfo(
-                {'cam2ego': data_samples[i].cam2ego[:num_views]})
-            cam2ego.append(data_samples[i].cam2ego)
-            ego2global.append(data_samples[i].ego2global)
-            if hasattr(data_samples[i], 'img_aug_mat'):
-                data_samples[i].set_metainfo(
-                    {'img_aug_mat': data_samples[i].img_aug_mat[:num_views]})
-                img_aug_mat.append(data_samples[i].img_aug_mat)
-            # todo depth
-            depth.append(data_samples[i].depth)
-            # todo rgb_gts
-            rgb_gts.append(data_samples[i].img)
-            if hasattr(data_samples[i], 'feats'): # todo 特征图
-                feats.append(data_samples[i].feats)
-            if hasattr(data_samples[i], 'sem_seg'):
-                sem_segs.append(data_samples[i].sem_seg) # todo 分割图
-
-            if hasattr(data_samples[i].gt_pts_seg, 'semantic_seg'):
-                occ_gts.append(data_samples[i].gt_pts_seg.semantic_seg) # todo occ占用图
-
-
-        data_samples = dict(
-            rgb_gts = rgb_gts,
-            depth=depth,
-            cam2img=cam2img,
-            cam2ego=cam2ego,
-            num_views=num_views,
-            ego2global=ego2global,
-            img_aug_mat=img_aug_mat if img_aug_mat else None)
-        if feats:
-            data_samples['feats'] = feats
-        if sem_segs:
-            data_samples['sem_segs'] = sem_segs
-        if occ_gts:
-            data_samples['occ_gts'] = torch.cat(occ_gts) # todo occ占用真值
-        for k, v in data_samples.items():
-            if isinstance(v, torch.Tensor) or not isinstance(v, Iterable):
-                continue
-            if isinstance(v[0], torch.Tensor):
-                data_samples[k] = torch.stack(v).to(inputs)
-            else:
-                data_samples[k] = torch.from_numpy(np.stack(v)).to(inputs)
-        return inputs, data_samples
-
     def _sparse_to_batched(self, features, coordinates, batch_size, return_mask=False):
 
         device = features.device
@@ -213,9 +137,17 @@ class VolSplat(BaseModel):
         rays_d = rays_d.permute(0, 1, 4, 2, 3)
         plucker = torch.cat([torch.cross(rays_o, rays_d, dim=2), rays_d], dim=2)
         return plucker
+    
+    # todo 重写BaseModel的_run_forward()
+    def _run_forward(self, data, mode): 
+        results = self(data, mode=mode)
+        return results
+    
+    def forward(self, data, mode='loss'):
+        
+        inputs = data['img']
+        data_samples = data
 
-    def forward(self, inputs, data_samples, mode='loss'):
-        inputs, data_samples = self.prepare_inputs(inputs, data_samples)
         bs, n, _, h, w = inputs.shape # (b,v,3,H,W)
         device = inputs.device
         
@@ -224,18 +156,23 @@ class VolSplat(BaseModel):
         # todo backbone特征提取
         multi_img_feats = self.extract_img_feat(img=inputs)
         img_feats = rearrange(multi_img_feats[0], "b v c h w -> (b v) c h w")
+        
+        # todo 将特征图上采样回原图像大小
         img_feats = self.upsampler(img_feats) # (bv c h w)
         
-        intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3)
+        img_aug_mat = data_samples['img_aug_mat']
+        intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) # todo 内参(相对于原图像)
         extrinsics = data_samples['cam2ego']        
-        
+
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
-                extrinsics, # (b v 4 4)
+                extrinsics, # (b v 4 4)                
                 img_feats,  # (bv c h w)
                 depth=depth,
                 voxel_resolution=self.voxel_resolution,
                 b=bs, v=n,
+                normal=False,
+                img_aug_mat=img_aug_mat,
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
         sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
@@ -272,14 +209,17 @@ class VolSplat(BaseModel):
         
         gaussians = self.gaussian_adapter.forward(
             extrinsics = extrinsics, # (b v 4 4)
-            intrinsics = intrinsics, # (b v 3 3)
+            intrinsics = intrinsics, # (b v 3 3) #! 这里也用到了相机内参
+            img_aug_mat=img_aug_mat,
             opacities = opacities,   # (b 1 n 1 1)
             raw_gaussians = rearrange(raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
-            input_images =rearrange(inputs, "b v c h w -> (b v) c h w"), # (bv c h w)
+            # input_images =rearrange(inputs, "b v c h w -> (b v) c h w"), # (bv c h w)
+            input_images = None, #! 
             depth = depth, # (b v h w)
             coordidate = gaussians.C, # (n 4)
             points = batched_points, # (b 1 n 3)
-            voxel_resolution = self.voxel_resolution, # 0.001        
+            voxel_resolution = self.voxel_resolution, # 0.001  
+            normal=False,      
         )
         
         gaussians = Gaussians(rearrange(gaussians.means,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]
@@ -290,5 +230,5 @@ class VolSplat(BaseModel):
             rearrange(gaussians.opacities,   "b v r srf spp -> b (v r srf spp)"), #[2, 1, 256000, 1, 1] -> [2, 256000]        
         ) 
                 
-        return self.decoder(gaussians,image_shape=(h,w),mode=mode,**data_samples)
+        return self.decoder(gaussians,data,mode=mode)
 

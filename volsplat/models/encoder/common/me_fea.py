@@ -7,7 +7,9 @@ import MinkowskiEngine as ME
 
 
 
-def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v):
+def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v,
+                           normal=False,
+                           img_aug_mat=None,):
     device = out.device
 
     h, w = depth.shape[2:]
@@ -17,9 +19,22 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     extrinsics = rearrange(extrinsics, "b v i j -> b v () () () i j")
     depths = rearrange(depth, "b v h w -> b v (h w) () ()")
 
-    uv_grid = sample_image_grid((h, w), device)[0]
-    uv_grid = repeat(uv_grid, "h w c -> 1 v (h w) () () c", v=v)
-    origins, directions = get_world_rays(uv_grid, extrinsics, intrinsics)
+    coordinates = sample_image_grid((h, w), device,normal=normal)[0]
+    if img_aug_mat is not None:
+        coordinates = repeat(coordinates, "h w c -> 1 v (h w) c", v=v)
+        # 齐次化 (b, v, n, 3)
+        coordinates = torch.cat([coordinates,  torch.ones_like(coordinates[..., :1])], dim=-1) # (b, v, n, 3)
+        post_rots = img_aug_mat[..., :3, :3] # (b,v,3,3)
+        post_trans = img_aug_mat[..., :3, 3] # (b,v,3)    
+        # 逆平移
+        coordinates = coordinates - post_trans.unsqueeze(-2)
+        # 逆旋转 (b, v, n, 3)
+        coordinates = (torch.inverse(post_rots).unsqueeze(2) @ coordinates.unsqueeze(-1)).squeeze(-1)
+        # 去掉齐次位并对齐维度 (b, v, n, 1, 1, 2)
+        coordinates = rearrange(coordinates[...,:-1], "b v n xy -> b v n () () xy")
+    else:
+        coordinates = repeat(coordinates, "h w c -> 1 v (h w) () () c", v=v)
+    origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
     world_coords = origins + directions * depths[..., None] # todo 计算得到每个像素的3D坐标
     world_coords = world_coords.squeeze(3).squeeze(3)  # [B, V, N, 3]
 
@@ -54,6 +69,7 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     aggregated_points = torch.zeros(num_voxels, 3, device=device)
     aggregated_points.scatter_add_(0, inverse_indices.unsqueeze(1).expand(-1, 3), all_points)
     aggregated_points = aggregated_points / counts.view(-1, 1).float()
+    
     # todo----------------------------------------------------------------------------------------------#
     # todo 4. 构建稀疏张量：
     # todo MinkowskiEngine(ME): 主要用于处理三维点云或稀疏网格数据

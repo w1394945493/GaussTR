@@ -22,7 +22,7 @@ renderer_type = "gsplat"
 near = 0.1
 far = 1000.
 
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis10'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis12'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -55,11 +55,6 @@ out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
 
 model = dict(
     type = 'VolSplat',
-
-    # data_preprocessor=dict(
-    #     type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
-    #     mean=mean,
-    #     std=std),
     
     ori_image_shape = ori_image_shape,
     use_checkpoint = use_checkpoint,
@@ -109,6 +104,9 @@ model = dict(
         type='GaussianAdapter_depth',
         gaussian_scale_min = 1e-10,
         gaussian_scale_max = 3.0,
+        # gaussian_scale_min = 0.05,
+        # gaussian_scale_max = 1.5,        
+        
         sh_degree=sh_degree,
     ),
     decoder = dict(
@@ -158,7 +156,8 @@ test_pipeline = [
 ]
 
 
-final_dim = (112,200)
+# final_dim = (112,200)
+final_dim = (448,800)
 output_dim = (112,200)
 
 data_aug_conf = {
@@ -204,8 +203,8 @@ seed = 42
 
 train_dataloader = dict(
     batch_size=1,
-    # num_workers=4,
-    num_workers=0,
+    num_workers=4,
+    # num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
@@ -214,8 +213,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    # num_workers=4,
-    num_workers=0,
+    num_workers=4,
+    # num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,

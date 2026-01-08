@@ -123,7 +123,7 @@ class DecoderSplatting(BaseModule):
                 use_sh=self.use_sh,
                 img_aug_mats=img_aug_mat,
                 
-                near_plane=self.near,
+                near_plane=self.near, # 
                 far_plane=self.far,
 
                 render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization

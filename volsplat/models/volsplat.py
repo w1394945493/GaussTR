@@ -148,21 +148,31 @@ class VolSplat(BaseModel):
         inputs = data['img']
         data_samples = data
 
-        bs, n, _, h, w = inputs.shape # (b,v,3,H,W)
+        bs, n, _, input_h, input_w = inputs.shape # (b,v,3,H,W)
         device = inputs.device
         
         depth = data_samples["depth"]  # (b v h w)
         
-        # todo backbone特征提取
+        # todo backbone+FPN特征提取
         multi_img_feats = self.extract_img_feat(img=inputs)
         img_feats = rearrange(multi_img_feats[0], "b v c h w -> (b v) c h w")
-        
-        # todo 将特征图上采样回原图像大小
-        img_feats = self.upsampler(img_feats) # (bv c h w)
-        
+
         img_aug_mat = data_samples['img_aug_mat']
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) # todo 内参(相对于原图像)
-        extrinsics = data_samples['cam2ego']        
+        extrinsics = data_samples['cam2ego'] 
+        
+        # todo 将特征图上采样回原图像大小
+        # img_feats = self.upsampler(img_feats) # (bv c h w)        
+        f_h, f_w = img_feats.shape[-2:]
+        d_h, d_w = depth.shape[-2:]
+        if (d_w != f_w) or (d_h != f_h):
+            resize = torch.diag(torch.tensor([f_w/input_w, f_h/input_h],
+                                            dtype=img_aug_mat.dtype,device = img_aug_mat.device))
+            mat = torch.eye(4).to(img_aug_mat.device)            
+            mat[:2,:2] = resize
+            mat = repeat(mat,"i j -> () () i j")
+            img_aug_mat = mat @ img_aug_mat
+            depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
 
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
@@ -175,6 +185,7 @@ class VolSplat(BaseModel):
                 img_aug_mat=img_aug_mat,
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
+        # todo 残差连接
         sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
 
         if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)

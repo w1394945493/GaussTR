@@ -22,7 +22,7 @@ renderer_type = "gsplat"
 near = 0.1
 far = 1000.
 
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis13'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/outputs/vis14'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,

@@ -347,5 +347,13 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
+        {
+            "name": "debug gaussian voxelizer(triton)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/scripts/debug_gaussian_voxelizer.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

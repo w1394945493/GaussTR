@@ -6,12 +6,12 @@ from .utils import (apply_to_items, generate_grid, get_covariance,
                     quat_to_rotmat, unbatched_forward)
 
 
-def splat_into_3d(grid_coords,
-                  means3d,
-                  opacities,
-                  covariances,
-                  vol_range,
-                  voxel_size,
+def splat_into_3d(grid_coords, # 感知空间(m) [-40, -40, -1, 40, 40, 5.4]
+                  means3d,     # 高斯点位置 (N,3) N=6x300 6个相机，300个query高斯
+                  opacities,   # 透明度  (N)
+                  covariances, # 协方差  (N,3,3)
+                  vol_range,   # 体素范围 
+                  voxel_size, # 体素尺寸 0.4
                   features=None,
                   eps=1e-6):
     grid_density = torch.zeros((*grid_coords.shape[:-1], 1),
@@ -19,7 +19,6 @@ def splat_into_3d(grid_coords,
     if features is not None:
         grid_feats = torch.zeros((*grid_coords.shape[:-1], features.size(-1)),
                                  device=grid_coords.device) # (x,y,z,n_cls)
-
     for g in range(means3d.size(0)):
         sigma = torch.sqrt(torch.diag(covariances[g]))
         factor = 3 * torch.tensor([-1, 1])[:, None].to(sigma)
@@ -38,7 +37,6 @@ def splat_into_3d(grid_coords,
         grid_density[slices] += density
         if features is not None:
             grid_feats[slices] += density * features[g]
-
     if features is None:
         return grid_density
     grid_feats /= grid_density.clamp(eps)

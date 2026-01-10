@@ -44,6 +44,7 @@ def splat_into_3d(grid_coords, # 体素网格坐标 (N,3)
     grid_feats /= grid_density.clamp(eps)
     return grid_density, grid_feats
 
+
 @triton.jit
 def _splat_fwd_kernel_opt(
     means_ptr, inv_covs_ptr, opacities_ptr,
@@ -117,7 +118,9 @@ def _splat_fwd_kernel_opt(
                 for f in range(n_dims):
                     feat_val = tl.load(features_ptr + idx * n_dims + f)
                     tl.atomic_add(grid_feats_ptr + offset * n_class + f, density * feat_val)
-                
+
+
+
 if __name__=='__main__':
     torch.manual_seed(42)
     device = torch.device("cuda")
@@ -152,12 +155,14 @@ if __name__=='__main__':
     
     
     # todo -------------------------------------------------#
-    # todo 
-    grid_density_triton = torch.zeros(grid_shape, device=device)
-    grid_feats_triton = torch.zeros((*grid_shape, n_class), device=device)
-    # todo 第一次编译耗时较长
+    # todo triton并行处理
+    
+    # todo 第一次运行时，包含编译用时，耗时会较长
     torch.cuda.synchronize()
     t0 = time.time()
+
+    grid_density_triton = torch.zeros(grid_shape, device=device)
+    grid_feats_triton = torch.zeros((*grid_shape, n_class), device=device)    
     _splat_fwd_kernel_opt[(N,)](
         means3d, inv_covs.reshape(N, 9), opacities, radii,features,
         grid_density_triton, grid_feats_triton,
@@ -172,11 +177,13 @@ if __name__=='__main__':
     torch.cuda.synchronize()
     print(f"triton编译用时: {t1-t0}") 
 
-    grid_density_triton = torch.zeros(grid_shape, device=device)
-    grid_feats_triton = torch.zeros((*grid_shape, n_class), device=device)
+
     
     torch.cuda.synchronize()
     t0 = time.time()
+    
+    grid_density_triton = torch.zeros(grid_shape, device=device)
+    grid_feats_triton = torch.zeros((*grid_shape, n_class), device=device)
     _splat_fwd_kernel_opt[(N,)](
         means3d, inv_covs.reshape(N, 9), opacities, radii, features,
         grid_density_triton, grid_feats_triton,
@@ -192,7 +199,7 @@ if __name__=='__main__':
     print(f"triton第二次调用用时: {t1-t0}") 
 
     # todo---------------------------------------#
-    # todo 调用原方法
+    # todo 原方法
     lin_x = torch.linspace(vol_min[0], vol_max[0] - voxel_size, dim_x, device=device)
     lin_y = torch.linspace(vol_min[1], vol_max[1] - voxel_size, dim_y, device=device)
     lin_z = torch.linspace(vol_min[2], vol_max[2] - voxel_size, dim_z, device=device)

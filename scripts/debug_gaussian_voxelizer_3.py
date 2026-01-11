@@ -108,20 +108,23 @@ def _splat_fwd_kernel_opt(
                 mahal = (dx * (xc0 + dy * c3 + dz * c6) +
                          dy * (dx * c1 + yc4 + dz * c7) +
                          dz * (dx * c2 + dy * c5 + dz * c8))                
+                
+                
                 density = opac * tl.exp(-0.5 * mahal)
                 # todo 计算网格索引
                 offset = x * (dim_y * dim_z) + y * dim_z + z
+                
                 # todo 1. 累加密度
                 tl.atomic_add(grid_density_ptr + offset, density)
                 
-                # todo 
+                # todo 2. 累加特征
                 for f in range(n_dims):
                     feat_val = tl.load(features_ptr + idx * n_dims + f)
                     tl.atomic_add(grid_feats_ptr + offset * n_dims + f, density * feat_val)
 
 @triton.jit
 def _splat_bwd_kernel_opt(
-    grad_features_ptr, grad_opacities_ptr,         # 输出：高斯特征、透明度梯度
+    grad_features_ptr, grad_opacities_ptr,  grad_means_ptr, grad_inv_covs_ptr,      # 输出：高斯特征、透明度、位置、协方差逆梯度
     grid_density_ptr, grid_feats_ptr,              # 输入：体素网格密度、体素网格特征
     grad_grid_density_ptr, grad_grid_feats_ptr,    # 输入： 损失对体素网格透明度、特征的梯度
     means_ptr, inv_covs_ptr, opacities_ptr, radii_ptr, features_ptr,  # 输入：高斯点原始位置、协方差逆、透明度、半径、特征
@@ -169,7 +172,19 @@ def _splat_bwd_kernel_opt(
     iz_start = tl.maximum(0, iz_s.to(tl.int32))
     iz_end   = tl.minimum(dim_z, iz_e.to(tl.int32) + 1)    
 
+    # 透明度梯度累加
     grad_opac_acc = 0.0
+    
+    # 均值梯度累加
+    grad_mx_acc = 0.0
+    grad_my_acc = 0.0
+    grad_mz_acc = 0.0
+
+    # 协方差逆梯度累加 (3x3 矩阵)
+    gic0, gic1, gic2 = 0.0, 0.0, 0.0
+    gic3, gic4, gic5 = 0.0, 0.0, 0.0
+    gic6, gic7, gic8 = 0.0, 0.0, 0.0
+    
     for x in range(ix_start, ix_end): 
         dx = x * voxel_size + vol_min_x - mx 
         # 预计算 x 轴相关的中间变量
@@ -196,10 +211,20 @@ def _splat_bwd_kernel_opt(
                 grid_density_val = tl.load(grid_density_ptr + offset)   
                 grid_density_val = tl.maximum(grid_density_val, eps)
                 
-                # 路径 (1): 处理 grad_grid_density 的直接贡献
                 g_density_from_loss = tl.load(grad_grid_density_ptr + offset)
+                
+                # 计算当前体素对均值梯度的中间变量
+                # 1. 空间导数向量: Σ^-1 * (x_j - μ_i)
+                dir_x = dx * c0 + dy * c1 + dz * c2
+                dir_y = dx * c3 + dy * c4 + dz * c5
+                dir_z = dx * c6 + dy * c7 + dz * c8
+                
+                v_combined_scalar = g_density_from_loss * opac
+                
+                # 密度梯度 路径 (1): 处理 grad_grid_density 的直接贡献
                 grad_opac_acc += g_density_from_loss * exp_term
                             
+                # 特征维度循环
                 for f in range(n_dims): # todo n_dims: 特征维度
                     g_grid = tl.load(grad_grid_feats_ptr + offset * n_dims + f)   # 外界传回的梯度
                     F_grid = tl.load(grid_feats_ptr + offset * n_dims + f) # 此时网格位置的平均特征
@@ -208,18 +233,45 @@ def _splat_bwd_kernel_opt(
                     # todo 1. 高斯特征梯度(不受分母 clamp 导数影响)
                     grad_gauss_feat = g_grid * density / grid_density_val
                     tl.atomic_add(grad_features_ptr + idx * n_dims + f, grad_gauss_feat)                    
-                    # todo 2. 高斯透明度梯度    
-                    # 路径 (2): 处理 grad_grid_feats 的商法则贡献                
-                    # grad_opac_acc += g_grid * (exp_term * (f_i - F_grid) / grid_density_val)
+                    
                     # 分子贡献项 (始终存在)
-                    grad_opac_acc += g_grid * (exp_term * f_i / grid_density_val)
+                    feat_grad_scalar = g_grid * (f_i / grid_density_val)
                     # 分母贡献项 (仅当 density 未被 clamp 时存在)
                     if grid_density_val > eps:
-                        grad_opac_acc -= g_grid * (exp_term * F_grid / grid_density_val)
+                        feat_grad_scalar -= g_grid * (F_grid / grid_density_val)
+                    
+                    # todo 2. 高斯透明度梯度    
+                    # 路径 (2): 处理 grad_grid_feats 的商法则贡献                
+                    grad_opac_acc += feat_grad_scalar * exp_term
+                    
+                    # todo 3. 均值(位置)梯度
+                    v_combined_scalar += feat_grad_scalar * opac
                         
-
+                grad_mx_acc += v_combined_scalar * exp_term * dir_x
+                grad_my_acc += v_combined_scalar * exp_term * dir_y
+                grad_mz_acc += v_combined_scalar * exp_term * dir_z
+                
+                S = (v_combined_scalar * exp_term ) * (-0.5)
+                gic0 += S * dx * dx
+                gic1 += S * dx * dy
+                gic2 += S * dx * dz
+                gic3 += S * dy * dx
+                gic4 += S * dy * dy
+                gic5 += S * dy * dz
+                gic6 += S * dz * dx
+                gic7 += S * dz * dy
+                gic8 += S * dz * dz                
+                
     tl.atomic_add(grad_opacities_ptr + idx, grad_opac_acc)
+    tl.atomic_add(grad_means_ptr + idx * 3 + 0, grad_mx_acc)
+    tl.atomic_add(grad_means_ptr + idx * 3 + 1, grad_my_acc)
+    tl.atomic_add(grad_means_ptr + idx * 3 + 2, grad_mz_acc)
 
+    out_gic_ptr = grad_inv_covs_ptr + idx * 9
+    tl.atomic_add(out_gic_ptr + 0, gic0); tl.atomic_add(out_gic_ptr + 1, gic1); tl.atomic_add(out_gic_ptr + 2, gic2)
+    tl.atomic_add(out_gic_ptr + 3, gic3); tl.atomic_add(out_gic_ptr + 4, gic4); tl.atomic_add(out_gic_ptr + 5, gic5)
+    tl.atomic_add(out_gic_ptr + 6, gic6); tl.atomic_add(out_gic_ptr + 7, gic7); tl.atomic_add(out_gic_ptr + 8, gic8) 
+      
 class GaussSplatting3D(torch.autograd.Function):
     @staticmethod
     def forward(ctx, means3d, covs, opacities, features, vol_range, voxel_size, grid_shape):
@@ -232,8 +284,8 @@ class GaussSplatting3D(torch.autograd.Function):
         
         
         grid_density = torch.zeros(grid_shape, device=device)
-        grid_feats = torch.zeros((*grid_shape, n_dims), device=device)          
-        
+        grid_feats = torch.zeros((*grid_shape, n_dims), device=device)     
+            
         _splat_fwd_kernel_opt[(N,)](
             means3d, inv_covs.reshape(N, 9), opacities, radii, features,
             grid_density, grid_feats,
@@ -263,9 +315,11 @@ class GaussSplatting3D(torch.autograd.Function):
         # 初始化梯度
         grad_features = torch.zeros_like(features)
         grad_opacities = torch.zeros_like(opacities)
+        grad_means = torch.zeros_like(means3d)
+        grad_inv_covs = torch.zeros((N, 9), device=means3d.device) 
               
         _splat_bwd_kernel_opt[(N,)](
-            grad_features, grad_opacities, # 输出   
+            grad_features, grad_opacities, grad_means, grad_inv_covs,  # 输出   
             grid_density, grid_feats,      # 输入:  体素网格状态
             grad_grid_density.contiguous(), grad_grid_feats.contiguous(),  # 输入： 损失对体素网格透明度、特征的梯度
             means3d, inv_covs.reshape(N, 9), opacities, radii, features,  # 输入：高斯点原始位置、协方差逆、透明度、半径、特征
@@ -273,13 +327,16 @@ class GaussSplatting3D(torch.autograd.Function):
             float(ctx.voxel_size),
             N, n_dims,
             int(ctx.grid_shape[0]), int(ctx.grid_shape[1]), int(ctx.grid_shape[2])
-        )        
+        )       
+        # 将逆协方差梯度转换为原始协方差梯度
+        grad_inv_covs = grad_inv_covs.view(N, 3, 3)
+        grad_covs = -inv_covs @ grad_inv_covs @ inv_covs
         
-        return None, None, grad_opacities, grad_features, None, None, None
+        return grad_means, grad_covs, grad_opacities, grad_features, None, None, None
 
 
 if __name__=='__main__':
-    torch.manual_seed(42)
+    torch.manual_seed(0)
     device = torch.device("cuda")
     
     N = 1800
@@ -330,13 +387,14 @@ if __name__=='__main__':
     torch.cuda.synchronize()
     print(f"triton编译用时: {t1-t0}") 
 
-
     features_triton = features.clone().detach().requires_grad_(True)
     opacities_triton = opacities.clone().detach().requires_grad_(True)
+    means3d_triton = means3d.clone().detach().requires_grad_(True)
+    covs_triton = covs.clone().detach().requires_grad_(True)
     
     torch.cuda.synchronize()
     t0 = time.time()
-    grid_density_triton, grid_feats_triton = GaussSplatting3D.apply(means3d, covs, opacities_triton, features_triton, vol_range, voxel_size, grid_shape)
+    grid_density_triton, grid_feats_triton = GaussSplatting3D.apply(means3d_triton, covs_triton, opacities_triton, features_triton, vol_range, voxel_size, grid_shape)
     t1 = time.time()   
     torch.cuda.synchronize()
     print(f"triton第二次调用用时: {t1-t0}") 
@@ -347,7 +405,8 @@ if __name__=='__main__':
     # todo 原方法
     features_ori = features.clone().detach().requires_grad_(True)
     opacities_ori = opacities.clone().detach().requires_grad_(True)
-    
+    means3d_ori = means3d.clone().detach().requires_grad_(True)
+    covs_ori = covs.clone().detach().requires_grad_(True)
     
     lin_x = torch.linspace(vol_min[0], vol_max[0] - voxel_size, dim_x, device=device)
     lin_y = torch.linspace(vol_min[1], vol_max[1] - voxel_size, dim_y, device=device)
@@ -359,9 +418,9 @@ if __name__=='__main__':
     t0 = time.time()
     grid_density_ori, grid_feats_ori = splat_into_3d(
             grid_coords=grid_coords,
-            means3d=means3d,
+            means3d=means3d_ori,
             opacities=opacities_ori,
-            covariances=covs,
+            covariances=covs_ori,
             vol_range=vol_range,
             voxel_size=voxel_size,
             features=features_ori
@@ -417,6 +476,9 @@ if __name__=='__main__':
         
     try:
         torch.testing.assert_close(opacities_triton.grad, opacities_ori.grad, rtol=1e-4, atol=1e-5)
+        
+        print("Backward 透明度梯度验证 -> [通过]")
+        
         print(f"opacities_triton的梯度是否有 NaN: {torch.isnan(opacities_triton.grad).any()}")
         print(f"opacities_triton的梯度最大值: {opacities_triton.grad.max().item()}")
         
@@ -425,4 +487,35 @@ if __name__=='__main__':
 
     except AssertionError as e:
         print("Backward 透明度梯度验证 -> [失败]")
+        print(e)
+
+    try:
+        torch.testing.assert_close(means3d_triton.grad, means3d_ori.grad, rtol=1e-4, atol=1e-5)
+        
+        print("Backward 均值梯度验证 -> [通过]")
+        
+        print(f"means3d_triton的梯度是否有 NaN: {torch.isnan(means3d_triton.grad).any()}")
+        print(f"means3d_triton的梯度最大值: {means3d_triton.grad.max().item()}")
+        
+        print(f"means3d_ori的梯度是否有 NaN: {torch.isnan(means3d_ori.grad).any()}")
+        print(f"means3d_ori的梯度最大值: {means3d_ori.grad.max().item()}") 
+
+    except AssertionError as e:
+        print("Backward 均值梯度验证 -> [失败]")
+        print(e)
+
+    
+    try:
+        torch.testing.assert_close(covs_triton.grad, covs_ori.grad, rtol=1e-4, atol=1e-5)
+        
+        print("Backward 协方差梯度验证 -> [通过]")
+        
+        print(f"covs_triton的梯度是否有 NaN: {torch.isnan(covs_triton.grad).any()}")
+        print(f"covs_triton的梯度最大值: {covs_triton.grad.max().item()}")
+        
+        print(f"covs_ori的梯度是否有 NaN: {torch.isnan(covs_ori.grad).any()}")
+        print(f"covs_ori的梯度最大值: {covs_ori.grad.max().item()}") 
+
+    except AssertionError as e:
+        print("Backward 协方差梯度验证 -> [失败]")
         print(e)

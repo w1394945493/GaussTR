@@ -15,8 +15,8 @@ from mmdet3d.registry import TRANSFORMS
 import matplotlib.pyplot as plt
 import numpy as np
 
-# from .utils import get_img2global, get_lidar2global
-from utils import get_img2global, get_lidar2global
+from .utils import get_img2global, get_lidar2global
+# from utils import get_img2global, get_lidar2global
 
 @DATASETS.register_module()
 class NuScenesSurroundOccDataset(Dataset):

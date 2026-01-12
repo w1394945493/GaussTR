@@ -201,7 +201,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train2 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train3 \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
 export CUDA_VISIBLE_DEVICES=2

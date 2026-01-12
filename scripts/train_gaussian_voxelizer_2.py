@@ -1,6 +1,7 @@
 from setproctitle import setproctitle
 setproctitle("wys")
 
+import time 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import torch
@@ -17,6 +18,34 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from debug_gaussian_voxelizer import splat_into_3d, GaussSplatting3D
 from lovzsz_softmax import lovasz_softmax
 
+def quaternion_to_rotation_matrix(q):
+    """将四元数 (w, x, y, z) 转为旋转矩阵"""
+    w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+    R = torch.stack([
+        1 - 2 * (y**2 + z**2), 2 * (x*y - w*z), 2 * (x*z + w*y),
+        2 * (x*y + w*z), 1 - 2 * (x**2 + z**2), 2 * (y*z - w*x),
+        2 * (x*z - w*y), 2 * (y*z + w*x), 1 - 2 * (x**2 + y**2)
+    ], dim=-1).reshape(-1, 3, 3)
+    return R
+
+def build_covariance(s, q):
+    """
+    s: (N, 3) scales 已经是计算好的物理尺度
+    q: (N, 4) quaternions
+    """
+    # 1. 构造缩放矩阵 S
+    S = torch.diag_embed(s)
+    # 2. 归一化四元数并构造旋转矩阵 R
+    q = torch.nn.functional.normalize(q, dim=-1)
+    R = quaternion_to_rotation_matrix(q)
+    
+    # 3. 计算 Sigma = R * S * S_T * R_T
+    # M = R * S
+    M = R @ S
+    covs = M @ M.transpose(-1, -2)
+    
+    return covs
+
 if __name__=='__main__':
     torch.manual_seed(42)
     device = torch.device("cuda")
@@ -27,7 +56,18 @@ if __name__=='__main__':
     vol_range = torch.tensor([-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], device=device)
     grid_shape = (200, 200, 16)
     n_class = 18
-    N = 3200 # 高斯点数量    
+    N = 12800 # 高斯点数量
+    
+    class_indices = list(range(1, 17))
+    label_str = ['barrier', 'bicycle', 'bus', 'car', 'cons.veh',
+        'motorcycle', 'pedestrian', 'traffic_cone', 'trailer', 'truck',
+        'drive.surf', 'other_flat', 'sidewalk', 'terrain', 'manmade',
+        'vegetation']
+    num_classes = len(class_indices)
+    empty_label = 17  
+    
+
+    
     # todo ---------------------------------
     # 2. 加载并处理标签
     label_file = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603547590.pcd.bin.npy'
@@ -44,13 +84,28 @@ if __name__=='__main__':
     # 3. 初始化可学习的高斯参数
     # 均值：在空间内随机分布
     means3d = nn.Parameter(torch.rand((N, 3), device=device) * (vol_max - vol_min) + vol_min)
-    # 协方差：通过 L (Cholesky) 构造保证正定性
+    # 尺度    
+    # scales = nn.Parameter(torch.zeros((N, 3), device=device)) # sigmoid(0) = 0.5
+    
+    initial_s_target = 1.0 * voxel_size
+    val = (initial_s_target - (voxel_size/3)) / ((10*voxel_size) - (voxel_size/3))
+    initial_scales_val = np.log(val / (1 - val))
+    scales = nn.Parameter(torch.full((N, 3), initial_scales_val, device=device))
+    scales.data += torch.randn_like(scales.data) * 0.1
+    
+    scale_min = voxel_size / 3.0 
+    scale_max = 10.0 * voxel_size
+    
+    # 旋转 随机初始化
+    rotations = nn.Parameter(torch.randn((N, 4), device=device))
+    
     L = nn.Parameter(torch.randn((N, 3, 3), device=device) * 0.2)
+    
     # 透明度
     opacities = nn.Parameter(torch.rand((N,), device=device))
     # 特征：初始化为类别概率的 logits
     features = nn.Parameter(torch.randn((N, n_class), device=device))
-    optimizer = optim.Adam([means3d, L, opacities, features], lr=1e-2)
+    optimizer = optim.Adam([means3d, scales, rotations, L, opacities, features], lr=1e-2)
     
     manual_class_weight=[
     1.01552756, 1.06897009, 1.30013094, 1.07253735, 0.94637502, 1.10087012,
@@ -60,16 +115,24 @@ if __name__=='__main__':
     
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     
-    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/0111/train/vis_results'
+    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/0112/train5/vis_results'
     os.makedirs(save_dir, exist_ok=True)
-    
+
     print("Starting training with Triton-accelerated GaussSplatting3D...")
     for i_iter in tqdm(range(200)):
-        covs = torch.matmul(L, L.transpose(-1, -2)) + torch.eye(3, device=device) * 1e-4
+        optimizer.zero_grad()
+        
+        s = scale_min + (scale_max - scale_min) * torch.sigmoid(scales)
+        covs = build_covariance(s,rotations)
+        
+        # covs = torch.matmul(L, L.transpose(-1, -2)) + torch.eye(3, device=device) * 1e-4
+    
         density, pred_feats = GaussSplatting3D.apply(
                     means3d, covs, torch.sigmoid(opacities), features, 
                     vol_range, voxel_size, grid_shape
-                )   
+                ) 
+
+
         logits = pred_feats.permute(3, 0, 1, 2).unsqueeze(0) # (200, 200, 16, 18) -> permute -> (1, 18, 200, 200, 16)
         target = target_tensor.unsqueeze(0)
         ce_loss = 10.0 * criterion(logits, target)        
@@ -81,13 +144,7 @@ if __name__=='__main__':
         loss.backward()
         optimizer.step()
         
-        class_indices = list(range(1, 17))
-        label_str = ['barrier', 'bicycle', 'bus', 'car', 'cons.veh',
-         'motorcycle', 'pedestrian', 'traffic_cone', 'trailer', 'truck',
-         'drive.surf', 'other_flat', 'sidewalk', 'terrain', 'manmade',
-         'vegetation']
-        num_classes = len(class_indices)
-        empty_label = 17
+
         
         if (i_iter+1) % 10 == 0:
             with torch.no_grad():
@@ -113,6 +170,8 @@ if __name__=='__main__':
                                                 & (outputs != empty_label)).item()
                 total_positive[-1] += torch.sum(outputs != empty_label).item()
 
+                
+                
                 total_seen = total_seen.cpu().numpy()
                 total_correct = total_correct.cpu().numpy()
                 total_positive = total_positive.cpu().numpy()

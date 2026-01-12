@@ -4,7 +4,7 @@ import torch, torch.nn as nn
 from mmdet3d.registry import MODELS
 from .base_head import BaseTaskHead
 from ..utils.utils import get_rotation_matrix
-
+from .gaussian_voxelizer import GaussSplatting3D
 
 @MODELS.register_module()
 class GaussianHead(BaseTaskHead):
@@ -16,6 +16,7 @@ class GaussianHead(BaseTaskHead):
         empty_args=None,
         with_empty=False,
         cuda_kwargs=None,
+        voxel_kwargs = None,
         dataset_type='nusc',
         empty_label=17,
         use_localaggprob=False,
@@ -26,19 +27,22 @@ class GaussianHead(BaseTaskHead):
         super().__init__(init_cfg)
 
         self.num_classes = num_classes # todo 18
-        self.use_localaggprob = use_localaggprob # todo False
-        if use_localaggprob: # False
-            if use_localaggprob_fast:
-                import local_aggregate_prob_fast
-                self.aggregator = local_aggregate_prob_fast.LocalAggregator(**cuda_kwargs)
-            else:
-                import local_aggregate_prob
-                self.aggregator = local_aggregate_prob.LocalAggregator(**cuda_kwargs)
-        else: # todo
-            import local_aggregate # {'scale_multiplier': 3, 'H': 200, 'W': 200, 'D': 16, 'pc_min': [-50.0, -50.0, -5.0], 'grid_size': 0.5}
-            self.aggregator = local_aggregate.LocalAggregator(**cuda_kwargs)
+        
+        voxel_size = voxel_kwargs['voxel_size']
+        vol_min = torch.tensor(voxel_kwargs['vol_min'])
+        vol_max = torch.tensor(voxel_kwargs['vol_max'])
+        vol_range = torch.cat([vol_min, vol_max]) 
 
-        self.combine_geosem = combine_geosem
+        # 网格形状 (200, 200, 16)
+        dim_x = int((vol_max[0] - vol_min[0]) / voxel_size)
+        dim_y = int((vol_max[1] - vol_min[1]) / voxel_size)
+        dim_z = int((vol_max[2] - vol_min[2]) / voxel_size)
+        grid_shape = (dim_x, dim_y, dim_z)  
+               
+        self.register_buffer('vol_range', vol_range)        
+        self.voxel_size = voxel_size
+        self.grid_shape = grid_shape
+
         if with_empty:
             self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0) # todo nn.Parameter: 可训练参数
             self.register_buffer('empty_mean', torch.tensor(empty_args['mean'])[None, None, :]) # todo register_buffer: 跟着模型走，但不训练的状态量
@@ -87,6 +91,7 @@ class GaussianHead(BaseTaskHead):
         origi_opa = gaussians.opacities # b, g, 1
         if origi_opa.numel() == 0:
             origi_opa = torch.ones_like(opacities[..., :1], requires_grad=False)
+        
         if self.with_emtpy: # todo True
             assert opacities.shape[-1] == self.num_classes - 1 # todo self.num_classes: 18
             if 'kitti' in self.dataset_type:
@@ -100,13 +105,8 @@ class GaussianHead(BaseTaskHead):
             empty_sem[..., self.empty_label] += self.empty_scalar # todo self.empty_scaler: 10.2920 self.empty_label: 17
             opacities = torch.cat([opacities, empty_sem], dim=1) # todo
             origi_opa = torch.cat([origi_opa, self.empty_opa], dim=1) # todo self.empty_opa: (1 1 1) 内容为1
-        elif self.use_localaggprob:
-            assert opacities.shape[-1] == self.num_classes - 1
-            opacities = opacities.softmax(dim=-1)
-            if 'kitti' in self.dataset_type:
-                opacities = torch.cat([torch.zeros_like(opacities[..., :1]), opacities], dim=-1)
-            else:
-                opacities = torch.cat([opacities, torch.zeros_like(opacities[..., :1])], dim=-1) # todo 增加了一个背景类维度
+
+
 
         bs, g, _ = means.shape
         S = torch.zeros(bs, g, 3, 3, dtype=means.dtype, device=means.device)
@@ -115,9 +115,11 @@ class GaussianHead(BaseTaskHead):
         S[..., 2, 2] = scales[..., 2]
         R = get_rotation_matrix(rotations) # b, g, 3, 3
         M = torch.matmul(S, R)
-        Cov = torch.matmul(M.transpose(-1, -2), M)
-        CovInv = Cov.cpu().inverse().cuda() # b, g, 3, 3 # todo g = 25600 + 1 = 25601
-        return means, origi_opa, opacities, scales, CovInv
+        covs = torch.matmul(M.transpose(-1, -2), M)
+        return means, origi_opa, opacities, scales, covs
+    
+        # CovInv =covs.cpu().inverse().cuda() # b, g, 3, 3 # todo g = 25600 + 1 = 25601
+        # return means, origi_opa, opacities, scales, CovInv
 
     def forward(
         self,
@@ -150,40 +152,22 @@ class GaussianHead(BaseTaskHead):
         sampled_xyz, sampled_label = self._sampling(occ_xyz, occ_label, None)
         for idx in apply_loss_layers:
             gaussians = representation[idx]['gaussian']
-
-            means, origi_opa, opacities, scales, CovInv = self.prepare_gaussian_args(gaussians)
-            bs, g = means.shape[:2]
-            # todo ------------------------------------------#
-            semantics = self.aggregator(
-                sampled_xyz.clone().float(),  # (b 200x200x16 3) -50 50 -50 50 -5 3
-                means, # (b n 3) n=25601 means -50 50 -50 50 -5 3
-                origi_opa.reshape(bs, g), # (b n) n = 25601
-                opacities, # (b n num_class) n=25601 num_classes = 18
-                scales, # (b n 3) # min:0.08 max: 100
-                CovInv) # (b n 3 3) # 1, c, n
-            if self.use_localaggprob:
-                if self.combine_geosem:
-                    sem = semantics[0][:, :-1] * semantics[1].unsqueeze(-1)
-                    geo = 1 - semantics[1].unsqueeze(-1)
-                    geosem = torch.cat([sem, geo], dim=-1)
-                else:
-                    geosem = semantics[0]
-
-                prediction.append(geosem[None].transpose(1, 2))
-                bin_logits.append(semantics[1][None])
-                density.append(semantics[2][None])
-            else:
-                prediction.append(semantics[None].transpose(1, 2))
-
-        if self.use_localaggprob and not self.combine_geosem:
-            threshold = kwargs.get("sigmoid_thresh", 0.5)
-            final_semantics = prediction[-1].argmax(dim=1)
-            final_occupancy = bin_logits[-1] > threshold
-            final_prediction = torch.ones_like(final_semantics) * self.empty_label
-            final_prediction[final_occupancy] = final_semantics[final_occupancy]
-        else:
-            final_prediction = prediction[-1].argmax(dim=1) # todo (1 18 640000) -> (1 640000) 直接取最大值
-
+            means3d, opacities, features, scales, covs = self.prepare_gaussian_args(gaussians)
+            
+            means3d = means3d.squeeze(0)
+            opacities = opacities.squeeze(0)
+            features = features.squeeze(0)
+            covs = covs.squeeze(0) 
+            
+            _, pred_feats = GaussSplatting3D.apply(
+                        means3d, covs, opacities, features, 
+                        self.vol_range, self.voxel_size, self.grid_shape
+                    ) # todo pred_feats: (200, 200, 16, 18)
+            logits = pred_feats.permute(3, 0, 1, 2).flatten(1).unsqueeze(0) # (200, 200, 16, 18) -> (18,640000) -> (1,18,6400)
+            prediction.append(logits)
+            final_prediction = logits.argmax(dim=1)
+        
+                        
         return {
             'pred_occ': prediction,
             'bin_logits': bin_logits,

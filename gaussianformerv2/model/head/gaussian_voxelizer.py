@@ -4,7 +4,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 def splat_into_3d(grid_coords, # 体素网格坐标 (N,3)
                   means3d,     # 高斯点位置 (N,3) N=6x300 6个相机，300个query高斯
                   opacities,   # 透明度  (N)
@@ -43,8 +42,6 @@ def splat_into_3d(grid_coords, # 体素网格坐标 (N,3)
         return grid_density
     grid_feats /= grid_density.clamp(eps)
     return grid_density, grid_feats
-
-
 
 @triton.jit
 def _splat_fwd_kernel_opt(
@@ -340,9 +337,11 @@ if __name__=='__main__':
     device = torch.device("cuda")
     
     N = 1800
-    voxel_size = 0.4   # 网格尺寸
+    
     n_class = 18
 
+    #! Occ3D中的体素空间相关参数
+    voxel_size = 0.4   # 网格尺寸
     vol_min = torch.tensor([-40.0, -40.0, -1.0], device=device)
     vol_max = torch.tensor([40.0, 40.0, 5.4], device=device)
     vol_range = torch.cat([vol_min, vol_max]) 
@@ -369,8 +368,11 @@ if __name__=='__main__':
     
     device = means3d.device
     N = means3d.shape[0]
-
-
+    inv_covs = torch.inverse(covs)        
+    variances = torch.diagonal(covs, dim1=-2, dim2=-1)      
+    radii = 3.0 * torch.sqrt(variances)
+    
+    
     # todo -------------------------------------------------#
     # todo triton并行处理
     

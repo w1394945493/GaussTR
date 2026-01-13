@@ -245,7 +245,7 @@ class GaussSplatting3D(torch.autograd.Function):
         
         grid_density = torch.zeros(grid_shape, device=device)
         grid_feats = torch.zeros((*grid_shape, n_dims), device=device)     
-        grid_feats[..., -1] = 1e-5  # 初始化为极小负数，默认预测为背景  
+        grid_feats[..., -1] = 1e-5  # todo 初始化最后一维为极小数，确保默认预测为背景，避免预测第0类  
         _splat_fwd_kernel_opt[(N,)](
             means3d, inv_covs.reshape(N, 9), opacities, radii, features,
             grid_density, grid_feats,

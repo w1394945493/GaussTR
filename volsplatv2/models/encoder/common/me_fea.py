@@ -8,8 +8,10 @@ import MinkowskiEngine as ME
 
 
 def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v,
-                           normal=False,
-                           img_aug_mat=None,):
+                           normal=False, img_aug_mat=None, # 像素特征转体素特征相关参数
+                           embed_points = None, embed_feats = None, # 可学习嵌入 (b,num_embed,xyz) (b,num_embed,dims)
+                           
+                           ):
     device = out.device
 
     h, w = depth.shape[2:]
@@ -41,17 +43,34 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     features = rearrange(out, "(b v) c h w -> b v c h w", b=b, v=v)
     features = rearrange(features, "b v c h w -> b v h w c")
     features = rearrange(features, "b v h w c -> b v (h w) c")  # [B, V, N, C]
-
-    all_points = rearrange(world_coords, "b v n c -> (b v n) 3")  # [B*V*N, 3] # todo 所有点
-    feats_flat = features.reshape(-1, c)  # [B*V*N, C] # todo 相应的特征
     
+    # 1. 展开像素点和特征（保持 batch 维度）
+    pixel_points = rearrange(world_coords, "b v n c -> b (v n) c") # [b, vn, 3]
+    pixel_feats = rearrange(features, "b v n c -> b (v n) c")      # [b, vn, c]    
+    # 2. 拼接可学习嵌入
+    if embed_points is not None:
+        # 在维度 1 (点数维度) 拼接
+        all_points = torch.cat([embed_points, pixel_points], dim=1) # [b, num_embed + vn, 3]
+        feats_flat = torch.cat([embed_feats, pixel_feats], dim=1)
+        
+    
+    else:
+        all_points = pixel_points
+        feats_flat = pixel_feats
+    # 3. 生成对应的 batch_indices (关键修正！)
+    # 现在的点数是 N_total = all_points.shape[1]
+    b_size, n_total, _ = all_points.shape
+    batch_indices = torch.arange(b_size, device=device).reshape(b_size, 1, 1)
+    batch_indices = batch_indices.repeat(1, n_total, 1).reshape(-1, 1) # [b * n_total, 1]
+    # 4. 展平所有点准备进行体素化
+    all_points = all_points.reshape(-1, 3) # [b * n_total, 3]
+    feats_flat = feats_flat.reshape(-1, c) # [b * n_total, c]
     
     # todo 2.体素化：将连续的3D点云转化为结构化的栅格特征
     with torch.no_grad():
         quantized_coords = torch.round(all_points / voxel_resolution).long() # todo 2.1量化: 通过all_points / voxel_resolution并取整 将3D坐标映射到整数索引的体素网格
-
         # Create coordinate matrix: batch index + quantized coordinates # todo 组成坐标矩阵
-        batch_indices = torch.arange(b, device=device).repeat_interleave(v * h * w).unsqueeze(1)
+        # batch_indices = torch.arange(b, device=device).repeat_interleave(v * h * w).unsqueeze(1) # 移到外面计算
         combined_coords = torch.cat([batch_indices, quantized_coords], dim=1)
         # todo unique 2.2唯一化：去重，找出所有被占据的唯一体素坐标，并记录每个体素包含多少个原始点，以及映射关系
         # Get unique voxel IDs and mapping indices

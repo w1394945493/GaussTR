@@ -42,26 +42,23 @@ class VolSplat(BaseModel):
                 sparse_gs,
                 gaussian_adapter,
                 decoder,
-        
+
                 use_checkpoint,
+                
                 
                 in_embed_dim,
                 out_embed_dims,
                 voxel_resolution,
+                vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0],
+                use_embed=False,
+                num_embed=1800,
+                embed_dim=128,
+                
                  **kwargs):
         super().__init__(**kwargs)
 
         self.backbone = MODELS.build(backbone)
         self.neck = MODELS.build(neck)
-        self.upsampler = nn.Sequential(
-            nn.Conv2d(in_embed_dim, out_embed_dims[0], 3, 1, 1),
-            nn.Upsample(
-                scale_factor=4,
-                mode="bilinear",
-                align_corners=True,
-            ),
-            nn.GELU(),
-        )
         
         self.sparse_unet = MODELS.build(sparse_unet)
         self.gaussian_head = MODELS.build(sparse_gs)
@@ -70,9 +67,22 @@ class VolSplat(BaseModel):
         self.decoder = MODELS.build(decoder)
 
         self.use_checkpoint = use_checkpoint
-        
         self.voxel_resolution = voxel_resolution
 
+        self.use_embed = use_embed
+        self.embed_points = None
+        self.embed_feats = None
+        if use_embed:
+            self.num_embed = num_embed
+            self.embed_points = nn.Embedding(num_embed, 3) 
+            self.embed_feats = nn.Embedding(num_embed, in_embed_dim)
+            with torch.no_grad():
+                # 分别对 x, y, z 轴进行均匀分布初始化
+                nn.init.uniform_(self.embed_points.weight[:, 0], vol_range[0], vol_range[3])
+                nn.init.uniform_(self.embed_points.weight[:, 1], vol_range[1], vol_range[4])
+                nn.init.uniform_(self.embed_points.weight[:, 2], vol_range[2], vol_range[5])                
+                # 正态分布初始化
+                nn.init.normal_(self.embed_feats.weight, std=0.02)
 
         print(cyan(f'successfully init Model!'))
 
@@ -176,6 +186,12 @@ class VolSplat(BaseModel):
         
         # todo -------------------------------------------------------#
         # todo 将像素特征转为体素特征
+        if self.use_embed:
+            embed_points = self.embed_points.weight.unsqueeze(0).expand(bs,-1,-1) # (embed,3) -> (bs,embed,3)
+            embed_feats = self.embed_feats.weight.unsqueeze(0).expand(bs,-1,-1) # (embed,dim) -> (bs,embed,dim)
+        else:
+            embed_points, embed_feats = None, None
+        
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)  #! 外参：确定是cam2lidar还是cam2ego               
@@ -185,6 +201,10 @@ class VolSplat(BaseModel):
                 b=bs, v=n,
                 normal=False,
                 img_aug_mat=img_aug_mat,
+                
+                embed_points = embed_points,
+                embed_feats = embed_feats,
+                
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
         # todo -----------------------------------------------------#

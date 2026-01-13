@@ -24,8 +24,9 @@ far = 1000.
 
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
+use_embed = True # todo 是否额外增加一些可学习嵌入
 
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis2'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -56,7 +57,11 @@ model = dict(
     out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
     # voxel_resolution = 0.001,
     voxel_resolution = voxel_size,
-
+    vol_range=vol_range,
+    
+    use_embed=use_embed,
+    num_embed=1800,
+    
     backbone=dict(
         type='mmdet.ResNet',
         depth=50,

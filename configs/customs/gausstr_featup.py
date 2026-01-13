@@ -57,7 +57,9 @@ model = dict(
 # Data
 dataset_type = 'NuScenesOccDataset'
 # data_root = 'data/nuscenes/' # todo 根目录
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini'
+# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini'
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval' #! 根目录
+
 data_prefix = dict(
     CAM_FRONT='samples/CAM_FRONT', # todo 位于根目录下
     CAM_FRONT_LEFT='samples/CAM_FRONT_LEFT',
@@ -135,8 +137,8 @@ train_dataloader = dict(
 
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
-        # ann_file='nuscenes_infos_train.pkl',
-        ann_file='nuscenes_mini_infos_train.pkl',
+        ann_file='nuscenes_infos_train.pkl', #! train
+        # ann_file='nuscenes_mini_infos_train.pkl',
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 
@@ -148,8 +150,8 @@ val_dataloader = dict(
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
-        # ann_file='nuscenes_infos_val.pkl', # todo pkl文件
-        ann_file='nuscenes_mini_infos_val.pkl',
+        ann_file='nuscenes_infos_val.pkl', #! val
+        # ann_file='nuscenes_mini_infos_val.pkl',
         pipeline=test_pipeline,
         **shared_dataset_cfg))
 test_dataloader = val_dataloader

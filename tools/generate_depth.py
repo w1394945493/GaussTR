@@ -2,11 +2,11 @@
 from setproctitle import setproctitle
 setproctitle("wys")
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 import os.path as osp
 import numpy as np
 import torch
-
+import torch.nn.functional as F
 from mmengine import FUNCTIONS, Config
 from mmdet3d.registry import DATASETS, MODELS
 try:
@@ -50,7 +50,11 @@ def test_loop(model, dataset_cfg, dataloader_cfg, save_dir):
         x = transform(torch.cat(data['inputs']['img']).cuda())
 
         with torch.no_grad():
-            depths = model(x, cam2imgs)
+            depths = model(x, cam2imgs) # 
+            
+            # 缩放到112x200分辨率
+            depths = F.interpolate(depths.unsqueeze(1),   # (6, 1, 900, 1600)
+                    size=(112, 200),mode='bilinear',align_corners=False).squeeze(1)  
         depths = depths.cpu().numpy()
         for path, depth in zip(img_paths, depths):
             save_path = osp.join(save_dir, path.split('/')[-1].split('.')[0])
@@ -59,22 +63,21 @@ def test_loop(model, dataset_cfg, dataloader_cfg, save_dir):
 # todo ---------------------#
 # todo 用于生成深度图
 if __name__ == '__main__':
-    # ann_files = [
-    #     'nuscenes_infos_train.pkl', 'nuscenes_infos_val.pkl',
-    #     # 'nuscenes_infos_mini_train.pkl', 'nuscenes_infos_mini_val.pkl'
-    # ]
-    # todo -----------------#
     ann_files = [
-        'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl'
-    ] # todo 'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl': 仅包含关键帧的数据
+        'nuscenes_infos_train.pkl', 'nuscenes_infos_val.pkl',
+    ] # todo 生成整个nuscenes数据集的深度图(112x200)
+    # todo -----------------#
+    # ann_files = [
+    #     'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl'
+    # ] # todo 'nuscenes_mini_infos_train.pkl', 'nuscenes_mini_infos_val.pkl': 仅包含关键帧的数据
     # cfg = Config.fromfile('configs/gausstr_featup.py')
 
-    cfg = Config.fromfile('configs/customs/gausstr_featup.py')
+    cfg = Config.fromfile('/home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstr_featup.py')
     model = MODELS.build(
         dict(type='Metric3D', model_name='metric3d_vit_large')).cuda()
 
     # save_dir = 'data/nuscenes_metric3d'
-    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_metric3d'
+    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/nuscenes'
     os.makedirs(save_dir,exist_ok=True)
     dataloader_cfg = cfg.test_dataloader
     dataloader_cfg.pop('sampler')

@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis2'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis3'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -20,7 +20,27 @@ mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
 # todo ----------------------------------#
-# todo 视图渲染参数
+# todo 训练：
+batch_size=4
+num_workers=16
+# batch_size=1
+# num_workers=4
+
+train_batch_size=batch_size
+train_num_workers=num_workers
+
+val_batch_size=batch_size
+val_num_workers=num_workers
+
+
+
+train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+
+# todo ----------------------------------#
+# todo 视图渲染相关参数
 # sh_degree = 2 # todo d_sh = (sh_degree + 1)**2
 sh_degree = None
 use_sh = sh_degree is not None
@@ -32,26 +52,22 @@ renderer_type = "gsplat"
 near = 0.1
 far = 1000.
 
-
+# todo ----------------------------------#
+# todo 占用预测相关参数
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
 use_embed = True # todo 是否额外增加一些可学习嵌入
 num_embed=1800
-
-
-
-
-
-
-use_checkpoint = True
-
-_dim_ = 128
-
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
-
 out_channels += num_class
+#! 高斯尺度相关
+voxel_resolution = voxel_size / 5
+gaussian_scale_min = voxel_size / 3.0
+gaussian_scale_max = 10 * voxel_size
 
+use_checkpoint = True
+_dim_ = 128
 
 model = dict(
     type = 'VolSplat',
@@ -61,7 +77,7 @@ model = dict(
     in_embed_dim=_dim_,
     out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
     # voxel_resolution = 0.001,
-    voxel_resolution = voxel_size,
+    voxel_resolution = voxel_resolution,
     vol_range=vol_range,
     
     use_embed=use_embed,
@@ -96,9 +112,9 @@ model = dict(
         in_channels=_dim_, # 128
         out_channels=_dim_, # 128
         num_blocks=3,
-        # use_attention=False,
-        use_attention=True,
-        ), # 是否引入一个注意力层   
+        use_attention=False, 
+        # use_attention=True, # 是否引入一个注意力层   
+        ), 
     
     sparse_gs=dict(
         type='SparseGaussianHead',
@@ -110,8 +126,8 @@ model = dict(
         # gaussian_scale_min = 1e-10,
         # gaussian_scale_max = 3.0,
         
-        gaussian_scale_min = voxel_size / 3.0,
-        gaussian_scale_max = 10 * voxel_size,        
+        gaussian_scale_min = gaussian_scale_min,
+        gaussian_scale_max = gaussian_scale_max,        
         
         sh_degree=sh_degree,
     ),
@@ -139,6 +155,8 @@ model = dict(
 # Data
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
+
+
 occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录
 depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'
 
@@ -151,7 +169,7 @@ train_pipeline = [
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
     dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
-    # dict(type="PhotoMetricDistortionMultiViewImage"), # todo 
+    dict(type="PhotoMetricDistortionMultiViewImage"), # todo 
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
@@ -190,7 +208,7 @@ train_dataset_config = dict(
     data_root=data_root,
     # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
     # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
-    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    imageset=anno_root + train_ann_file,
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
     # load_adj_frame = True, # todo 训练时，不引入相邻帧图像
@@ -205,7 +223,7 @@ val_dataset_config = dict(
     data_root=data_root,
     # imageset=anno_root + "nuscenes_infos_val_sweeps_occ.pkl",
     # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
-    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    imageset=anno_root + val_ann_file,
     data_aug_conf=data_aug_conf,
     pipeline=test_pipeline,
     load_adj_frame = False, # todo 评估时，不引入相邻帧图像
@@ -216,23 +234,28 @@ val_dataset_config = dict(
 seed = 42
 
 train_dataloader = dict(
-    batch_size=1,
-    num_workers=4,
+    batch_size=train_batch_size,
+    num_workers=train_num_workers,
     # num_workers=0,
     persistent_workers=False,
     pin_memory=True,
-    sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
+    sampler=dict(type='DefaultSampler', 
+                 shuffle=True, 
+                 seed=seed), # todo
     collate_fn=dict(type='custom_collate_fn_temporal'),
     dataset=train_dataset_config)
 
 val_dataloader = dict(
-    batch_size=1,
-    num_workers=4,
+    batch_size=val_batch_size,
+    num_workers=val_num_workers,
     # num_workers=0,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,
-    sampler=dict(type='DefaultSampler', shuffle=False, seed=seed), # todo
+    sampler=dict(type='DefaultSampler', 
+                #  shuffle=False,
+                 shuffle=True, 
+                 seed=seed), # todo
     collate_fn=dict(type='custom_collate_fn_temporal'),
     dataset=val_dataset_config)
 

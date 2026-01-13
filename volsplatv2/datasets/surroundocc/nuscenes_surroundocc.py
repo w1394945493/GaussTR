@@ -28,7 +28,7 @@ class NuScenesSurroundOccDataset(Dataset):
                  num_samples=0,
                  vis_scene_index=-1,
                  
-                 load_adj_frame = True,
+                 load_adj_frame = False,
                  interval=15, #! 相邻帧相隔帧数
                  
                  phase='train',
@@ -53,10 +53,8 @@ class NuScenesSurroundOccDataset(Dataset):
                     "img_aug_mat",
                     
                     'output_img',
-                    # 'output_depth',
                     "output_cam2img", # todo (wys 12.30) 用于视图合成
                     "output_cam2ego",
-                    # "output_cam2lidar",
                     "output_img_aug_mat",
                     
                     "scene_token",
@@ -188,9 +186,6 @@ class NuScenesSurroundOccDataset(Dataset):
         cam_positions = []
         focal_positions = []
         
-
-        
-
         lidar2ego_r = Quaternion(info['data']['LIDAR_TOP']['calib']['rotation']).rotation_matrix # (3 3)
         lidar2ego = np.eye(4) # (4 4)单位矩阵
         lidar2ego[:3, :3] = lidar2ego_r
@@ -382,13 +377,4 @@ if __name__=='__main__':
     N = 5 if len(nuscenes_surroundocc) > 5 else len(nuscenes_surroundocc)
     for i in range(N):
         data = nuscenes_surroundocc[i]
-        # 1. 转换维度并搬运到 CPU
-        # [6, 3, 896, 1600] -> [6, 896, 1600, 3]
-        imgs_np = data['img_gt'].permute(0, 2, 3, 1).cpu().numpy()
-        depths_np = data['depth'].cpu().numpy()
-
-        # 2. 简单的去归一化，确保在 0-1 之间
-        imgs_np = (imgs_np - imgs_np.min()) / (imgs_np.max() - imgs_np.min() + 1e-6)
-        # 保存图片
-        save_2x3_layout(imgs_np, f'vis_image_{i}.png')
-        save_2x3_layout(depths_np, f'vis_depth_{i}.png', is_depth=True)
+        

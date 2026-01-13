@@ -196,6 +196,7 @@ class LoadFeatMaps(ResizeCropFlipImage):
             feat = np.load(
                 os.path.join(self.data_root,
                              filename.split('/')[-1].split('.')[0] + '.npy'))
+            
             '''
             import cv2
             cv2.imwrite('depth_0.png',feat.astype(np.uint8))

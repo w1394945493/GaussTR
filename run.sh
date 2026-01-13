@@ -9,9 +9,12 @@ python tools/update_data.py \
     --out-dir /home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini \
     --extra-tag nuscenes_mini
 
+
+
 # todo Run to generate metric depth estimations
 # todo 对nuscenes数据集的pkl文件进行深度预测，将预测结果保存为.npy格式文件
 python tools/generate_depth.py
+python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 
 # todo 使用talk2dino model：
 PYTHONPATH=. mim test mmdet3d [CONFIG] -C [CKPT_PATH] [-l pytorch -G [GPU_NUM]]
@@ -228,13 +231,30 @@ python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
 # todo --------------------------------------------------------#
 # todo VolSplatv2
 # todo 训练
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=5
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/volsplatv2_base.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train2
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_base.py \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train3
 
 
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/volsplatv2_base.py \
-    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train2/epoch_24.pth \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_base.py \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train3/epoch_24.pth \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
+
+# todo ---------------------------------------------------------#
+# todo 整理整个nuscenes数据集
+ln -s /home/A_DataSets_01/Nuscenes/v1.0-trainval /home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval
+ln -s /home/A_DataSets_01/Nuscenes/samples/ /home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval
+
+# todo 2026.01.13 wys
+# todo 从GaussTR下载pkl文件
+python tools/update_data.py \
+    nuscenes \
+    --root-path /home/A_DataSets_01/Nuscenes \
+    --version v1.0 \
+    --out-dir /home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval \
+    --extra-tag nuscenes \
+
+# todo 生成深度图
+python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py

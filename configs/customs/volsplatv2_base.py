@@ -2,30 +2,6 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-
-custom_imports = dict(imports=['volsplatv2']) # todo
-
-mean = [123.675, 116.28, 103.53]
-std  = [58.395, 57.12, 57.375]
-
-
-# sh_degree = 2 # todo d_sh = (sh_degree + 1)**2
-sh_degree = None
-use_sh = sh_degree is not None
-
-# renderer_type = "vanilla"
-renderer_type = "gsplat"
-
-# near = 0.5
-# far = 100.
-
-near = 0.1
-far = 1000.
-
-vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
-voxel_size=0.5
-use_embed = True # todo 是否额外增加一些可学习嵌入
-
 save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis2'
 custom_hooks = [
     dict(type='DumpResultHook',
@@ -35,6 +11,35 @@ custom_hooks = [
          save_occ=True,     
         ),
 ]  #  # 保存结果
+
+custom_imports = dict(imports=['volsplatv2']) # todo
+
+# todo ----------------------------------#
+# todo 图像预处理参数
+mean = [123.675, 116.28, 103.53]
+std  = [58.395, 57.12, 57.375]
+
+# todo ----------------------------------#
+# todo 视图渲染参数
+# sh_degree = 2 # todo d_sh = (sh_degree + 1)**2
+sh_degree = None
+use_sh = sh_degree is not None
+
+# renderer_type = "vanilla"
+renderer_type = "gsplat"
+# near = 0.5
+# far = 100.
+near = 0.1
+far = 1000.
+
+
+vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
+voxel_size=0.5
+use_embed = True # todo 是否额外增加一些可学习嵌入
+num_embed=1800
+
+
+
 
 
 

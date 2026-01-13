@@ -191,7 +191,7 @@ class VolSplat(BaseModel):
             embed_feats = self.embed_feats.weight.unsqueeze(0).expand(bs,-1,-1) # (embed,dim) -> (bs,embed,dim)
         else:
             embed_points, embed_feats = None, None
-        
+            
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)  #! 外参：确定是cam2lidar还是cam2ego               

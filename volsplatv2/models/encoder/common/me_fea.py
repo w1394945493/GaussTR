@@ -52,8 +52,6 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
         # 在维度 1 (点数维度) 拼接
         all_points = torch.cat([embed_points, pixel_points], dim=1) # [b, num_embed + vn, 3]
         feats_flat = torch.cat([embed_feats, pixel_feats], dim=1)
-        
-    
     else:
         all_points = pixel_points
         feats_flat = pixel_feats

@@ -42,13 +42,15 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     features = rearrange(features, "b v c h w -> b v h w c")
     features = rearrange(features, "b v h w c -> b v (h w) c")  # [B, V, N, C]
 
-    all_points = rearrange(world_coords, "b v n c -> (b v n) c")  # [B*V*N, 3] # todo 所有点
+    all_points = rearrange(world_coords, "b v n c -> (b v n) 3")  # [B*V*N, 3] # todo 所有点
     feats_flat = features.reshape(-1, c)  # [B*V*N, C] # todo 相应的特征
+    
+    
     # todo 2.体素化：将连续的3D点云转化为结构化的栅格特征
     with torch.no_grad():
         quantized_coords = torch.round(all_points / voxel_resolution).long() # todo 2.1量化: 通过all_points / voxel_resolution并取整 将3D坐标映射到整数索引的体素网格
 
-        # Create coordinate matrix: batch index + quantized coordinates
+        # Create coordinate matrix: batch index + quantized coordinates # todo 组成坐标矩阵
         batch_indices = torch.arange(b, device=device).repeat_interleave(v * h * w).unsqueeze(1)
         combined_coords = torch.cat([batch_indices, quantized_coords], dim=1)
         # todo unique 2.2唯一化：去重，找出所有被占据的唯一体素坐标，并记录每个体素包含多少个原始点，以及映射关系

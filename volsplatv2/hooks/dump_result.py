@@ -2,9 +2,11 @@ import os
 import torch
 import torchvision
 import torch.nn.functional as F
+
+import pickle
+
 from mmengine.hooks import Hook
 from mmdet3d.registry import HOOKS
-
 from colorama import Fore
 def cyan(text: str) -> str:
     return f"{Fore.CYAN}{text}{Fore.RESET}"
@@ -14,13 +16,15 @@ class DumpResultHook(Hook):
     def __init__(self,
                  save_dir='output/vis',
                  save_img=True,
-                 save_depth=True,                 
+                 save_depth=True,    
+                 save_occ=True,             
                  ):
         os.makedirs(save_dir,exist_ok=True)
         self.save_dir = save_dir    
             
         self.save_img = save_img
         self.save_depth = save_depth
+        self.save_occ = save_occ
         
         if save_img:
             self.dir_img = os.path.join(save_dir, 'img_pred')
@@ -29,7 +33,9 @@ class DumpResultHook(Hook):
         if save_depth:
             self.dir_depth = os.path.join(save_dir, 'depth_pred')
             os.makedirs(self.dir_depth,exist_ok=True)
-            
+        if save_occ:
+            self.occ_depth = os.path.join(save_dir, 'occ_pred')
+            os.makedirs(self.occ_depth,exist_ok=True)            
         print(f"Dump results to: {self.save_dir}")        
         return
     
@@ -129,7 +135,18 @@ class DumpResultHook(Hook):
                 save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}_depth_input.png"
                 save_path = os.path.join(self.dir_depth, save_name)
                 torchvision.utils.save_image(grid, save_path)
-        
+        if self.save_occ and ('occ_pred' in outputs[0]):
+             for i in range(bs):
+                occ_pred = outputs[0]['occ_pred'][i].cpu().numpy()
+                occ_gt = outputs[0]['occ_gt'][i].cpu().numpy()
+                output = dict(
+                    occ_pred = occ_pred,
+                    occ_gt = occ_gt,
+                )
+                save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.pkl"
+                save_path = os.path.join(self.occ_depth, save_name)
+                with open(save_path, 'wb') as f:
+                    pickle.dump(output, f)               
         return
 
 

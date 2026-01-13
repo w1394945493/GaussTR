@@ -224,3 +224,17 @@ python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/volsplat_base.py \
     --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplat/train/best_psnr_epoch_4.pth \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
+
+# todo --------------------------------------------------------#
+# todo VolSplatv2
+# todo 训练
+export CUDA_VISIBLE_DEVICES=1
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/volsplatv2_base.py \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train2
+
+
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/volsplatv2_base.py \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train/epoch_24.pth \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \

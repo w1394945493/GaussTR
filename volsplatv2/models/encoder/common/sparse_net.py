@@ -88,14 +88,14 @@ class AttentionBlock(nn.Module):
 
     def _attention(self, qkv: torch.Tensor):
         length, width = qkv.shape
-        ch = width // (3 * self.num_heads)
+        ch = width // (3 * self.num_heads) # todo self.num_heads: 1
         qkv = qkv.reshape(length, self.num_heads, 3 * ch).unsqueeze(0)
         qkv = qkv.permute(0, 2, 1, 3)  # (1, num_heads, length, 3 * ch)
         q, k, v = qkv.chunk(3, dim=-1)  # (1, num_heads, length, ch)
         
         if hasattr(F, 'scaled_dot_product_attention'):
             with torch.backends.cuda.sdp_kernel(enable_math=False):
-                values = F.scaled_dot_product_attention(q, k, v)[0]
+                values = F.scaled_dot_product_attention(q, k, v)[0] # 注意力算子 注意力算子
         else:
             values = F.scaled_dot_product_attention(q, k, v)[0]
         
@@ -105,9 +105,9 @@ class AttentionBlock(nn.Module):
     def forward(self, x: ME.SparseTensor):
         x_norm = self.norm(x)
         
-        qkv = self.qkv(x_norm)
+        qkv = self.qkv(x_norm) # (n,d) -> (n,3d)
         
-        feature_dense = self._attention(qkv.F)
+        feature_dense = self._attention(qkv.F) # 做一个全局的自注意力 (n,3d) -> (n,d)
         feature = ME.SparseTensor(
             features=feature_dense,
             coordinate_map_key=qkv.coordinate_map_key,
@@ -121,26 +121,27 @@ class SparseConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
         super().__init__()
         self.conv = ME.MinkowskiConvolution(
-            in_channels, out_channels, 
-            kernel_size=kernel_size, 
-            stride=stride, 
-            dimension=3
-        )
+            in_channels, out_channels, # todo 输入/输出通道
+            kernel_size=kernel_size,   # todo 卷积核大小：稀疏卷积仅处理有值(非零点)，空缺地方不占用计算资源
+            stride=stride, # todo 步长 stride=2：下采样：将空间网格坐标除以2
+            dimension=3 # todo 维度: 声明在3D空间进行操作
+        ) # todo 注：不需要手动设置padding: 稀疏卷积中，以“点”为中心
         self.norm = ME.MinkowskiBatchNorm(out_channels)
         self.act = ME.MinkowskiReLU(inplace=True)
         
     def forward(self, x: ME.SparseTensor):
-        return self.act(self.norm(self.conv(x)))
+        return self.act(self.norm(self.conv(x))) # todo 输入x：应该是一个ME.SparseTensor: 主要包括两部分：坐标(N,4) bs,x,y,z Features：特征
 
 class SparseUpConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=2):
         super().__init__()
-        self.upconv = ME.MinkowskiConvolutionTranspose(
+        # todo ME.MinkowskiConvolutionTranspose: 稀疏转置卷积：主要用于上采样，把被压缩的低分辨率特征图放大回高分辨率
+        self.upconv = ME.MinkowskiConvolutionTranspose( 
             in_channels, out_channels, 
             kernel_size=kernel_size, 
-            stride=stride, 
+            stride=stride, # todo stride=2：定义了输出网格相对于输入网格的放大倍数
             dimension=3
-        )
+        ) # todo： 转置卷积回将一个输入的非空点，按照kernel_size扩散出一组新的坐标点
         self.norm = ME.MinkowskiBatchNorm(out_channels)
         self.act = ME.MinkowskiReLU(inplace=True)
         
@@ -171,6 +172,8 @@ class SparseUNetWithAttention(nn.Module):
         self.bottleneck = nn.ModuleList()
         self.bottleneck.append(SparseConvBlock(bottleneck_in, bottleneck_out, kernel_size=3, stride=2))
         
+        # todo -------------------------#
+        # todo 是否引入注意力层
         if use_attention:
             self.bottleneck.append(AttentionBlock(bottleneck_out))
         
@@ -205,24 +208,25 @@ class SparseUNetWithAttention(nn.Module):
     def forward(self, x: ME.SparseTensor):
         encoder_outputs = []
         
-        for encoder in self.encoders:
+        # todo 编码器层：稀疏卷积进行下采样，
+        for encoder in self.encoders: # todo encoder: SparseConvBlock: 稀疏卷积
             x = encoder(x)
-            encoder_outputs.append(x)
+            encoder_outputs.append(x) # todo 保存每一层输出：分辨率降低(UNet网络前一部分模块)
 
-        for layer in self.bottleneck:
+        for layer in self.bottleneck: # todo 继续进行下采样
             x = layer(x)
 
-        for i, decoder_block in enumerate(self.decoder_blocks):
+        for i, decoder_block in enumerate(self.decoder_blocks): # todo UNet网络结构，上采样
             upconv, after_cat = decoder_block
             
-            x = upconv(x)
+            x = upconv(x) # todo 进行上采样
             
             enc_index = len(encoder_outputs) - i - 1
             if enc_index >= 0 and enc_index < len(encoder_outputs):
                 x = ME.cat(x, encoder_outputs[enc_index])
                 x = after_cat(x)
         
-        output = self.final_upsample(x)
+        output = self.final_upsample(x) # todo 最终上采样层，将特征图恢复到特定的目标分辨率
         del encoder_outputs
         
         return output

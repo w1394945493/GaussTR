@@ -16,7 +16,6 @@ def rasterize_gaussians(
     opacities,
     colors, # 颜色
     use_sh = True,
-    img_aug_mats=None,
     **kwargs):
 
     # cam2world to world2cam

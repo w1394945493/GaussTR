@@ -150,6 +150,7 @@ class VolSplat(BaseModel):
         device = inputs.device
         
         depth = data_samples["depth"]  # (b v h w)
+        depth = torch.clamp(depth,max=51.2)
         
         # todo backbone+FPN特征提取
         multi_img_feats = self.extract_img_feat(img=inputs)
@@ -157,7 +158,8 @@ class VolSplat(BaseModel):
 
         img_aug_mat = data_samples['img_aug_mat']
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) # todo 内参(相对于原图像)
-        extrinsics = data_samples['cam2ego'] 
+        # extrinsics = data_samples['cam2ego'] 
+        extrinsics = data_samples['cam2lidar'] # todo  
         
         # todo 将特征图上采样回原图像大小
         # img_feats = self.upsampler(img_feats) # (bv c h w)        
@@ -171,10 +173,12 @@ class VolSplat(BaseModel):
             mat = repeat(mat,"i j -> () () i j")
             img_aug_mat = mat @ img_aug_mat
             depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
-
+        
+        # todo -------------------------------------------------------#
+        # todo 将像素特征转为体素特征
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
-                extrinsics, # (b v 4 4)                
+                extrinsics, # (b v 4 4)  #! 外参：确定是cam2lidar还是cam2ego               
                 img_feats,  # (bv c h w)
                 depth=depth,
                 voxel_resolution=self.voxel_resolution,
@@ -183,7 +187,8 @@ class VolSplat(BaseModel):
                 img_aug_mat=img_aug_mat,
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
-        # todo 残差连接
+        # todo -----------------------------------------------------#
+        # todo 3D UNet网络
         sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
 
         if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
@@ -200,7 +205,7 @@ class VolSplat(BaseModel):
             print("Warning: Input and output coordinates inconsistent, skipping residual connection")
             sparse_out_with_residual = sparse_out
 
-        gaussians = self.gaussian_head(sparse_out_with_residual)
+        gaussians = self.gaussian_head(sparse_out_with_residual) # todo MLP层网络
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
         gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
@@ -218,17 +223,10 @@ class VolSplat(BaseModel):
         
         gaussians = self.gaussian_adapter.forward(
             extrinsics = extrinsics, # (b v 4 4)
-            intrinsics = intrinsics, # (b v 3 3) #! 这里也用到了相机内参
-            img_aug_mat=img_aug_mat,
             opacities = opacities,   # (b 1 n 1 1)
             raw_gaussians = rearrange(raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
-            # input_images =rearrange(inputs, "b v c h w -> (b v) c h w"), # (bv c h w)
-            input_images = None, #! 
-            depth = depth, # (b v h w)
-            coordidate = gaussians.C, # (n 4)
             points = batched_points, # (b 1 n 3)
-            voxel_resolution = self.voxel_resolution, # 0.001  
-            normal=False,      
+            voxel_resolution = self.voxel_resolution, # 0.001     
         )
     
         return self.decoder(gaussians,data,mode=mode)

@@ -114,7 +114,14 @@ if __name__=='__main__':
     class_weights = torch.tensor(manual_class_weight).to(device)
     
     criterion = nn.CrossEntropyLoss(weight=class_weights)
-    
+    '''
+    criterion.ignore_index
+    -100
+    criterion.weight
+    tensor([1.0155, 1.0690, 1.3001, 1.0725, 0.9464, 1.1009, 1.2696, 1.0626, 1.1890,
+            1.0622, 1.0060, 0.8571, 1.0392, 0.9087, 0.8936, 0.8549, 0.8528, 0.5000],
+        device='cuda:0')    
+    '''
     save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/0112/train5/vis_results'
     os.makedirs(save_dir, exist_ok=True)
 
@@ -135,10 +142,19 @@ if __name__=='__main__':
 
         logits = pred_feats.permute(3, 0, 1, 2).unsqueeze(0) # (200, 200, 16, 18) -> permute -> (1, 18, 200, 200, 16)
         target = target_tensor.unsqueeze(0)
-        ce_loss = 10.0 * criterion(logits, target)        
-        
+        ce_loss = 10.0 * criterion(logits, # todo (b dim 200 200 16) 
+                                   target) # todo (b 200 200 16)        
+        '''
+        unique_values, counts = torch.unique(target, return_counts=True)
+
+        # 打印值及其对应的出现次数
+        for val, count in zip(unique_values, counts):
+            print(f"值: {val.item()}, 出现次数: {count.item()}")        
+        '''
         lovasz_input = torch.softmax(logits.flatten(2), dim=1)
-        lovasz_loss = 1.0 * lovasz_softmax(lovasz_input.transpose(1, 2).flatten(0, 1), target.flatten(), ignore=17)        
+        lovasz_loss = 1.0 * lovasz_softmax(lovasz_input.transpose(1, 2).flatten(0, 1), # todo ((b h w d) 18)
+                                           target.flatten(), # todo ((b h w d))
+                                           ignore=17)        
         loss = ce_loss + lovasz_loss
         
         loss.backward()

@@ -1,3 +1,3 @@
 from .volsplat import VolSplat
 from .encoder import *
-from .decoder import DecoderSplatting
+from .decoder import GaussianDecoder,GaussianVoxelizer

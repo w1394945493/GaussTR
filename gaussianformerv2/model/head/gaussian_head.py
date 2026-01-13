@@ -146,6 +146,7 @@ class GaussianHead(BaseTaskHead):
         prediction = []
         bin_logits = []
         density = []
+        # todo ----------------------------------------------------------#
         occ_xyz = metas['occ_xyz'].to(self.zero_tensor.device)
         occ_label = metas['occ_label'].to(self.zero_tensor.device)
         occ_cam_mask = metas['occ_cam_mask'].to(self.zero_tensor.device)
@@ -163,6 +164,7 @@ class GaussianHead(BaseTaskHead):
                         means3d, covs, opacities, features, 
                         self.vol_range, self.voxel_size, self.grid_shape
                     ) # todo pred_feats: (200, 200, 16, 18)
+            
             logits = pred_feats.permute(3, 0, 1, 2).flatten(1).unsqueeze(0) # (200, 200, 16, 18) -> (18,640000) -> (1,18,6400)
             prediction.append(logits)
             final_prediction = logits.argmax(dim=1)

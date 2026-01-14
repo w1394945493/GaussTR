@@ -193,20 +193,22 @@ class LoadFeatMaps(ResizeCropFlipImage):
 
         feats = [] 
         for i, filename in enumerate(results['filename']):
+            # feat = np.load(
+            #     os.path.join(self.data_root, filename.split('/')[-1].split('.')[0] + '.npy'))
             feat = np.load(
-                os.path.join(self.data_root,
-                             filename.split('/')[-1].split('.')[0] + '.npy'))
-            
+                os.path.join(self.data_root,filename.split('/')[-2], # cam_type
+                             filename.split('/')[-1].split('.')[0] + '_dpt.npy')).astype(np.float32) # todo 224 x 400 分辨率深度图
             '''
             import cv2
             cv2.imwrite('depth_0.png',feat.astype(np.uint8))
             '''
+            h, w = feat.shape
             feat = Image.fromarray(feat)
             feat, ida_mat = self._img_transform(
                 feat,
-                resize=resize,
-                resize_dims=resize_dims,
-                crop=crop,
+                resize=[1.0, 1.0],
+                resize_dims=(w,h),
+                crop=(0,0,w,h),
                 flip=flip,
                 rotate=rotate,
             )     
@@ -217,38 +219,7 @@ class LoadFeatMaps(ResizeCropFlipImage):
             cv2.imwrite('depth_1.png',feat.astype(np.uint8))
             '''
         
-        results[self.key] = np.array(feats,dtype=np.float32)
-        
-        # todo 非关键帧无深度图
-        # if 'output_filename' in results:
-        #     feats = [] 
-        #     for i, filename in enumerate(results['output_filename']): #! 'output_filename'
-        #         feat = np.load(
-        #             os.path.join(self.data_root,
-        #                         filename.split('/')[-1].split('.')[0] + '.npy'))
-        #         '''
-        #         import cv2
-        #         cv2.imwrite('depth_0.png',feat.astype(np.uint8))
-        #         '''
-        #         feat = Image.fromarray(feat)
-        #         feat, ida_mat = self._img_transform(
-        #             feat,
-        #             resize=output_resize,
-        #             resize_dims=output_dims,
-        #             crop=output_crop,
-        #             flip=False,
-        #             rotate=0,
-        #         )     
-        #         feat = np.array(feat).astype(np.float32)       
-        #         feats.append(feat)
-        #         '''
-        #         import cv2
-        #         cv2.imwrite('depth_1.png',feat.astype(np.uint8))
-        #         '''
-            
-        #     results[f'output_{self.key}'] = np.array(feats,dtype=np.float32)        
-        
-        
+        results[self.key] = np.array(feats,dtype=np.float32)        
         return results
         
         
@@ -299,13 +270,18 @@ class NormalizeMultiviewImage(object):
             '''
             import cv2
             import numpy as np
-            img_norm = results["img"][0]
+            img_norm = results["img"][-1]
             mean = self.mean
             std = self.std
             input_img = (img_norm * std) + mean
             input_img = np.clip(input_img, 0, 255).astype(np.uint8)
             cv2.imwrite('input.png',input_img[...,::-1])  # RGB -> BGR
-            cv2.imwrite('output.png',results["output_img"][0][...,::-1].astype(np.uint8))  # RGB -> BGR
+            cv2.imwrite('output.png',results["output_img"][-1][...,::-1].astype(np.uint8))  # RGB -> BGR
+            
+            depth = results['depth'][-1].astype(np.uint8)
+            cv2.imwrite('input_depth.png',depth) 
+            
+            
             '''
         return results
 

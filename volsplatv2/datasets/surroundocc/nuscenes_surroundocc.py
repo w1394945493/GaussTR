@@ -13,6 +13,7 @@ from mmdet3d.registry import TRANSFORMS
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tqdm import tqdm
 from .utils import get_img2global, get_lidar2global
 # from utils import get_img2global, get_lidar2global
 
@@ -68,7 +69,12 @@ class NuScenesSurroundOccDataset(Dataset):
         self.scene_infos = data['infos']
         self.keyframes = data['metadata']
         self.keyframes = sorted(self.keyframes, key=lambda x: x[0] + "{:0>3}".format(str(x[1])))
-
+        
+        # todo -------------------------------#
+        # todo 均匀抽取1/10 训练/评估
+        self.keyframes = self.keyframes[::10]
+        
+        
         self.data_aug_conf = data_aug_conf
         self.load_adj_frame = load_adj_frame
         self.interval = interval 
@@ -301,23 +307,24 @@ class NuScenesSurroundOccDataset(Dataset):
         return resize,  resize_dims,  crop,  flip,  rotate, output_resize, output_dims, output_crop
 
 
-
-
-
-
-
-
 if __name__=='__main__':
     from transform_3d import *
     from mmengine.registry import init_default_scope
     init_default_scope('mmdet3d')
 
-    data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
-    anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-    occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录
-    depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'
+    # data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录 # todo v1.0-mini
+    # anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录  # todo v1.0-trainval
+    # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录(所有数据集标注根目录)
+    # depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'
+
+    data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' # todo v1.0-trainval
+    anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo v1.0-mini
+    
+    occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/samples/"
+    depth_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/samples_dptm_small"
     
     dataset_type = 'NuScenesSurroundOccDataset'
+    ann_file_name = "nuscenes_infos_train_sweeps_occ.pkl"
 
     img_norm_cfg = dict(
         mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True
@@ -349,9 +356,9 @@ if __name__=='__main__':
     dataset_dict = dict(
         type=dataset_type,
         data_root=data_root,
-        # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
+        imageset=os.path.join(anno_root, ann_file_name),
         # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
-        imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+        # imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
         data_aug_conf=data_aug_conf,
         pipeline=pipeline,
         phase='train',
@@ -374,7 +381,8 @@ if __name__=='__main__':
         plt.close(fig)  # 必须关闭窗口防止内存泄漏
         
     nuscenes_surroundocc = DATASETS.build(dataset_dict)
-    N = 5 if len(nuscenes_surroundocc) > 5 else len(nuscenes_surroundocc)
-    for i in range(N):
+    # N = 5 if len(nuscenes_surroundocc) > 5 else len(nuscenes_surroundocc)
+    N = len(nuscenes_surroundocc)
+    for i in tqdm(range(N)):
         data = nuscenes_surroundocc[i]
         

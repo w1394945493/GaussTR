@@ -234,7 +234,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
 export CUDA_VISIBLE_DEVICES=5
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_base.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train3
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train2
 
 
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
@@ -258,3 +258,24 @@ python tools/update_data.py \
 
 # todo 生成深度图
 python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
+
+# todo volsplatv2 训练 total nuscenes
+# todo 单卡训练
+export CUDA_VISIBLE_DEVICES=3
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4 \
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4/epoch_5.pth
+# todo 多卡训练
+export CUDA_VISIBLE_DEVICES=3,4,5,6
+PYTHONPATH=. torchrun --nproc_per_node=4 \
+    /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
+    --launcher pytorch \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4
+
+# /home/lianghao/anaconda3/envs/wangyushentemp/lib/python3.11/site-packages/mmdet3d/.mim/tools/train.py
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
+    -G 4 \
+    --launcher pytorch \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4 \

@@ -146,12 +146,7 @@ class VolSplat(BaseModel):
         plucker = torch.cat([torch.cross(rays_o, rays_d, dim=2), rays_d], dim=2)
         return plucker
     
-    # todo 重写BaseModel的_run_forward()
-    def _run_forward(self, data, mode): 
-        results = self(data, mode=mode)
-        return results
-    
-    def forward(self, data, mode='loss'):
+    def forward(self, mode='loss',**data):
         
         inputs = data['img']
         data_samples = data

@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis3'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis4'
 custom_hooks = [
     dict(type='DumpResultHook',
          save_dir = save_dir,
@@ -21,10 +21,10 @@ std  = [58.395, 57.12, 57.375]
 
 # todo ----------------------------------#
 # todo 训练：
-batch_size=4
-num_workers=16
-# batch_size=1
-# num_workers=4
+# batch_size=4
+# num_workers=16
+batch_size=1
+num_workers=4
 
 train_batch_size=batch_size
 train_num_workers=num_workers
@@ -34,10 +34,10 @@ val_num_workers=num_workers
 
 
 
-train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 # todo ----------------------------------#
 # todo 视图渲染相关参数
@@ -157,9 +157,11 @@ data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' 
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
 
 
-occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录
-depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'
-
+# occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录
+# depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'  # mini metric 3d depth
+occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/samples/" # all
+depth_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/samples_dptm_small" # all
+    
 dataset_type = 'NuScenesSurroundOccDataset'
 
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -281,7 +283,12 @@ val_evaluator = dict(type='OccMetric',
     filter_minmax = False,)
 test_evaluator = val_evaluator
 
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
+# todo 评估间隔
+train_cfg = dict(type='EpochBasedTrainLoop', 
+                 max_epochs=24, 
+                #  val_interval=1,
+                 val_interval=2,
+                 )
 val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')
 
@@ -319,12 +326,12 @@ param_scheduler = [
 
 
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=1,),# todo 管理 训练 loss / metrics 的间隔(每)
+    logger=dict(type='LoggerHook', interval=20,),# todo 管理打印间隔
     checkpoint=dict(type='CheckpointHook', 
                     interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。
                     max_keep_ckpts=1,     # 最大保留数量（不包含“最优”权重）。
-                    # save_best='miou',     # 开启“最优模型”保存机制。
-                    # rule='greater',       # 越大越好
+                    save_best='miou',     # 开启“最优模型”保存机制。
+                    rule='greater',       # 越大越好
                     # published_keys=['miou','iou', 'psnr', 'ssim', 'lpips']
                     )
 )

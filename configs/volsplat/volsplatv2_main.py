@@ -1,19 +1,16 @@
-_base_ = [
-    'mmdet3d::_base_/default_runtime.py',
-    '/home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_base.py',
-    ]
+_base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis2'
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir,
-         save_img=False,
-         save_depth=False, 
-         save_occ=True,     
-        ),
-]  #  # 保存结果
+# save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis4'
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir,
+#          save_img=False,
+#          save_depth=False, 
+#          save_occ=False,     
+#         ),
+# ]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -25,9 +22,9 @@ std  = [58.395, 57.12, 57.375]
 # todo ----------------------------------#
 # todo 训练：
 batch_size=4
-num_workers=16
+# num_workers=16
 # batch_size=1
-# num_workers=4
+num_workers=4
 
 train_batch_size=batch_size
 train_num_workers=num_workers
@@ -35,11 +32,12 @@ train_num_workers=num_workers
 val_batch_size=batch_size
 val_num_workers=num_workers
 
+# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
 # train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
 # val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-
-train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 # todo ----------------------------------#
 # todo 视图渲染相关参数
@@ -155,16 +153,16 @@ model = dict(
 
 # ----------------------------------------------------------#
 # Data
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
-anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-
-
-occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # occ标注根目录
-depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'
-
-
-
-
+# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+# anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
+anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' 
+    
+# occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录
+# depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'  # mini metric 3d depth
+occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/samples/" # all
+depth_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/samples_dptm_small" # all
+    
 dataset_type = 'NuScenesSurroundOccDataset'
 
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -241,21 +239,28 @@ seed = 42
 train_dataloader = dict(
     batch_size=train_batch_size,
     num_workers=train_num_workers,
-    # num_workers=0,
-    persistent_workers=False,
+    persistent_workers=True if train_num_workers > 0 else False,
+    # persistent_workers=False,
     pin_memory=True,
-    sampler=dict(type='DefaultSampler', shuffle=True, seed=seed), # todo
+    sampler=dict(type='DefaultSampler', 
+                 shuffle=True, 
+                 seed=seed
+                 ), # todo
     collate_fn=dict(type='custom_collate_fn_temporal'),
     dataset=train_dataset_config)
 
 val_dataloader = dict(
     batch_size=val_batch_size,
     num_workers=val_num_workers,
-    # num_workers=0,
-    persistent_workers=False,
+    persistent_workers=True if val_num_workers > 0 else False, # todo num_workers=0, persistent_workers必须为False
+    # persistent_workers=False,
     pin_memory=True,
     drop_last=False,
-    sampler=dict(type='DefaultSampler', shuffle=False, seed=seed), # todo
+    sampler=dict(type='DefaultSampler', 
+                 shuffle=False,
+                #  shuffle=True, 
+                 seed=seed
+                 ), # todo
     collate_fn=dict(type='custom_collate_fn_temporal'),
     dataset=val_dataset_config)
 
@@ -281,7 +286,12 @@ val_evaluator = dict(type='OccMetric',
     filter_minmax = False,)
 test_evaluator = val_evaluator
 
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
+# todo 评估间隔
+train_cfg = dict(type='EpochBasedTrainLoop', 
+                 max_epochs=24, 
+                 val_interval=1, # todo 评估间隔
+                #  val_interval=2,
+                 )
 val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')
 
@@ -292,7 +302,7 @@ optim_wrapper = dict(
 
 param_scheduler = [
     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),
-    # dict(type='MultiStepLR', milestones=[16], gamma=0.1)
+    dict(type='MultiStepLR', milestones=[16], gamma=0.1)
 ]
 
 # base_lr = 2e-4
@@ -319,12 +329,12 @@ param_scheduler = [
 
 
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=1,),# todo 管理 训练 loss / metrics 的间隔(每)
+    logger=dict(type='LoggerHook', interval=10,),# todo 管理打印间隔
     checkpoint=dict(type='CheckpointHook', 
                     interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。
                     max_keep_ckpts=1,     # 最大保留数量（不包含“最优”权重）。
-                    # save_best='miou',     # 开启“最优模型”保存机制。
-                    # rule='greater',       # 越大越好
+                    save_best='miou',     # 开启“最优模型”保存机制。
+                    rule='greater',       # 越大越好
                     # published_keys=['miou','iou', 'psnr', 'ssim', 'lpips']
                     )
 )
@@ -337,3 +347,8 @@ vis_backends = [
     dict(type='TensorboardVisBackend') # 调用 TensorBoard
 ]
 visualizer = dict(type='Visualizer',vis_backends=vis_backends,name='visualizer')
+
+# model_wrapper_cfg = dict(
+#     type='MMDistributedDataParallel',
+#     find_unused_parameters=True  # 允许模型中有不参与计算的参数
+# )

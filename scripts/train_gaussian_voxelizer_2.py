@@ -122,7 +122,7 @@ if __name__=='__main__':
             1.0622, 1.0060, 0.8571, 1.0392, 0.9087, 0.8936, 0.8549, 0.8528, 0.5000],
         device='cuda:0')    
     '''
-    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/0112/train5/vis_results'
+    save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/debug/0114/train/vis_results'
     os.makedirs(save_dir, exist_ok=True)
 
     print("Starting training with Triton-accelerated GaussSplatting3D...")

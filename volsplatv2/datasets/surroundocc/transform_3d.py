@@ -30,7 +30,7 @@ class DefaultFormatBundle(object):
                        (3)to DataContainer (stack=True)
     """
 
-    def __init__(self, keys = ['img','output_img']): #!
+    def __init__(self, keys = ['img']): #!
         self.keys = keys
         return
 
@@ -53,6 +53,7 @@ class DefaultFormatBundle(object):
                 else:
                     imgs = np.ascontiguousarray(results[key].transpose(2, 0, 1))
                 results[key] = torch.from_numpy(imgs)
+        
         return results
 
     def __repr__(self):
@@ -60,26 +61,10 @@ class DefaultFormatBundle(object):
 
 
 @TRANSFORMS.register_module()
-class NuScenesAdaptor(object):
-    def __init__(self, num_cams, use_ego=False):
-        self.num_cams = num_cams
-        self.projection_key = 'ego2img' if use_ego else 'lidar2img' # todo 'lidar2img'
-
-    def __call__(self, input_dict):
-        input_dict["projection_mat"] = np.float32(
-            np.stack(input_dict[self.projection_key]) 
-        )
-        input_dict["image_wh"] = np.ascontiguousarray(
-            np.array(input_dict["img_shape"], dtype=np.float32)[:, :2][:, ::-1]
-        )
-        return input_dict
-
-
-@TRANSFORMS.register_module()
 class ResizeCropFlipImage(object):
     def __call__(self, results):
         aug_configs = results.get("aug_configs")
-        resize, resize_dims, crop, flip, rotate, output_resize, output_dims, output_crop = aug_configs
+        resize, resize_dims, crop, flip, rotate = aug_configs
         
         imgs = results["img"]
         N = len(imgs)
@@ -101,42 +86,11 @@ class ResizeCropFlipImage(object):
             new_imgs.append(np.array(img).astype(np.float32))
             # todo (wys 12.30)
             transforms.append(mat) # todo img2img' 矩阵
-            results["lidar2img"][i] = mat @ results["lidar2img"][i] # todo 已经都做过变换了
-            results["ego2img"][i] = mat @ results["ego2img"][i]
 
-        
         results["img"] = new_imgs
         results["img_shape"] = [x.shape[:2] for x in new_imgs]
         # todo (wys 12.30)
-        results["img_aug_mat"] = np.array(transforms).astype(np.float32)
-        
-        if 'output_img' in results:
-            imgs = results["output_img"]
-            N = len(imgs)
-            new_imgs = []
-            transforms = []
-            for i in range(N):
-                img = Image.fromarray(np.uint8(imgs[i]))
-                img, ida_mat = self._img_transform(
-                    img,
-                    resize=output_resize,
-                    resize_dims=output_dims,
-                    crop=output_crop,
-                    flip=False,
-                    rotate=0,
-                )
-                #!----------------------------------------------------#
-                mat = np.eye(4)
-                mat[:3, :3] = ida_mat # todo 
-                new_imgs.append(np.array(img).astype(np.float32))
-                # todo (wys 12.30)
-                transforms.append(mat) # todo img2img' 矩阵
-            
-            results["output_img"] = new_imgs
-            # todo (wys 12.30)
-            results["output_img_aug_mat"] = np.array(transforms).astype(np.float32)
-
-        
+        results["img_aug_mat"] = np.array(transforms).astype(np.float32)         
         return results
 
     def _get_rot(self, h):
@@ -189,7 +143,7 @@ class LoadFeatMaps(ResizeCropFlipImage):
     def __call__(self, results):
         #! 加载输入图像的深度图 跟着输入图像的预处理对深度图进行处理！
         aug_configs = results.get("aug_configs")
-        resize, resize_dims, crop, flip, rotate, output_resize, output_dims, output_crop = aug_configs
+        resize, resize_dims, crop, flip, rotate = aug_configs
 
         feats = [] 
         for i, filename in enumerate(results['filename']):
@@ -257,32 +211,22 @@ class NormalizeMultiviewImage(object):
             mmcv.imnormalize(img, self.mean, self.std, self.to_rgb) # todo to_rgb == True: bgr -> rgb
             for img in results["img"]
         ]
-        results["img_norm_cfg"] = dict(
-            mean=self.mean, std=self.std, to_rgb=self.to_rgb
-        )
-        
-        if "output_img" in results:
-            if self.to_rgb:
-                results["output_img"] = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img) for img in results["output_img"]]
-            else:
-                results["output_img"] = [img for img in results["output_img"]]
+        # results["img_norm_cfg"] = dict(
+        #     mean=self.mean, std=self.std, to_rgb=self.to_rgb
+        # )
+        '''
+        import cv2
+        import numpy as np
+        img_norm = results["img"][-1]
+        mean = self.mean
+        std = self.std
+        input_img = (img_norm * std) + mean
+        input_img = np.clip(input_img, 0, 255).astype(np.uint8)
+        cv2.imwrite('input.png',input_img[...,::-1])  # RGB -> BGR
 
-            '''
-            import cv2
-            import numpy as np
-            img_norm = results["img"][-1]
-            mean = self.mean
-            std = self.std
-            input_img = (img_norm * std) + mean
-            input_img = np.clip(input_img, 0, 255).astype(np.uint8)
-            cv2.imwrite('input.png',input_img[...,::-1])  # RGB -> BGR
-            cv2.imwrite('output.png',results["output_img"][-1][...,::-1].astype(np.uint8))  # RGB -> BGR
-            
-            depth = results['depth'][-1].astype(np.uint8)
-            cv2.imwrite('input_depth.png',depth) 
-            
-            
-            '''
+        depth = results['depth'][-1].astype(np.uint8)
+        cv2.imwrite('input_depth.png',depth) 
+        '''
         return results
 
     def __repr__(self):
@@ -465,34 +409,6 @@ class BEVLoadMultiViewImageFromFiles(object):
         # which will transpose each image separately and then stack into array
         results['img'] = [img[..., i] for i in range(img.shape[-1])]
         results['ori_img'] = deepcopy(img)
-        results['img_shape'] = img.shape
-        results['ori_shape'] = img.shape
-        # Set initial values for default meta_keys
-        results['pad_shape'] = img.shape
-        results['scale_factor'] = 1.0
-        num_channels = 1 if len(img.shape) < 3 else img.shape[2]
-        results['img_norm_cfg'] = dict(
-            mean=np.zeros(num_channels, dtype=np.float32),
-            std=np.ones(num_channels, dtype=np.float32),
-            to_rgb=False)
-        
-        # todo ---------------------------------#
-        # todo 获取输出图像(用于渲染监督)
-        if 'output_img_filename' in results:
-            filename = results['output_img_filename']
-            img_bytes = [
-                get(name, backend_args=None) for name in filename
-            ] # todo backend_args: None  get(): 获取文件原始二进制内容
-            imgs = [
-                mmcv.imfrombytes(
-                    img_byte,
-                    flag=self.color_type, # todo unchanged: 保持bgr
-                    backend='pillow',
-                    channel_order='rgb') for img_byte in img_bytes
-            ]
-            results['output_filename'] = filename
-            results['output_img'] = imgs      
-        
         return results
 
     def __repr__(self):

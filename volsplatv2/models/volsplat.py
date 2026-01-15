@@ -44,15 +44,7 @@ class VolSplat(BaseModel):
                 decoder,
 
                 use_checkpoint,
-                
-                
-                in_embed_dim,
-                out_embed_dims,
                 voxel_resolution,
-                vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0],
-                use_embed=False,
-                num_embed=1800,
-                embed_dim=128,
                 
                  **kwargs):
         super().__init__(**kwargs)
@@ -68,21 +60,6 @@ class VolSplat(BaseModel):
 
         self.use_checkpoint = use_checkpoint
         self.voxel_resolution = voxel_resolution
-
-        self.use_embed = use_embed
-        self.embed_points = None
-        self.embed_feats = None
-        if use_embed:
-            self.num_embed = num_embed
-            self.embed_points = nn.Embedding(num_embed, 3) 
-            self.embed_feats = nn.Embedding(num_embed, in_embed_dim)
-            with torch.no_grad():
-                # 分别对 x, y, z 轴进行均匀分布初始化
-                nn.init.uniform_(self.embed_points.weight[:, 0], vol_range[0], vol_range[3])
-                nn.init.uniform_(self.embed_points.weight[:, 1], vol_range[1], vol_range[4])
-                nn.init.uniform_(self.embed_points.weight[:, 2], vol_range[2], vol_range[5])                
-                # 正态分布初始化
-                nn.init.normal_(self.embed_feats.weight, std=0.02)
 
         print(cyan(f'successfully init Model!'))
 
@@ -152,7 +129,6 @@ class VolSplat(BaseModel):
         data_samples = data
 
         bs, n, _, input_h, input_w = inputs.shape # (b,v,3,H,W)
-        device = inputs.device
         
         depth = data_samples["depth"]  # (b v h w)
         depth = torch.clamp(depth,max=51.2)
@@ -163,11 +139,8 @@ class VolSplat(BaseModel):
 
         img_aug_mat = data_samples['img_aug_mat']
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) # todo 内参(相对于原图像)
-        # extrinsics = data_samples['cam2ego'] 
         extrinsics = data_samples['cam2lidar'] # todo  
         
-        # todo 将特征图上采样回原图像大小
-        # img_feats = self.upsampler(img_feats) # (bv c h w)        
         f_h, f_w = img_feats.shape[-2:]
         d_h, d_w = depth.shape[-2:]
         if (d_w != f_w) or (d_h != f_h):
@@ -181,11 +154,6 @@ class VolSplat(BaseModel):
         
         # todo -------------------------------------------------------#
         # todo 将像素特征转为体素特征
-        if self.use_embed:
-            embed_points = self.embed_points.weight.unsqueeze(0).expand(bs,-1,-1) # (embed,3) -> (bs,embed,3)
-            embed_feats = self.embed_feats.weight.unsqueeze(0).expand(bs,-1,-1) # (embed,dim) -> (bs,embed,dim)
-        else:
-            embed_points, embed_feats = None, None
             
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
@@ -197,13 +165,11 @@ class VolSplat(BaseModel):
                 normal=False,
                 img_aug_mat=img_aug_mat,
                 
-                embed_points = embed_points,
-                embed_feats = embed_feats,
                 
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
         # todo -----------------------------------------------------#
-        # todo 3D UNet网络
+        # todo 3D UNet网络 进行细化
         sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
 
         if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
@@ -220,6 +186,10 @@ class VolSplat(BaseModel):
             print("Warning: Input and output coordinates inconsistent, skipping residual connection")
             sparse_out_with_residual = sparse_out
 
+        
+        
+        # todo ------------------------------------------------------------------------#
+        # todo 高斯参数预测
         gaussians = self.gaussian_head(sparse_out_with_residual) # todo MLP层网络
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
@@ -237,7 +207,6 @@ class VolSplat(BaseModel):
         raw_gaussians = rearrange(raw_gaussians,"... (srf c) -> ... srf c",srf=1,)
         
         gaussians = self.gaussian_adapter.forward(
-            extrinsics = extrinsics, # (b v 4 4)
             opacities = opacities,   # (b 1 n 1 1)
             raw_gaussians = rearrange(raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
             points = batched_points, # (b 1 n 3)

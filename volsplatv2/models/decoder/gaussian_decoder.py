@@ -24,7 +24,7 @@ class GaussianDecoder(BaseModule):
 
     def __init__(self,
                  voxelizer,
-                 loss_lpips,
+                #  loss_lpips,
                  near,
                  far,
                  use_sh = True,
@@ -40,8 +40,8 @@ class GaussianDecoder(BaseModule):
         self.voxelizer = MODELS.build(voxelizer)
         
 
-        self.loss_lpips = MODELS.build(loss_lpips)
-        self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
+        # self.loss_lpips = MODELS.build(loss_lpips)
+        # self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
         self.use_sh = use_sh
         self.near = near
         self.far = far
@@ -63,26 +63,7 @@ class GaussianDecoder(BaseModule):
                 **kwargs):
 
         data_samples = data
-        output_imgs = data_samples['output_img']
-        h, w = output_imgs.shape[-2:]
-        
-        img_aug_mat = data_samples['output_img_aug_mat']
-        cam2img = data_samples['output_cam2img']
-        
-        bs, n = cam2img.shape[:2] # todo: n: 视角数
-        device = cam2img.device
-        
-        
-        # todo 相对于输出图像的内参
-        intrinsics = (img_aug_mat @ cam2img)[...,:3,:3] # (b v 3 3)
-        # todo 归一化内参
-        intrinsics[...,0,:] /= w
-        intrinsics[...,1,:] /= h
-        
-        
-        # extrinsics = data_samples['output_cam2ego'] # (b v 4 4)
-        
-        
+
         means3d = gaussians.means # todo (b n 3)
         harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
         opacities = gaussians.opacities # todo (b n)
@@ -113,6 +94,7 @@ class GaussianDecoder(BaseModule):
                 'occ_pred': occ_pred, # (b,200,200,16)
                 'occ_mask': occ_mask, # (b,200,200,16)
                 'occ_gt': occ_gt,     # (b,200,200,16)
+                'gaussian': gaussians, # 
             }]
             return outputs
 
@@ -135,6 +117,7 @@ class GaussianDecoder(BaseModule):
             print(f"pred值: {val.item()}, 出现次数: {count.item()}")         
                  
         '''
+        
         losses['loss_voxel_ce'] = 10.0 * \
             CE_ssc_loss(semantics,  # (b n_class n)
                         sampled_label,  # (b n)
@@ -145,6 +128,8 @@ class GaussianDecoder(BaseModule):
             lovasz_input.transpose(1, 2).flatten(0, 1), 
             sampled_label.flatten(), 
             ignore=self.lovasz_ignore)
+        
+        
         
         # todo ----------------------------------------#
         # todo 深度预测损失：

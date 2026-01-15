@@ -2,15 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-# save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis4'
-# custom_hooks = [
-#     dict(type='DumpResultHook',
-#          save_dir = save_dir,
-#          save_img=False,
-#          save_depth=False, 
-#          save_occ=False,     
-#         ),
-# ]  #  # 保存结果
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis7'
+
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir, 
+         save_occ=True,
+         save_gaussian=True,    
+        ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -19,25 +18,7 @@ custom_imports = dict(imports=['volsplatv2']) # todo
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
 
-# todo ----------------------------------#
-# todo 训练：
-batch_size=4
-# num_workers=16
-# batch_size=1
-num_workers=4
 
-train_batch_size=batch_size
-train_num_workers=num_workers
-
-val_batch_size=batch_size
-val_num_workers=num_workers
-
-# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 # todo ----------------------------------#
 # todo 视图渲染相关参数
@@ -56,15 +37,19 @@ far = 1000.
 # todo 占用预测相关参数
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
-use_embed = True # todo 是否额外增加一些可学习嵌入
-num_embed=1800
+
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
 out_channels += num_class
+
 #! 高斯尺度相关
-voxel_resolution = voxel_size / 5
+# voxel_resolution = voxel_size
+# gaussian_scale_min = voxel_size / 3.0
+# gaussian_scale_max = voxel_size
+
+voxel_resolution = voxel_size * 2
 gaussian_scale_min = voxel_size / 3.0
-gaussian_scale_max = 10 * voxel_size
+gaussian_scale_max = voxel_size * 10
 
 use_checkpoint = True
 _dim_ = 128
@@ -73,15 +58,8 @@ model = dict(
     type = 'VolSplat',
 
     use_checkpoint = use_checkpoint,
-    
-    in_embed_dim=_dim_,
-    out_embed_dims=[_dim_, _dim_*2, _dim_*4, _dim_*4],
     # voxel_resolution = 0.001,
     voxel_resolution = voxel_resolution,
-    vol_range=vol_range,
-    
-    use_embed=use_embed,
-    num_embed=1800,
     
     backbone=dict(
         type='mmdet.ResNet',
@@ -139,10 +117,10 @@ model = dict(
             voxel_size=voxel_size,
             filter_gaussians=True,
         ),
-        loss_lpips=dict(
-            type='LossLpips',
-            weight = 0.05,
-        ),
+        # loss_lpips=dict(
+        #     type='LossLpips',
+        #     weight = 0.05,
+        # ),
         lovasz_ignore = num_class-1,
         near = near,
         far = far,
@@ -151,13 +129,29 @@ model = dict(
     )
 )
 
-# ----------------------------------------------------------#
-# Data
-# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
-# anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
-anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' 
-    
+# todo ----------------------------------#
+# todo 训练：
+batch_size=1
+num_workers=4
+
+train_batch_size=batch_size
+train_num_workers=num_workers
+
+val_batch_size=batch_size
+val_num_workers=num_workers
+
+# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
+# anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
+# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
+# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录
 # depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'  # mini metric 3d depth
 occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/samples/" # all
@@ -175,7 +169,6 @@ train_pipeline = [
     dict(type="PhotoMetricDistortionMultiViewImage"), # todo 
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
-    dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
 ]
 
 test_pipeline = [
@@ -186,7 +179,6 @@ test_pipeline = [
     dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
-    dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
 ]
 
 
@@ -196,7 +188,7 @@ output_dim = (112,200)
 
 data_aug_conf = {
     "final_dim": final_dim,
-    
+
     "bot_pct_lim": (0.0, 0.0),
     "rot_lim": (0.0, 0.0),
     "H": 900,
@@ -209,28 +201,18 @@ data_aug_conf = {
 train_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
-    # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
-    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
     imageset=anno_root + train_ann_file,
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
-    # load_adj_frame = True, # todo 训练时，不引入相邻帧图像
-    load_adj_frame = False,
-    interval=15,
     phase='train',
-    # phase='val',
 )
 
 val_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
-    # imageset=anno_root + "nuscenes_infos_val_sweeps_occ.pkl",
-    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
     imageset=anno_root + val_ann_file,
     data_aug_conf=data_aug_conf,
     pipeline=test_pipeline,
-    load_adj_frame = False, # todo 评估时，不引入相邻帧图像
-    # phase='val',
     phase='val',
 )
 
@@ -240,7 +222,6 @@ train_dataloader = dict(
     batch_size=train_batch_size,
     num_workers=train_num_workers,
     persistent_workers=True if train_num_workers > 0 else False,
-    # persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', 
                  shuffle=True, 
@@ -252,13 +233,11 @@ train_dataloader = dict(
 val_dataloader = dict(
     batch_size=val_batch_size,
     num_workers=val_num_workers,
-    persistent_workers=True if val_num_workers > 0 else False, # todo num_workers=0, persistent_workers必须为False
-    # persistent_workers=False,
+    persistent_workers=True if val_num_workers > 0 else False, # todo 当num_workers=0时, persistent_workers必须为False
     pin_memory=True,
     drop_last=False,
     sampler=dict(type='DefaultSampler', 
                  shuffle=False,
-                #  shuffle=True, 
                  seed=seed
                  ), # todo
     collate_fn=dict(type='custom_collate_fn_temporal'),
@@ -329,7 +308,9 @@ param_scheduler = [
 
 
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=10,),# todo 管理打印间隔
+    logger=dict(type='LoggerHook', 
+                interval=1,
+                ),# todo 管理打印间隔
     checkpoint=dict(type='CheckpointHook', 
                     interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。
                     max_keep_ckpts=1,     # 最大保留数量（不包含“最优”权重）。

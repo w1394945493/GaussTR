@@ -234,13 +234,14 @@ def _splat_bwd_kernel_opt(
                     grad_gauss_feat = g_grid * density / grid_density_val
                     tl.atomic_add(grad_features_ptr + idx * n_dims + f, grad_gauss_feat)                    
                     
+                    # todo 2. 高斯透明度梯度   
                     # 分子贡献项 (始终存在)
                     feat_grad_scalar = g_grid * (f_i / grid_density_val)
                     # 分母贡献项 (仅当 density 未被 clamp 时存在)
                     if grid_density_val > eps:
                         feat_grad_scalar -= g_grid * (F_grid / grid_density_val)
                     
-                    # todo 2. 高斯透明度梯度    
+                     
                     # 路径 (2): 处理 grad_grid_feats 的商法则贡献                
                     grad_opac_acc += feat_grad_scalar * exp_term
                     
@@ -285,7 +286,7 @@ class GaussSplatting3D(torch.autograd.Function):
         
         grid_density = torch.zeros(grid_shape, device=device)
         grid_feats = torch.zeros((*grid_shape, n_dims), device=device)     
-            
+        grid_feats[..., -1] = 1e-5   # todo 初始化最后一维为极小数，确保默认预测为背景，避免预测第0类 
         _splat_fwd_kernel_opt[(N,)](
             means3d, inv_covs.reshape(N, 9), opacities, radii, features,
             grid_density, grid_feats,
@@ -396,8 +397,6 @@ if __name__=='__main__':
     torch.cuda.synchronize()
     print(f"triton第二次调用用时: {t1-t0}") 
 
-    
-    
     # todo---------------------------------------#
     # todo 原方法
     features_ori = features.clone().detach().requires_grad_(True)
@@ -447,14 +446,18 @@ if __name__=='__main__':
     input_triton = grid_feats_triton.permute(3, 0, 1, 2).unsqueeze(0)  # (200, 200, 16, 18) -> 转换为 (1, 18, 200, 200, 16)
     target_triton = target_labels.unsqueeze(0) # 变为 (1, 200, 200, 16)
     loss_triton = criterion(input_triton, target_triton)
+    loss_triton = loss_triton + grid_density_triton.mean()
     print(f'loss triton: {loss_triton.item()}')
     loss_triton.backward()
 
     input_ori = grid_feats_ori.permute(3, 0, 1, 2).unsqueeze(0)
     target_ori = target_labels.unsqueeze(0)
     loss_ori = criterion(input_ori, target_ori)
+    loss_ori = loss_ori + grid_density_ori.mean()
     print(f'loss ori: {loss_ori.item()}')
     loss_ori.backward()
+    
+    
     
     # 3. 对比 特征 的梯度
     try:
@@ -500,7 +503,6 @@ if __name__=='__main__':
     except AssertionError as e:
         print("Backward 均值梯度验证 -> [失败]")
         print(e)
-
     
     try:
         torch.testing.assert_close(covs_triton.grad, covs_ori.grad, rtol=1e-4, atol=1e-5)

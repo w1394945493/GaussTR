@@ -48,30 +48,25 @@ class GaussianAdapter_depth(nn.Module):
     
     def forward(
         self,
-        extrinsics: Tensor,
         opacities: Tensor,
         raw_gaussians: Tensor, #[1, 1, N, 37]
         points: Optional[Tensor] = None,
         voxel_resolution: float = 0.01,
         eps: float = 1e-8,
     ) :
-    #-> Gaussians
-
-        batch_dims = extrinsics.shape[:-2]
-
-        b, v = batch_dims
-        
         offset_xyz, scales, rotations, sh, semantics = raw_gaussians.split((3, 3, 4, 3 * self.d_sh 
                                                                  if self.d_sh is not None else 3, self.num_class), 
                                                                 dim=-1) #[1, 1, N, 1, 1, c]
-        
+        # todo --------------------------------------------#
+        # todo 尺度
         # scales = torch.clamp(F.softplus(scales - 4.),
-        #     min=self.gaussian_scale_min,
-        #     max=self.gaussian_scale_max,
+        #     min=self.gaussian_scale_min, # 0.5/3
+        #     max=self.gaussian_scale_max, # 0.5*10
         #     )
-        scales = self.gaussian_scale_min + (self.gaussian_scale_min - self.gaussian_scale_min) * torch.sigmoid(scales)
+        scales = self.gaussian_scale_min + (self.gaussian_scale_max - self.gaussian_scale_min) * torch.sigmoid(scales)
 
-
+        # todo --------------------------------------------#
+        # todo 旋转：归一化得到四元数
         # Normalize the quaternion features to yield a valid quaternion.
         rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps)
         
@@ -90,9 +85,13 @@ class GaussianAdapter_depth(nn.Module):
         elif xyz.ndim == 4:
             xyz = rearrange(xyz, "b v n c -> b v n () () c")
 
-        offset_xyz = offset_xyz.sigmoid()
-        offset_world = (offset_xyz - 0.5) *voxel_resolution*3  # [1,1,N,1,1, 3]
-
+        # todo -------------------------------------------------#
+        # todo 期望(位置)
+        # offset_xyz = offset_xyz.sigmoid()
+        # offset_world = (offset_xyz - 0.5) *voxel_resolution*3  # [1,1,N,1,1, 3] # 高斯点偏移 -0.5~0.5之间；voxel_resolution * 3高斯点可以在以自己为中心，3x3x3体素范围内活动
+        offset_world = offset_xyz
+        
+        # todo 得到体素点在真实世界中的位置
         means = xyz + offset_world  # [1,1,N, 1,1,3]
 
         gaussians = Gaussians(rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]

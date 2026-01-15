@@ -264,8 +264,16 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 export CUDA_VISIBLE_DEVICES=3
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4 \
-    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4/epoch_5.pth
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5 \
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_24.pth
+
+
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_24.pth \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
+
+
 # todo 多卡训练
 export CUDA_VISIBLE_DEVICES=3,4,5,6
 PYTHONPATH=. torchrun --nproc_per_node=4 \

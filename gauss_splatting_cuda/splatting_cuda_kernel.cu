@@ -3,6 +3,13 @@
 #include <math.h>
 
 
+// todo c++: 参数类型写法 决定程序性能，显存访问方式，以及数据安全性：指针类型：只读指针、读写指针和数值常量
+// todo const float*: 只读的显存数组，输入参数：保持固定不变
+// todo float* 需要修改的显存数组 
+// todo 有无*： 传值(Pass by value) 与 传址(Pass by Reference/Pointer) 的区别
+// todo 带有*的(指针)：传入的数据在显存中的首地址
+// todo float/int: 单个数值，不可修改
+// todo __global__: CUDA函数类型限定符：告诉编译器，函数由CPU调用，但在GPU上执行，必须返回void
 // Forward Kernel
 __global__ void _splat_fwd_kernel_opt(
     const float* means_ptr, const float* inv_covs_ptr, const float* opacities_ptr,
@@ -14,15 +21,15 @@ __global__ void _splat_fwd_kernel_opt(
     int dim_x, int dim_y, int dim_z
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= N_gaussians) return;
+    if (idx >= N_gaussians) return; // todo if语句：逻辑变量必须放到()内，逻辑块必须放到{}里(单行可省略)
 
     // 均值 x,y,z
-    float mx = means_ptr[idx * 3 + 0];
+    float mx = means_ptr[idx * 3 + 0]; // todo 指针：实际地址 = 基地址 + 偏移量；访问地址对应的值 *(ptr+i): *表示取出该地址值
     float my = means_ptr[idx * 3 + 1];
     float mz = means_ptr[idx * 3 + 2];
 
     // 协方差逆 (3x3 矩阵展平)
-    const float* c_ptr = inv_covs_ptr + idx * 9;
+    const float* c_ptr = inv_covs_ptr + idx * 9; // todo 地址
     float c0 = c_ptr[0], c1 = c_ptr[1], c2 = c_ptr[2];
     float c3 = c_ptr[3], c4 = c_ptr[4], c5 = c_ptr[5];
     float c6 = c_ptr[6], c7 = c_ptr[7], c8 = c_ptr[8];
@@ -33,7 +40,7 @@ __global__ void _splat_fwd_kernel_opt(
     float rz = radii_ptr[idx * 3 + 2];
 
     // 计算 AABB 范围 (同 Triton 逻辑)
-    int ix_start = max(0, (int)((mx - rx - vol_min_x) / voxel_size));
+    int ix_start = max(0, (int)((mx - rx - vol_min_x) / voxel_size)); 
     int ix_end   = min(dim_x, (int)((mx + rx - vol_min_x) / voxel_size) + 1);
 
     int iy_start = max(0, (int)((my - ry - vol_min_y) / voxel_size));
@@ -58,7 +65,8 @@ __global__ void _splat_fwd_kernel_opt(
                 float density = opac * expf(-0.5f * mahal);
                 long long offset = (long long)x * (dim_y * dim_z) + y * dim_z + z;
 
-                atomicAdd(grid_density_ptr + offset, density);
+                atomicAdd(grid_density_ptr + offset, density); // todo automicAdd原子加法：用于处理多个线程同时往同一个内存地址写数据(“竞态冲突”或“写冲突”)
+                // todo atomicAdd(float* address, float val)：第一个值：指针，指向要修改的内存地址；第二个值：参数，要累加进取的值
 
                 for (int f = 0; f < n_dims; f++) {
                     float feat_val = features_ptr[idx * n_dims + f];

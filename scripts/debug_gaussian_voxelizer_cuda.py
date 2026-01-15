@@ -80,13 +80,13 @@ class GaussSplatting3DCuda(torch.autograd.Function):
         # 3. 调用 CUDA 前向传播
         # 注意传参顺序要和 splatting_cuda.cpp 中的 m.def("forward", ...) 一致
         gauss_splatting_cuda.forward(
-            means3d.contiguous(),
+            means3d.contiguous(), # todo 必须要保证 存储连续 .contiguous() 做了slice等操作，就会导致不连续，修改操作(in-place modify)不会破坏连续性
             inv_covs.view(N, 9).contiguous(),
             opacities.contiguous(),
             radii.contiguous(),
-            features.contiguous(),
-            grid_density,
-            grid_feats,
+            features.contiguous(), # todo means、inv_covs等都是输入参数，前向传播过程固定不变，对应const float*
+            grid_density, # todo 输出参数：对应 float*, 不应当有const
+            grid_feats,   # todo 原厂保证：使用torch.zeros等新创建的张量，Pytorch默认在显存中新开辟一块完全连续的空间
             float(vol_range[0]), float(vol_range[1]), float(vol_range[2]),
             float(voxel_size)
         )
@@ -96,7 +96,7 @@ class GaussSplatting3DCuda(torch.autograd.Function):
         grid_feats_norm = grid_feats / grid_density.unsqueeze(-1).clamp(min=eps)
 
         # 5. 保存给反向传播用的变量
-        ctx.save_for_backward(means3d, inv_covs, opacities, radii, features, grid_density, grid_feats_norm)
+        ctx.save_for_backward(means3d, inv_covs, opacities, radii, features, grid_density, grid_feats_norm) # todo 在backward函数里一定注意不要修改save_tensors这些变量
         ctx.vol_range = vol_range
         ctx.voxel_size = voxel_size
         ctx.eps = eps
@@ -195,20 +195,6 @@ if __name__=='__main__':
     device = means3d.device
     N = means3d.shape[0]
 
-
-    # todo -------------------------------------------------#
-    # todo triton并行处理
-    
-    # todo 第一次运行时，包含编译用时，耗时会较长
-    torch.cuda.synchronize()
-    t0 = time.time()
-
-    _ = GaussSplatting3DCuda.apply(means3d, covs, opacities, features, vol_range, voxel_size, grid_shape)
-
-    t1 = time.time()   
-    torch.cuda.synchronize()
-    print(f"cuda编译用时: {t1-t0}") 
-
     features_cuda = features.clone().detach().requires_grad_(True)
     opacities_cuda = opacities.clone().detach().requires_grad_(True)
     means3d_cuda = means3d.clone().detach().requires_grad_(True)
@@ -219,7 +205,7 @@ if __name__=='__main__':
     grid_density_cuda, grid_feats_cuda = GaussSplatting3DCuda.apply(means3d_cuda, covs_cuda, opacities_cuda, features_cuda, vol_range, voxel_size, grid_shape)
     t1 = time.time()   
     torch.cuda.synchronize()
-    print(f"cuda第二次调用用时: {t1-t0}") 
+    print(f"cuda调用用时: {t1-t0}") 
 
     # todo---------------------------------------#
     # todo 原方法

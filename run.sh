@@ -264,7 +264,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 export CUDA_VISIBLE_DEVICES=3
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train7 \
     --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_24.pth
 
 

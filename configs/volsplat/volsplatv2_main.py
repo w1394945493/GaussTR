@@ -43,9 +43,9 @@ out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
 out_channels += num_class
 
 #! 高斯尺度相关
-voxel_resolution = voxel_size
+voxel_resolution = voxel_size / 5.0
 gaussian_scale_min = voxel_size / 3.0
-gaussian_scale_max = voxel_size * 5
+gaussian_scale_max = voxel_size
 
 
 use_checkpoint = True
@@ -55,7 +55,6 @@ model = dict(
     type = 'VolSplat',
 
     use_checkpoint = use_checkpoint,
-    # voxel_resolution = 0.001,
     voxel_resolution = voxel_resolution,
     
     backbone=dict(
@@ -128,7 +127,7 @@ model = dict(
 
 # todo ----------------------------------#
 # todo 训练：
-batch_size=1
+batch_size=4
 num_workers=4
 
 train_batch_size=batch_size
@@ -137,17 +136,17 @@ train_num_workers=num_workers
 val_batch_size=batch_size
 val_num_workers=num_workers
 
-# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
-# anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
-# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
+anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
+train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
-anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+# anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
+# # train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录
 # depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'  # mini metric 3d depth
@@ -306,7 +305,7 @@ param_scheduler = [
 
 default_hooks = dict(
     logger=dict(type='LoggerHook', 
-                interval=1,
+                interval=10,
                 ),# todo 管理打印间隔
     checkpoint=dict(type='CheckpointHook', 
                     interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。

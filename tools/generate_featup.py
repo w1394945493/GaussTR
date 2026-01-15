@@ -13,8 +13,10 @@ from tqdm import tqdm
 # image_dir = 'data/nuscenes/samples/'
 # save_dir = 'data/nuscenes_featup/'
 
-image_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/v1.0-mini/samples'
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/nuscenes/nuscenes_featup/'
+image_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini/samples'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_featup/mini'
+os.makedirs(save_dir,exist_ok=True)
+cam_types = ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT','CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']
 
 def main():
     device = torch.device('cuda')
@@ -22,12 +24,10 @@ def main():
         'mhamilton723/FeatUp', 'maskclip', use_norm=False).to(device)
     upsampler.eval()
 
-    from featup.featurizers import maskclip
-    upsampler = maskclip.load()
-
     transform = T.Compose([T.Resize((432, 768)), T.ToTensor(), norm])
 
-    for view_dir in os.listdir(image_dir):
+    # for view_dir in os.listdir(image_dir):
+    for view_dir in tqdm(cam_types):
         for image_name in tqdm(os.listdir(osp.join(image_dir, view_dir))):
 
             image_path = osp.join(image_dir, view_dir, image_name)

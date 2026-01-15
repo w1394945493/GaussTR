@@ -1,12 +1,6 @@
 import time
-
 import torch
-import triton
-import triton.language as tl
-import sys
 import gauss_splatting_cuda
-
-
 
 def splat_into_3d(grid_coords, # 体素网格坐标 (N,3)
                   means3d,     # 高斯点位置 (N,3) N=6x300 6个相机，300个query高斯
@@ -52,7 +46,7 @@ def splat_into_3d(grid_coords, # 体素网格坐标 (N,3)
 
 
 
-class GaussSplatting3DFunction(torch.autograd.Function):
+class GaussSplatting3DCuda(torch.autograd.Function):
     @staticmethod
     def forward(ctx, means3d, covs, opacities, features, vol_range, voxel_size, grid_shape):
         """
@@ -206,7 +200,7 @@ if __name__=='__main__':
     torch.cuda.synchronize()
     t0 = time.time()
 
-    _ = GaussSplatting3DFunction.apply(means3d, covs, opacities, features, vol_range, voxel_size, grid_shape)
+    _ = GaussSplatting3DCuda.apply(means3d, covs, opacities, features, vol_range, voxel_size, grid_shape)
 
     t1 = time.time()   
     torch.cuda.synchronize()
@@ -219,7 +213,7 @@ if __name__=='__main__':
     
     torch.cuda.synchronize()
     t0 = time.time()
-    grid_density_cuda, grid_feats_cuda = GaussSplatting3DFunction.apply(means3d_cuda, covs_cuda, opacities_cuda, features_cuda, vol_range, voxel_size, grid_shape)
+    grid_density_cuda, grid_feats_cuda = GaussSplatting3DCuda.apply(means3d_cuda, covs_cuda, opacities_cuda, features_cuda, vol_range, voxel_size, grid_shape)
     t1 = time.time()   
     torch.cuda.synchronize()
     print(f"cuda第二次调用用时: {t1-t0}") 

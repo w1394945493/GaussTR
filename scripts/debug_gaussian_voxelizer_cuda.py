@@ -76,6 +76,7 @@ class GaussSplatting3DCuda(torch.autograd.Function):
         grid_density = torch.zeros(grid_shape, device=device, dtype=torch.float32)
         grid_feats = torch.zeros((*grid_shape, n_dims), device=device, dtype=torch.float32)
         grid_feats[..., -1] = 1e-5 
+        
         # 3. 调用 CUDA 前向传播
         # 注意传参顺序要和 splatting_cuda.cpp 中的 m.def("forward", ...) 一致
         gauss_splatting_cuda.forward(
@@ -90,7 +91,7 @@ class GaussSplatting3DCuda(torch.autograd.Function):
             float(voxel_size)
         )
 
-        # 4. 归一化特征 (按照你 Triton 的逻辑)
+        # 4. 归一化特征
         eps = 1e-6
         grid_feats_norm = grid_feats / grid_density.unsqueeze(-1).clamp(min=eps)
 
@@ -156,6 +157,8 @@ class GaussSplatting3DCuda(torch.autograd.Function):
         # means3d, covs, opacities, features, vol_range, voxel_size, grid_shape
         # 不需要梯度的参数返回 None
         return grad_means, grad_covs, grad_opacities, grad_features, None, None, None
+
+
 
 if __name__=='__main__':
     torch.manual_seed(42)

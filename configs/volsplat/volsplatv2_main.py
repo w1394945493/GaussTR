@@ -43,13 +43,10 @@ out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
 out_channels += num_class
 
 #! 高斯尺度相关
-# voxel_resolution = voxel_size
-# gaussian_scale_min = voxel_size / 3.0
-# gaussian_scale_max = voxel_size
-
-voxel_resolution = voxel_size * 2
+voxel_resolution = voxel_size
 gaussian_scale_min = voxel_size / 3.0
-gaussian_scale_max = voxel_size * 10
+gaussian_scale_max = voxel_size * 5
+
 
 use_checkpoint = True
 _dim_ = 128

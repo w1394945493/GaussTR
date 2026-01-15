@@ -87,9 +87,9 @@ class GaussianAdapter_depth(nn.Module):
 
         # todo -------------------------------------------------#
         # todo 期望(位置)
-        # offset_xyz = offset_xyz.sigmoid()
-        # offset_world = (offset_xyz - 0.5) *voxel_resolution*3  # [1,1,N,1,1, 3] # 高斯点偏移 -0.5~0.5之间；voxel_resolution * 3高斯点可以在以自己为中心，3x3x3体素范围内活动
-        offset_world = offset_xyz
+        offset_xyz = offset_xyz.sigmoid()
+        offset_world = (offset_xyz - 0.5) *voxel_resolution*3  # [1,1,N,1,1, 3] # 高斯点偏移 -0.5~0.5之间；voxel_resolution * 3高斯点可以在以自己为中心，3x3x3体素范围内活动
+
         
         # todo 得到体素点在真实世界中的位置
         means = xyz + offset_world  # [1,1,N, 1,1,3]

@@ -117,17 +117,17 @@ class GaussianDecoder(BaseModule):
             print(f"pred值: {val.item()}, 出现次数: {count.item()}")         
                  
         '''
-        
         losses['loss_voxel_ce'] = 10.0 * \
             CE_ssc_loss(semantics,  # (b n_class n)
                         sampled_label,  # (b n)
                         self.class_weights.type_as(semantics), 
-                        ignore_index=255)
+                        ignore_index=255,
+                        )
         lovasz_input = torch.softmax(semantics, dim=1)
         losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
             lovasz_input.transpose(1, 2).flatten(0, 1), 
             sampled_label.flatten(), 
-            ignore=self.lovasz_ignore)
+            ignore=self.lovasz_ignore) # todo 忽略背景类
         
         
         

@@ -18,3 +18,4 @@ export CUDA_VISIBLE_DEVICES=3
 PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train
+

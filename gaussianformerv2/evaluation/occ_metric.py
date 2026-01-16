@@ -5,13 +5,8 @@ from mmengine.evaluator import BaseMetric
 from mmengine.logging import MMLogger, print_log
 from terminaltables import AsciiTable
 
-from einops import rearrange
-
-
-from mmdet3d.evaluation import fast_hist, per_class_iou
 from mmdet3d.registry import METRICS
 
-from .img_metrics import compute_psnr,compute_lpips,compute_ssim
 
 def compute_occ_iou(hist, free_index):
     tp = (
@@ -78,27 +73,6 @@ class OccMetric(BaseMetric):
                                                 & (outputs != self.empty_label)).item() # todo 预测对的非空数(TP)
             self.total_positive[-1] += torch.sum(outputs != self.empty_label).item() # todo 预测为非空类的数(TP+FP)
         
-        # todo -----------------------------#
-        # todo 视图渲染评指标
-        rgb = rearrange(data_samples[0]['img_pred'],'b v c h w -> (b v) c h w')
-        rgb_gt = rearrange(data_batch['output_img']/255.,'b v c h w -> (b v) c h w').to(rgb.device)
-        
-        if f"psnr" not in self.test_step_outputs:
-            self.test_step_outputs[f"psnr"] = []
-        if f"ssim" not in self.test_step_outputs:
-            self.test_step_outputs[f"ssim"] = []
-        if f"lpips" not in self.test_step_outputs:
-            self.test_step_outputs[f"lpips"] = []        
-        
-        self.test_step_outputs[f"psnr"].append(
-            compute_psnr(rgb_gt, rgb).mean().item()
-        )
-        self.test_step_outputs[f"ssim"].append(
-            compute_ssim(rgb_gt, rgb).mean().item()
-        )
-        self.test_step_outputs[f"lpips"].append(
-            compute_lpips(rgb_gt, rgb).mean().item()
-        )
                 
     def compute_metrics(self, results):
 
@@ -155,23 +129,6 @@ class OccMetric(BaseMetric):
         ret_dict['miou'] = miou * 100
         ret_dict['iou'] = iou * 100
         self.reset()
-
-        # todo -----------------------------#
-        # todo 视图渲染评估结果打印
-                
-        header = ['metric name']
-        table_columns = ['results']
-        for metric_name, metric_scores in self.test_step_outputs.items():
-            avg_scores = sum(metric_scores) / len(metric_scores)
-            ret_dict[metric_name] = avg_scores
-            header.append(metric_name)
-            table_columns.append(f'{avg_scores:.4f}')
-
-        table_data = [header,table_columns]
-        table = AsciiTable(table_data)
-        table.inner_footing_row_border = True
-        print_log('\n' + table.table, logger=logger)        
-        self.test_step_outputs = {}
         
         return ret_dict
 

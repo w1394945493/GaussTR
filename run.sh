@@ -204,7 +204,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train3 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train4 \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
 export CUDA_VISIBLE_DEVICES=2
@@ -259,7 +259,8 @@ python tools/update_data.py \
 # todo 生成深度图
 python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 
-# todo volsplatv2 训练 total nuscenes
+# todo ---------------------------------------------------------#
+# todo volsplatv2 使用整个nuscenes数据集(1/10)进行训练
 # todo 单卡训练
 export CUDA_VISIBLE_DEVICES=3
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
@@ -287,3 +288,11 @@ PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/config
     -G 4 \
     --launcher pytorch \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4 \
+
+
+# todo ---------------------------------------------------------#
+# todo c3g
+export CUDA_VISIBLE_DEVICES=3
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/c3g_base.py\
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/c3g/train \

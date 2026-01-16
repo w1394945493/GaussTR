@@ -243,6 +243,9 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
+    logger=dict(type='LoggerHook', 
+                interval=1,
+                ),# todo 管理打印间隔
      # todo
     checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
 )

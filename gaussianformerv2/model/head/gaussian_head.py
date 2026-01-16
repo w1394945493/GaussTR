@@ -4,7 +4,8 @@ import torch, torch.nn as nn
 from mmdet3d.registry import MODELS
 from .base_head import BaseTaskHead
 from ..utils.utils import get_rotation_matrix
-from .gaussian_voxelizer import GaussSplatting3D
+
+from .gaussian_voxelizer import GaussSplatting3D,GaussSplatting3DCuda
 
 @MODELS.register_module()
 class GaussianHead(BaseTaskHead):
@@ -43,13 +44,15 @@ class GaussianHead(BaseTaskHead):
         self.voxel_size = voxel_size
         self.grid_shape = grid_shape
 
-        if with_empty:
-            self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0) # todo nn.Parameter: 可训练参数
-            self.register_buffer('empty_mean', torch.tensor(empty_args['mean'])[None, None, :]) # todo register_buffer: 跟着模型走，但不训练的状态量
-            self.register_buffer('empty_scale', torch.tensor(empty_args['scale'])[None, None, :])
-            self.register_buffer('empty_rot', torch.tensor([1., 0., 0., 0.])[None, None, :])
-            self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :])
-            self.register_buffer('empty_opa', torch.ones(1)[None, None, :])
+        # if with_empty:
+        #     self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0) # todo nn.Parameter: 可训练参数
+        #     self.register_buffer('empty_mean', torch.tensor(empty_args['mean'])[None, None, :]) # todo register_buffer: 跟着模型走，但不训练的状态量
+        #     self.register_buffer('empty_scale', torch.tensor(empty_args['scale'])[None, None, :])
+        #     self.register_buffer('empty_rot', torch.tensor([1., 0., 0., 0.])[None, None, :])
+        #     self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :])
+        #     self.register_buffer('empty_opa', torch.ones(1)[None, None, :])
+        
+        
         self.with_emtpy = with_empty
         self.empty_args = empty_args
         self.dataset_type = dataset_type
@@ -92,19 +95,19 @@ class GaussianHead(BaseTaskHead):
         if origi_opa.numel() == 0:
             origi_opa = torch.ones_like(opacities[..., :1], requires_grad=False)
         
-        if self.with_emtpy: # todo True
-            assert opacities.shape[-1] == self.num_classes - 1 # todo self.num_classes: 18
-            if 'kitti' in self.dataset_type:
-                opacities = torch.cat([torch.zeros_like(opacities[..., :1]), opacities], dim=-1)
-            else: # todo 拼接了一个全0列
-                opacities = torch.cat([opacities, torch.zeros_like(opacities[..., :1])], dim=-1) # todo cat -> (1 25600 18)
-            means = torch.cat([means, self.empty_mean], dim=1) # todo self.empty_mean: (1 1 3) 内容是(0.,0.,-1)
-            scales = torch.cat([scales, self.empty_scale], dim=1) # todo self.empty_scale: (1 1 3) 内容是(100 100 8)
-            rotations = torch.cat([rotations, self.empty_rot], dim=1) # todo self.empty_rot: (1 1 4) 内容是(1 0 0 0)
-            empty_sem = self.empty_sem.clone() # (1 1 18) # todo self.empty_sem: (1 1 18) 内容全为0
-            empty_sem[..., self.empty_label] += self.empty_scalar # todo self.empty_scaler: 10.2920 self.empty_label: 17
-            opacities = torch.cat([opacities, empty_sem], dim=1) # todo
-            origi_opa = torch.cat([origi_opa, self.empty_opa], dim=1) # todo self.empty_opa: (1 1 1) 内容为1
+        # if self.with_emtpy: # todo True
+        #     assert opacities.shape[-1] == self.num_classes - 1 # todo self.num_classes: 18
+        #     if 'kitti' in self.dataset_type:
+        #         opacities = torch.cat([torch.zeros_like(opacities[..., :1]), opacities], dim=-1)
+        #     else: # todo 拼接了一个全0列
+        #         opacities = torch.cat([opacities, torch.zeros_like(opacities[..., :1])], dim=-1) # todo cat -> (1 25600 18)
+        #     means = torch.cat([means, self.empty_mean], dim=1) # todo self.empty_mean: (1 1 3) 内容是(0.,0.,-1)
+        #     scales = torch.cat([scales, self.empty_scale], dim=1) # todo self.empty_scale: (1 1 3) 内容是(100 100 8)
+        #     rotations = torch.cat([rotations, self.empty_rot], dim=1) # todo self.empty_rot: (1 1 4) 内容是(1 0 0 0)
+        #     empty_sem = self.empty_sem.clone() # (1 1 18) # todo self.empty_sem: (1 1 18) 内容全为0
+        #     empty_sem[..., self.empty_label] += self.empty_scalar # todo self.empty_scaler: 10.2920 self.empty_label: 17
+        #     opacities = torch.cat([opacities, empty_sem], dim=1) # todo
+        #     origi_opa = torch.cat([origi_opa, self.empty_opa], dim=1) # todo self.empty_opa: (1 1 1) 内容为1
 
 
 
@@ -160,11 +163,17 @@ class GaussianHead(BaseTaskHead):
             features = features.squeeze(0)
             covs = covs.squeeze(0) 
             
-            _, pred_feats = GaussSplatting3D.apply(
+            
+            # grid_density, pred_feats = GaussSplatting3D.apply(
+            #             means3d, covs, opacities, features, 
+            #             self.vol_range, self.voxel_size, self.grid_shape
+            #         ) # todo pred_feats: (200, 200, 16, 18)
+            
+            grid_density, pred_feats = GaussSplatting3DCuda.apply(
                         means3d, covs, opacities, features, 
                         self.vol_range, self.voxel_size, self.grid_shape
                     ) # todo pred_feats: (200, 200, 16, 18)
-            
+
             logits = pred_feats.permute(3, 0, 1, 2).flatten(1).unsqueeze(0) # (200, 200, 16, 18) -> (18,640000) -> (1,18,6400)
             prediction.append(logits)
             final_prediction = logits.argmax(dim=1)

@@ -48,19 +48,12 @@ class NuScenesSurroundOccDataset(Dataset):
                     'focal_positions', # todo 
 
                     'img',
-                    "depth", # todo (wys 12.30) 深度图
+
                     "cam2img", # todo (wys 12.30) 用于视图合成
                     "cam2ego",
                     "cam2lidar",
                     "img_aug_mat",
-                    
-                    'output_img',
-                    'output_depth',
-                    "output_cam2img", # todo (wys 12.30) 用于视图合成
-                    "output_cam2ego",
-                    "output_cam2lidar",
-                    "output_img_aug_mat",
-                    
+
                     "scene_token",
                     "token",                      
                  ],
@@ -112,8 +105,6 @@ class NuScenesSurroundOccDataset(Dataset):
         info = deepcopy(self.scene_infos[scene_token][sample_idx]) # todo 以场景为单位的数据
 
         input_dict = self.get_data_info(info)
-        
-                
         if self.data_aug_conf is not None:
             input_dict["aug_configs"] = self._sample_augmentation()
 
@@ -123,29 +114,15 @@ class NuScenesSurroundOccDataset(Dataset):
         return_dict = {k: input_dict[k] for k in self.return_keys}
         return return_dict
 
-    
-    
-    
     def get_data_info(self, info):
         f = 0.0055
         image_paths = []
-        cam2imgs = []
-        cam2egos = []
-        cam2lidars = []
-
-        output_image_paths = []
-        output_cam2imgs = []
-        output_cam2egos = []
-        output_cam2lidars = []
-                
+       
         lidar2img_rts = []
         ego2image_rts = []
         cam_positions = []
         focal_positions = []
-        
-
-        
-
+            
         lidar2ego_r = Quaternion(info['data']['LIDAR_TOP']['calib']['rotation']).rotation_matrix # (3 3)
         lidar2ego = np.eye(4) # (4 4)单位矩阵
         lidar2ego[:3, :3] = lidar2ego_r
@@ -177,31 +154,12 @@ class NuScenesSurroundOccDataset(Dataset):
             cam_positions.append(cam_position.flatten()[:3])
             focal_position = img2lidar @ viewpad @ np.array([0., 0., f, 1.]).reshape([4, 1])
             focal_positions.append(focal_position.flatten()[:3])
-            
-            # todo --------------------------------------------------#
-            # todo (wys 12.30) 输入图像路径            
+                       
             image_paths.append(os.path.join(self.data_path, info['data'][cam_type]['filename']))
-            # todo --------------------------------------------------#
-            # todo (wys 12.30) 输入图像相机内参cam2img: 相对于原始尺寸(900x1600)的 
-            cam2imgs.append(viewpad)
-            # todo --------------------------------------------------#
-            # todo (wys 12.30) 输入图像相机外参cam2ego
-            cam2ego = np.eye(4)
-            cam2ego[:3, :3] = Quaternion(info['data'][cam_type]['calib']['rotation']).rotation_matrix
-            cam2ego[:3, 3] = np.asarray(info['data'][cam_type]['calib']['translation']).T 
-            cam2egos.append(cam2ego)
             
-            # todo --------------------------------------------------#
-            # todo (wys 12.30) 输入图像相机外参cam2lidar      
-            cam2lidar = ego2lidar @ cam2ego
-            cam2lidars.append(cam2lidar)
             
-            # todo --------------------------------------------------#
-            # todo (wys 12.30) 获取输出图像相关数据
-            output_image_paths.append(os.path.join(self.data_path, info['data'][cam_type]['filename']))
-            output_cam2imgs.append(viewpad)
-            output_cam2egos.append(cam2ego)
-            output_cam2lidars.append(cam2lidar)
+
+            
             
         input_dict =dict(
             scene_token = info['scene_token'],
@@ -218,14 +176,6 @@ class NuScenesSurroundOccDataset(Dataset):
             focal_positions=np.asarray(focal_positions),
             
             
-            cam2img = np.array(cam2imgs, dtype=np.float32), # todo 内参
-            cam2ego = np.array(cam2egos, dtype=np.float32), # todo 外参
-            cam2lidar = np.array(cam2lidars, dtype=np.float32), # todo 外参
-            
-            output_img_filename = output_image_paths,
-            output_cam2img = np.array(output_cam2imgs, dtype=np.float32), # todo 内参
-            output_cam2ego = np.array(output_cam2egos, dtype=np.float32), # todo 外参
-            output_cam2lidar = np.array(output_cam2lidars, dtype=np.float32), # todo 外参            
             
             
             ) # todo 
@@ -254,12 +204,12 @@ class NuScenesSurroundOccDataset(Dataset):
             rotate = np.random.uniform(*self.data_aug_conf["rot_lim"])
            
         
-        out_h, out_w = self.data_aug_conf['output_dim']
-        output_resize = [out_w/W, out_h/H]
-        output_dims = (out_w, out_h)
-        output_crop = (0, 0, out_w, out_h)
-        return resize,  resize_dims,  crop,  flip,  rotate, output_resize, output_dims, output_crop
-
+        # out_h, out_w = self.data_aug_conf['output_dim']
+        # output_resize = [out_w/W, out_h/H]
+        # output_dims = (out_w, out_h)
+        # output_crop = (0, 0, out_w, out_h)
+        # return resize,  resize_dims,  crop,  flip,  rotate, output_resize, output_dims, output_crop
+        return resize,  resize_dims,  crop,  flip,  rotate
 
 
 

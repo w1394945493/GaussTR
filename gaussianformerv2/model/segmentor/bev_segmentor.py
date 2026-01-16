@@ -9,8 +9,6 @@ from mmdet3d.registry import MODELS
 
 from .base_segmentor import CustomBaseSegmentor
 from ...loss import CE_ssc_loss,lovasz_softmax
-from ...geometry import sample_image_grid,get_world_rays
-from ..decoder import rasterize_gaussians
 
 from colorama import Fore
 
@@ -44,9 +42,6 @@ class BEVSegmentor(CustomBaseSegmentor):
     def __init__(
         self,
         
-        pixel_gs = None,
-        loss_lpips = None,
-        
         freeze_img_backbone=False,
         freeze_img_neck=False,
         freeze_lifter=False,
@@ -64,8 +59,6 @@ class BEVSegmentor(CustomBaseSegmentor):
     ):
         super().__init__(**kwargs)
 
-        self.pixel_gs = MODELS.build(pixel_gs)
-        self.loss_lpips = MODELS.build(loss_lpips)
         
         self.freeze_img_backbone = freeze_img_backbone
         self.freeze_img_neck = freeze_img_neck
@@ -156,73 +149,12 @@ class BEVSegmentor(CustomBaseSegmentor):
             'points': points
         }
         
+
         
+
         results.update(kwargs)
         outs = self.extract_img_feat(**results) # todo 提取多尺度图像特征图outs:{'ms_img_feats'}: (b v c h w)  1/8 1/16 1/32 1/64 4个尺度的特征图        
-        results.update(outs)
-
-        # todo --------------------------#
-        # todo 使用第1个特征图进行视图渲染        
-        img_feats = outs['ms_img_feats'][0]
-        input_h, input_w = imgs.shape[-2:] # todo 网络输入尺寸
-        f_h, f_w = img_feats.shape[-2:] # todo 特征图尺寸
-        
-        img_aug_mat = metas['img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵
-        resize = torch.diag(torch.tensor([f_w/input_w, f_h/input_h],
-                                         dtype=img_aug_mat.dtype,device = img_aug_mat.device))
-        mat = torch.eye(4).to(img_aug_mat.device)
-        mat[:2,:2] = resize
-        mat = repeat(mat,"i j -> () () i j")
-        img_aug_mat = mat @ img_aug_mat
-        # todo 内参(相对于原图900x1600)
-        intrinsics =  metas['cam2img'][...,:3,:3] # (b v 3 3)      
-        # todo 外参
-        extrinsics = metas['cam2lidar']
-              
-        depth = metas['depth']
-        depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
-        
-        pixel_gaussians = self.pixel_gs(
-                img_feats=rearrange(img_feats, "b v c h w -> (b v) c h w"),                 
-                depths_in=depth, # (b v h w)
-                intrinsics = intrinsics,
-                extrinsics = extrinsics,
-                img_aug_mat = img_aug_mat,
-                )  
-
-        means3d = pixel_gaussians.means
-        harmonics = pixel_gaussians.harmonics # (b n c d_sh) | (b n c), c=rgb
-        opacities = pixel_gaussians.opacities
-        scales = pixel_gaussians.scales
-        rotations = pixel_gaussians.rotations
-        covariances = pixel_gaussians.covariances
-        # todo --------------------------------------#       
-        # todo 内参
-        output_imgs = metas['output_img']
-        output_h, output_w = output_imgs.shape[-2:]
-        output_img_aug_mat = metas['output_img_aug_mat'] # (b v 4 4) # todo 变换增强矩阵(注意：仅缩放)
-        output_intrinsics =  (output_img_aug_mat @ metas['output_cam2img'])[...,:3,:3] # (b v 3 3) # todo 相对于原图的内外参        
-        
-        # todo 外参
-        output_extrinsics = metas['output_cam2lidar']
-
-        colors, rendered_depth = rasterize_gaussians(
-            extrinsics=output_extrinsics,
-            intrinsics=output_intrinsics,
-            image_shape = (output_h, output_w),
-            means3d=means3d,
-            rotations=rotations,
-            scales=scales,
-            covariances=covariances,
-            opacities=opacities,
-            colors=harmonics, # todo (b n c d_sh)
-            use_sh=False,
-            is_normalize = False, # todo 
-            near_plane=0.1,
-            far_plane=1000.,
-        
-            render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
-            channel_chunk=32)               
+        results.update(outs)             
         
         # todo --------------------------#
         # todo occ 占用预测
@@ -239,8 +171,6 @@ class BEVSegmentor(CustomBaseSegmentor):
                     'occ_gt': results['sampled_label'], # (b (h w d))
                     'occ_mask': results['occ_mask'].flatten(1), # (b (h w d))
                     
-                    'img_pred': colors,
-                    'depth_pred': rendered_depth,
                 }]
             return outputs
 
@@ -261,18 +191,6 @@ class BEVSegmentor(CustomBaseSegmentor):
         lovasz_input = torch.softmax(semantics, dim=1) # todo (b num_classes g)
         losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
             lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
-
-        rendered_depth = rendered_depth.flatten(0,1)
-        depth_gt = metas['output_depth']
-        depth_gt = depth_gt.flatten(0,1)
-        losses['loss_depth'] = 0.05 * self.depth_loss(rendered_depth, depth_gt, criterion='l1')
-        
-        rgb = colors.flatten(0,1)
-        rgb_gt = metas['output_img']
-        rgb_gt = rgb_gt.flatten(0,1) / 255.
-        reg_loss = (rgb - rgb_gt) ** 2
-        losses['loss_l2'] = reg_loss.mean()
-        losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
         
         return losses
     

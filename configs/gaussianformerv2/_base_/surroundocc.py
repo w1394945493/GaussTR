@@ -11,7 +11,7 @@ train_pipeline = [
     dict(type="BEVLoadMultiViewImageFromFiles", to_float32=True),
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
-    dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
+    # dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
     dict(type="PhotoMetricDistortionMultiViewImage"), # todo
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
@@ -23,7 +23,7 @@ test_pipeline = [
     dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
     dict(type="ResizeCropFlipImage"),
     # dict(type="PhotoMetricDistortionMultiViewImage"),
-    dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
+    # dict(type='LoadFeatMaps',data_root=depth_path, key='depth', apply_aug=True), #
     dict(type="NormalizeMultiviewImage", **img_norm_cfg),
     dict(type="DefaultFormatBundle"),
     dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
@@ -51,8 +51,8 @@ train_dataset_config = dict(
     type=dataset_type,
     data_root=data_root,
     # imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
-    imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
-    # imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
+    # imageset=anno_root + "nuscenes_mini_infos_train_sweeps_occ.pkl",
+    imageset=anno_root + "nuscenes_mini_infos_val_sweeps_occ.pkl",
     data_aug_conf=data_aug_conf,
     pipeline=train_pipeline,
     phase='train',

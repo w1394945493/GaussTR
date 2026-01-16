@@ -44,30 +44,7 @@ class OccMetric(BaseMetric):
         self.test_step_outputs = {}
 
     def process(self, data_batch, data_samples):
-        # todo -------------------------------#
-        # todo 占用预测评估
-        preds = data_samples[0]['occ_pred'] # (b,X,Y,Z)
-        labels = torch.cat(
-            [d.gt_pts_seg.semantic_seg for d in data_batch['data_samples']])
-        if self.use_image_mask:
-            mask = torch.stack([
-                torch.from_numpy(d.mask_camera)
-                for d in data_batch['data_samples']
-            ]).to(labels.device, torch.bool)
-        elif self.use_lidar_mask:
-            mask = torch.stack([
-                torch.from_numpy(d.mask_lidar)
-                for d in data_batch['data_samples']
-            ]).to(labels.device, torch.bool)
-        if self.use_image_mask or self.use_lidar_mask:
-            preds = preds[mask]
-            labels = labels[mask]
-
-        preds = preds.flatten().cpu().numpy()
-        labels = labels.flatten().cpu().numpy()
-        hist_ = fast_hist(preds, labels, self.num_classes) # 计算混淆矩阵
-        self.hist += hist_
-
+       
         # todo -------------------------------#
         # todo 视图合成评估
         rgb = rearrange(data_samples[0]['img_pred'],'b v c h w -> (b v) c h w')
@@ -114,33 +91,6 @@ class OccMetric(BaseMetric):
 
         # todo 评估结果记录
         ret_dict = dict()
-
-        # todo -----------------------------#
-        # todo occ占用预测评估结果打印
-        iou = per_class_iou(self.hist)
-        # if ignore_index is in iou, replace it with nan
-        miou = np.nanmean(iou[:-1])  # NOTE: ignore free class
-        label2cat = self.dataset_meta['label2cat']
-
-        header = ['classes']
-        for i in range(len(label2cat) - 1):
-            header.append(label2cat[i])
-        header.extend(['miou', 'iou'])
-        table_columns = [['results']]
-        for i in range(len(label2cat) - 1):
-            ret_dict[label2cat[i]] = float(iou[i])
-            table_columns.append([f'{iou[i]:.4f}'])
-        ret_dict['miou'] = float(miou)
-        ret_dict['iou'] = compute_occ_iou(self.hist, self.num_classes - 1)
-        table_columns.append([f'{miou:.4f}'])
-        table_columns.append([f"{ret_dict['iou']:.4f}"])
-
-        table_data = [header]
-        table_rows = list(zip(*table_columns))
-        table_data += table_rows
-        table = AsciiTable(table_data)
-        table.inner_footing_row_border = True
-        print_log('\n' + table.table, logger=logger)
 
         # todo -----------------------------#
         # todo 视图合成评估结果打印

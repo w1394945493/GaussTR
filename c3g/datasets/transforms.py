@@ -197,13 +197,11 @@ class ImageAug3D(BaseTransform):
 
     def __init__(self,
                  final_dim,
-                 resize_lim,
                  bot_pct_lim=[0.0, 0.0],
                  rot_lim=[0.0, 0.0],
                  rand_flip=False,
                  is_train=False):
         self.final_dim = final_dim
-        self.resize_lim = resize_lim
         self.bot_pct_lim = bot_pct_lim
         self.rand_flip = rand_flip
         self.rot_lim = rot_lim
@@ -218,10 +216,6 @@ class ImageAug3D(BaseTransform):
         newW, newH = resize_dims
 
         if self.is_train:
-            # resize = np.random.uniform(*self.resize_lim) # 在给定范围内随机生成浮动数值
-            # resize_dims = (int(W * resize), int(H * resize))
-            # newW, newH = resize_dims
-
 
             crop_h = int(
                 (1 - np.random.uniform(*self.bot_pct_lim)) * newH) - fH
@@ -232,10 +226,6 @@ class ImageAug3D(BaseTransform):
                 flip = True
             rotate = np.random.uniform(*self.rot_lim)
         else:
-            # resize = np.mean(self.resize_lim)
-            # resize_dims = (int(W * resize), int(H * resize))
-            # newW, newH = resize_dims
-
 
             crop_h = int((1 - np.mean(self.bot_pct_lim)) * newH) - fH
             crop_w = int(max(0, newW - fW) / 2)

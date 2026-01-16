@@ -16,9 +16,21 @@ std  = [127.5, 127.5, 127.5]
 
 
 
-input_size = (112,192)
-resize_lim=[0.1244, 0.12]  #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消了使用)
+input_size = (112,200)
 ori_image_shape = (900,1600)
+
+near = 0.1
+# far = 100.
+far = 1000.
+
+num_gaussians = 2048
+pose_free = True
+    
+d_sh = 1
+use_sh = d_sh is not None
+# renderer_type = "vanilla"
+renderer_type = "gsplat"
+
 
 patch_size = 14
 vggt_path = '/home/lianghao/wangyushen/data/wangyushen/Weights/anysplat/vggt-1b'
@@ -27,19 +39,44 @@ vggt_path = '/home/lianghao/wangyushen/data/wangyushen/Weights/anysplat/vggt-1b'
 train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
-
-
-
-
 model = dict(
     type = 'C3G',
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据预处理，打包为patch
         mean=mean,
         std=std),
+    
     ori_image_shape = ori_image_shape,
     vggt_path = vggt_path,
     patch_size = patch_size,
+    
+    num_gaussians = num_gaussians,
+    pose_free = pose_free,
+    transformer_dim = 2048,
+    
+    gaussian_adapter = dict(
+        type='UnifiedGaussianAdapter' if pose_free else 'GaussianAdapter',
+        d_sh = d_sh, 
+        gaussian_scale_min=0.5,
+        gaussian_scale_max=15.0,
+        clamping=-1,
+        scale_weight=0.001,
+        isotrophic_covariance=False,
+        opacity_min=0.0
+    ),
+        
+    gauss_decoder = dict(
+        type='GaussianDecoder',
+        loss_lpips=dict(
+            type='LossLpips',
+            weight = 0.05,
+        ),
+        near = near,
+        far = far,
+        use_sh = use_sh,
+        renderer_type = renderer_type,
+    ),
+    
 
 )
 
@@ -65,7 +102,6 @@ train_pipeline = [
     dict(
         type='ImageAug3D', # todo 对图像数据进行缩放
         final_dim=input_size,
-        resize_lim=resize_lim,
         # is_train=True # todo 训练时，先只做缩放，其他均不考虑
 
         ),
@@ -104,10 +140,8 @@ test_pipeline = [
         color_type='color',
         num_views=6),
     dict(type='LoadOccFromFile'),
-    # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
     dict(type='ImageAug3D',
          final_dim=input_size,
-         resize_lim=resize_lim,
          ),
     dict(
         type='LoadFeatMaps',

@@ -7,6 +7,11 @@ from einops import einsum, rearrange
 from jaxtyping import Float
 from torch import Tensor, nn
 
+import math
+
+from mmdet3d.registry import MODELS
+
+
 from ....geometry.projection import get_world_rays
 from ....misc.sh_rotation import rotate_sh
 from .gaussians import build_covariance
@@ -25,13 +30,14 @@ class Gaussians:
 
 
 
-
+@MODELS.register_module()
 class GaussianAdapter(nn.Module):
 
     def __init__(self,
+                 d_sh,
                  gaussian_scale_min=0.5,
                  gaussian_scale_max=15.0,
-                 sh_degree=0,
+                 sh_degree=0, 
                  clamping=-1,
                  scale_weight=0.001,
                  isotrophic_covariance=False,
@@ -39,7 +45,10 @@ class GaussianAdapter(nn.Module):
         super().__init__()
         self.gaussian_scale_min = gaussian_scale_min
         self.gaussian_scale_max = gaussian_scale_max
-        self.sh_degree = sh_degree
+        
+        self.d_sh = d_sh
+        self.sh_degree = math.isqrt(self.d_sh) - 1
+ 
         self.clamping = clamping
         self.scale_weight = scale_weight
         self.isotrophic_covariance = isotrophic_covariance
@@ -53,6 +62,7 @@ class GaussianAdapter(nn.Module):
             torch.ones((self.d_sh,), dtype=torch.float32),
             persistent=False,
         )
+        
         for degree in range(1, self.sh_degree + 1):
             self.sh_mask[degree**2 : (degree + 1) ** 2] = 0.1 * 0.25**degree
 
@@ -118,16 +128,11 @@ class GaussianAdapter(nn.Module):
             "... i j, j -> ... i",
         )
         return xy_multipliers.sum(dim=-1)
-
-    @property
-    def d_sh(self) -> int:
-        return (self.sh_degree + 1) ** 2
-
     @property
     def d_in(self) -> int:
-        return 7 + 3 * self.d_sh
+        return 7 + 3 * self.d_sh # todo 高斯特征维度
 
-
+@MODELS.register_module()
 class UnifiedGaussianAdapter(GaussianAdapter):
     def forward(
         self,

@@ -26,9 +26,12 @@ def cyan(text: str) -> str:
 class C3G(BaseModel):
 
     def __init__(self,
+                 gaussian_adapter,
+                 gauss_decoder,
                  vggt_path,
                  ori_image_shape,
                  num_gaussians = 2048,
+                 transformer_dim = 2048,
                  pose_free = True,
                  patch_size = 14,
                  **kwargs):
@@ -44,7 +47,7 @@ class C3G(BaseModel):
         for n, param in self.dpt_head.named_parameters():
             param.requires_grad = False
 
-        transformer_dim = 2048
+        
         self.gaussian_tokens = nn.Parameter(torch.randn(num_gaussians, transformer_dim))
         self.anchor_positions = nn.Parameter(torch.tensor([[0.,0.,1.]]).repeat(num_gaussians,1), requires_grad=False)
 
@@ -58,19 +61,22 @@ class C3G(BaseModel):
         )
 
         self.pose_free = pose_free
-        self.gaussian_adapter = UnifiedGaussianAdapter() if pose_free else GaussianAdapter()
+        
+        self.gaussian_adapter = MODELS.build(gaussian_adapter)
 
-        self.raw_gs_dim = 3 + 1 + self.gaussian_adapter.d_in
+        self.raw_gs_dim = 3 + 1 + self.gaussian_adapter.d_in 
         gaussians_per_token = 1
         self.gaussians_per_token = gaussians_per_token
 
 
         self.gmae_to_gaussians = nn.Linear(transformer_dim, self.raw_gs_dim * gaussians_per_token)
-
+        self.gauss_decoder = MODELS.build(gauss_decoder)
 
         self.patch_size = patch_size
         self.ori_image_shape = ori_image_shape
         self.num_surfaces = 1
+        
+        
         print(cyan(f'successfully init Model!'))
 
 
@@ -159,7 +165,7 @@ class C3G(BaseModel):
         dec_feat = rearrange(dec_feat, "b v n d -> b (v n) d")
         all_decoder_tokens = torch.cat((dec_feat, self.gaussian_tokens.unsqueeze(0).expand(bs, -1, -1),), dim=1)
 
-        decoded_tokens = self.gmae_decoder(all_decoder_tokens, mask=None)
+        decoded_tokens = self.gmae_decoder(all_decoder_tokens, mask=None) # todo 注意力层
         gaussian_params = self.gmae_to_gaussians(decoded_tokens[:, -self.gaussian_tokens.shape[0]:])  # b n d(3+1+d') # todo (b 2048 14)
         gaussian_params = rearrange(gaussian_params, "b n (gpt c) -> b (n gpt) c", gpt=self.gaussians_per_token, c=self.raw_gs_dim)
 
@@ -198,23 +204,16 @@ class C3G(BaseModel):
                 (h, w),
             )
 
-        final_gaussians = Gaussians(
-                    rearrange(
-                        gaussians.means,
-                        "b n srf spp xyz -> b (n srf spp) xyz",
-                    ),
-                    rearrange(
-                        gaussians.covariances,
-                        "b n srf spp i j -> b (n srf spp) i j",
-                    ),
-                    rearrange(
-                        gaussians.harmonics,
-                        "b n srf spp c d_sh -> b (n srf spp) c d_sh",
-                    ),
-                    rearrange(
-                        gaussians.opacities,
-                        "b n srf spp -> b (n srf spp)",
-                    ),
-                    gaussians.features if gaussians.features is not None else None
-                )
-        return
+        final_gaussians = Gaussians(rearrange(gaussians.means,"b n srf spp xyz -> b (n srf spp) xyz",), 
+                                    rearrange(gaussians.covariances,"b n srf spp i j -> b (n srf spp) i j",),
+                                    rearrange(gaussians.scales,"b n srf spp xyz -> b (n srf spp) xyz",),        
+                                    rearrange(gaussians.rotations,"b n srf spp q -> b (n srf spp) q",),              
+                                    rearrange(gaussians.harmonics,"b n srf spp c d_sh -> b (n srf spp) c d_sh",),
+                                    rearrange(gaussians.opacities,"b n srf spp -> b (n srf spp)",),
+                                    gaussians.features if gaussians.features is not None else None)
+        return self.gauss_decoder(
+            gaussians = final_gaussians,
+            inputs = inputs,
+            image_shape=(h, w),
+            mode=mode,
+            **data_samples)

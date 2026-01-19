@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from . import rasterize_gaussians, render_cuda
 from ...loss import CE_ssc_loss, lovasz_softmax
-       
+from ..encoder.common.gaussians import build_covariance       
 @MODELS.register_module()
 class GaussianDecoder(BaseModule):
 
@@ -30,7 +30,9 @@ class GaussianDecoder(BaseModule):
                  use_sh = True,
                  background_color=[0.0, 0.0, 0.0],
                  renderer_type = "vanilla",
-                 lovasz_ignore = 17,
+                 num_class = 18,
+                 with_empty = False,
+                 empty_args=None,
                  manual_class_weight=[
                  1.01552756, 1.06897009, 1.30013094, 1.07253735, 0.94637502, 1.10087012,
                  1.26960524, 1.06258364, 1.189019,   1.06217292, 1.00595144, 0.85706115,
@@ -40,8 +42,8 @@ class GaussianDecoder(BaseModule):
         self.voxelizer = MODELS.build(voxelizer)
         
 
-        # self.loss_lpips = MODELS.build(loss_lpips)
-        # self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg')) # todo mmseg
+
+        
         self.use_sh = use_sh
         self.near = near
         self.far = far
@@ -51,7 +53,17 @@ class GaussianDecoder(BaseModule):
             torch.tensor(background_color, dtype=torch.float32),
             persistent=False,
         )
-        self.lovasz_ignore = lovasz_ignore
+        self.lovasz_ignore = num_class - 1
+        self.num_classes = num_class
+        if with_empty:
+            self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0)
+            self.register_buffer('empty_mean', torch.tensor(empty_args['mean'])[None, None, :]) # (3,) -> (1,1,3)
+            self.register_buffer('empty_scale', torch.tensor(empty_args['scale'])[None, None, :]) # (1, 1, 3)
+            self.register_buffer('empty_rot', torch.tensor([1., 0., 0., 0.])[None, None, :]) # (1 1 4)
+            self.register_buffer('empty_covs', build_covariance(self.empty_scale,self.empty_rot))
+            self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :]) # (1 1 18)
+            self.register_buffer('empty_opa', torch.ones(1)[None,:])  # (1 1)
+        self.with_empty = with_empty
         self.class_weights = torch.tensor(manual_class_weight)
         
         
@@ -63,24 +75,41 @@ class GaussianDecoder(BaseModule):
                 **kwargs):
 
         data_samples = data
-
+        
         means3d = gaussians.means # todo (b n 3)
-        harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
+        # harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
         opacities = gaussians.opacities # todo (b n)
         scales = gaussians.scales
         rotations = gaussians.rotations
         covariances = gaussians.covariances
         features = gaussians.semantics # (b n num_class)
 
+        if self.with_empty:
+            assert features.shape[-1] == self.num_classes - 1
+            bs = means3d.shape[0] # 获取当前 Batch Size
+
+            empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, 1, 3)
+            empty_covs = self.empty_covs.expand(bs, -1, -1, -1) # (B, 1, 3, 3) 如果是矩阵
+            empty_sem = self.empty_sem.clone().expand(bs, -1, -1)       # (B, 1, num_classes)
+            empty_opa = self.empty_opa.expand(bs, -1)       # (B, 1)         
+            
+            features = torch.cat([features, torch.zeros_like(features[..., :1])], dim=-1) 
+            empty_sem[..., self.lovasz_ignore] += self.empty_scalar
+            features = torch.cat([features, empty_sem], dim=1)
+              
+            means3d = torch.cat([means3d, empty_mean], dim=1)
+            covariances = torch.cat([covariances,empty_covs],dim=1)
+            opacities = torch.cat([opacities,empty_opa],dim=1)
+
+        
         # todo 视图渲染
         # colors, rendered_depth = self.render_gaussians(extrinsics, intrinsics, 
         #                                                means3d, harmonics,opacities,scales,rotations,covariances,
         #                                                (h,w),device,)
         
-        # todo 占用预测
+        # todo --------------------------------------#
+        # todo 占用预测：需要逐bs进行
         density, grid_feats = self.voxelizer(means3d, covariances, opacities, features) # (b,200,200,16) (b,200,200,16,18)
-
-        
         occ_mask, occ_gt = data_samples['occ_cam_mask'],data_samples['occ_label'] # (b,200,200,16) (b,200,200,16)
         
         # todo ---------------------------------------#
@@ -103,20 +132,7 @@ class GaussianDecoder(BaseModule):
         # todo 占用预测损失
         semantics = grid_feats[occ_mask].unsqueeze(0).transpose(1,2)
         sampled_label = occ_gt[occ_mask].unsqueeze(0)
-        '''
-        unique_values, counts = torch.unique(sampled_label, return_counts=True)
-
-        # 打印值及其对应的出现次数
-        for val, count in zip(unique_values, counts):
-            print(f"gt值: {val.item()}, 出现次数: {count.item()}")   
         
-        unique_values, counts = torch.unique(semantics.argmax(1), return_counts=True)
-
-        # 打印值及其对应的出现次数
-        for val, count in zip(unique_values, counts):
-            print(f"pred值: {val.item()}, 出现次数: {count.item()}")         
-                 
-        '''
         losses['loss_voxel_ce'] = 10.0 * \
             CE_ssc_loss(semantics,  # (b n_class n)
                         sampled_label,  # (b n)

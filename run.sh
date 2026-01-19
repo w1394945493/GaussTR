@@ -262,10 +262,10 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 # todo ---------------------------------------------------------#
 # todo volsplatv2 使用整个nuscenes数据集(1/10)进行训练
 # todo 单卡训练
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=6
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train7 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5 \
     --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_24.pth
 
 

@@ -90,104 +90,12 @@ class DumpResultHook(Hook):
                 with open(save_path, 'wb') as f:
                     pickle.dump(output, f)  
                 
-                # todo --------------------------------------#
-                # todo 可视化高斯分布
-                # if 'gaussian' in outputs[0] and self.save_gaussian:
-                #     means = outputs[0]['gaussian'].means[i].cpu().numpy()
-                #     scales = outputs[0]['gaussian'].scales[i].cpu().numpy()
-                #     rotations = outputs[0]['gaussian'].rotations[i].cpu().numpy()
-                #     opas = outputs[0]['gaussian'].opacities[i].cpu().numpy()
-                #     sems = outputs[0]['gaussian'].semantics[i].cpu().numpy() # (n,18)
-                    
-                #     save_gaussian(
-                #         self.occ_depth,
-                #         means, scales, rotations, opas, sems,
-                #         f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}",)
-                                
+                if 'gaussian' in outputs[0]:
+                    means = outputs[0]['gaussian'].means[i].cpu().numpy()
+                    save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.npy"
+                    save_path = os.path.join(self.occ_depth, save_name)
+                    np.save(save_path,means)
+            
         return
 
-def save_gaussian(save_dir, means, scales, rotations, opas, sems,
-                  name, scalar=1.5, ignore_opa=False, filter_zsize=False):
-    empty_label = 17
-    sem_cmap = COLORS
-    pred = np.argmax(sems, axis=-1)
-
-    if ignore_opa:
-        opas[:] = 1.
-        mask = (pred != empty_label)
-    else:
-        mask = (pred != empty_label) & (opas > 0.75)
-
-    if filter_zsize:
-        zdist, zbins = np.histogram(means[:, 2], bins=100)
-        zidx = np.argsort(zdist)[::-1]
-        for idx in zidx[:10]:
-            binl = zbins[idx]
-            binr = zbins[idx + 1]
-            zmsk = (means[:, 2] < binl) | (means[:, 2] > binr)
-            mask = mask & zmsk
-
-        z_small_mask = scales[:, 2] > 0.1
-        mask = z_small_mask & mask
-
-    means = means[mask]
-    scales = scales[mask]
-    rotations = rotations[mask]
-    opas = opas[mask]
-    pred = pred[mask]
-
-    # number of ellipsoids
-    ellipNumber = means.shape[0]
-
-    #set colour map so each ellipsoid as a unique colour
-    norm = colors.Normalize(vmin=-1.0, vmax=5.4)
-    cmap = cm.jet
-    m = cm.ScalarMappable(norm=norm, cmap=cmap)
-
-    fig = plt.figure(figsize=(9, 9), dpi=300)
-    ax = fig.add_subplot(111, projection='3d')
-    ax.view_init(elev=46, azim=-180)
-    
-    border = np.array([
-        [-50.0, -50.0, 0.0],
-        [-50.0, 50.0, 0.0],
-        [50.0, -50.0, 0.0],
-        [50.0, 50.0, 0.0],
-    ])
-    ax.plot_surface(border[:, 0:1], border[:, 1:2], border[:, 2:],
-        rstride=1, cstride=1, color=[0, 0, 0, 1], linewidth=0, alpha=0., shade=True)
-
-    for indx in tqdm(range(ellipNumber)):
-
-        center = means[indx]
-        radii = scales[indx] * scalar
-        rot_matrix = rotations[indx]
-        rot_matrix = Quaternion(rot_matrix).rotation_matrix.T # todo 四元数转旋转矩阵
-
-        # calculate cartesian coordinates for the ellipsoid surface
-        u = np.linspace(0.0, 2.0 * np.pi, 10)
-        v = np.linspace(0.0, np.pi, 10)
-        x = radii[0] * np.outer(np.cos(u), np.sin(v))
-        y = radii[1] * np.outer(np.sin(u), np.sin(v))
-        z = radii[2] * np.outer(np.ones_like(u), np.cos(v))
-
-        xyz = np.stack([x, y, z], axis=-1) # phi, theta, 3
-        xyz = rot_matrix[None, None, ...] @ xyz[..., None]
-        xyz = np.squeeze(xyz, axis=-1)
-
-        xyz = xyz + center[None, None, ...]
-
-        ax.plot_surface(
-            xyz[..., 1], -xyz[..., 0], xyz[..., 2],
-            rstride=1, cstride=1, color=sem_cmap[pred[indx]], linewidth=0, alpha=opas[indx], shade=True)
-
-    plt.axis("equal")
-    # plt.gca().set_box_aspect([1, 1, 1])
-    ax.grid(False)
-    ax.set_axis_off()
-
-    filepath = os.path.join(save_dir, f'{name}.png')
-    plt.savefig(filepath)
-
-    plt.cla()
-    plt.clf()    
+  

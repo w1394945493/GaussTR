@@ -8,9 +8,9 @@ import MinkowskiEngine as ME
 
 
 def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v,
-                           normal=False, img_aug_mat=None, # 像素特征转体素特征相关参数
-                        #    embed_points = None, embed_feats = None, # 可学习嵌入 (b,num_embed,xyz) (b,num_embed,dims)
-                           
+                           normal=False, # 是否归一化
+                           img_aug_mat=None, # 图像变换矩阵
+                           vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], # todo surroundocc中感知范围
                            ):
     device = out.device
 
@@ -60,11 +60,23 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     
     # todo 2.体素化：将连续的3D点云转化为结构化的栅格特征
     with torch.no_grad():
-        quantized_coords = torch.round(all_points / voxel_resolution).long() # todo 2.1量化: 通过all_points / voxel_resolution并取整 将3D坐标映射到整数索引的体素网格
-        # Create coordinate matrix: batch index + quantized coordinates # todo 组成坐标矩阵
+        # todo 剔除不在occ感知范围内的点
+        x_min, y_min, z_min, x_max, y_max, z_max = vol_range
+        mask = (all_points[:, 0] >= x_min) & (all_points[:, 0] <= x_max) & \
+                (all_points[:, 1] >= y_min) & (all_points[:, 1] <= y_max) & \
+                (all_points[:, 2] >= z_min) & (all_points[:, 2] <= z_max)    
+                
+        
+        quantized_coords = torch.round(all_points / voxel_resolution).long() # 2.1量化: 通过all_points / voxel_resolution并取整 将3D坐标映射到整数索引的体素网格
+        # Create coordinate matrix: batch index + quantized coordinates 
         # batch_indices = torch.arange(b, device=device).repeat_interleave(v * h * w).unsqueeze(1) # 移到外面计算
-        combined_coords = torch.cat([batch_indices, quantized_coords], dim=1) # todo (bs x y z)
-        # todo unique 2.2唯一化：去重，找出所有被占据的唯一体素坐标，并记录每个体素包含多少个原始点，以及映射关系
+        combined_coords = torch.cat([batch_indices, quantized_coords], dim=1) # todo (n,4): 4维内容：(bs x y z)
+        
+        # todo 剔除不在occ感知空间范围内的点
+        combined_coords = combined_coords[mask]
+        
+        
+        # 2.2唯一化：去重，找出所有被占据的唯一体素坐标，并记录每个体素包含多少个原始点，以及映射关系
         # Get unique voxel IDs and mapping indices
         unique_coords, inverse_indices, counts = torch.unique(
             combined_coords,
@@ -72,6 +84,11 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
             return_inverse=True,
             return_counts=True
         )
+    
+    # todo 剔除不在occ感知范围内的点
+    all_points = all_points[mask]
+    feats_flat = feats_flat[mask]
+        
     # todo 3. 特征聚合：将落在同一个3D体素内的像素点的特征进行聚合
     num_voxels = unique_coords.shape[0]
     # todo 3.1 将落在同一体素内的所有像素特征累加并取平均

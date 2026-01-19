@@ -29,9 +29,6 @@ def cyan(text: str) -> str:
 
 # from mmdet3d.models.data_preprocessors import Det3DDataPreprocessor
 
-
-    
-
 @MODELS.register_module()
 class VolSplat(BaseModel):
 
@@ -112,16 +109,6 @@ class VolSplat(BaseModel):
             _, C, H, W = img_feat.size()
             img_feats_reshaped.append(img_feat.view(B, N, C, H, W))
         return img_feats_reshaped
-
-    def plucker_embedder(
-        self,
-        rays_o,
-        rays_d
-    ):
-        rays_o = rays_o.permute(0, 1, 4, 2, 3)
-        rays_d = rays_d.permute(0, 1, 4, 2, 3)
-        plucker = torch.cat([torch.cross(rays_o, rays_d, dim=2), rays_d], dim=2)
-        return plucker
     
     def forward(self, mode='loss',**data):
         
@@ -131,7 +118,6 @@ class VolSplat(BaseModel):
         bs, n, _, input_h, input_w = inputs.shape # (b,v,3,H,W)
         
         depth = data_samples["depth"]  # (b v h w)
-        depth = torch.clamp(depth,max=51.2)
         
         # todo backbone+FPN特征提取
         multi_img_feats = self.extract_img_feat(img=inputs)
@@ -143,17 +129,18 @@ class VolSplat(BaseModel):
         
         f_h, f_w = img_feats.shape[-2:]
         d_h, d_w = depth.shape[-2:]
-        if (d_w != f_w) or (d_h != f_h):
-            resize = torch.diag(torch.tensor([f_w/input_w, f_h/input_h],
-                                            dtype=img_aug_mat.dtype,device = img_aug_mat.device))
-            mat = torch.eye(4).to(img_aug_mat.device)            
-            mat[:2,:2] = resize
-            mat = repeat(mat,"i j -> () () i j")
-            img_aug_mat = mat @ img_aug_mat
-            depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
         
-        # todo -------------------------------------------------------#
-        # todo 将像素特征转为体素特征
+        
+        # todo resize
+        resize = torch.diag(torch.tensor([f_w/input_w, f_h/input_h],
+                                        dtype=img_aug_mat.dtype,device = img_aug_mat.device))
+        mat = torch.eye(4).to(img_aug_mat.device)            
+        mat[:2,:2] = resize
+        mat = repeat(mat,"i j -> () () i j")
+        img_aug_mat = mat @ img_aug_mat
+        
+        if (d_w != f_w) or (d_h != f_h):
+            depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
             
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
@@ -164,8 +151,6 @@ class VolSplat(BaseModel):
                 b=bs, v=n,
                 normal=False,
                 img_aug_mat=img_aug_mat,
-                
-                
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
         # todo -----------------------------------------------------#
@@ -174,7 +159,7 @@ class VolSplat(BaseModel):
 
         if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
             # Create new feature tensor
-            new_features = sparse_out.F + sparse_input.F # todo 见论文 3(C).1) Feature Refinement 的 公式(8)
+            new_features = sparse_out.F + sparse_input.F # todo 见论文 3(C).1) Feature Refinement 的 公式(8) 残差细化连接
 
             sparse_out_with_residual = ME.SparseTensor(
                 features=new_features,
@@ -184,15 +169,16 @@ class VolSplat(BaseModel):
         else:
             # Handle coordinate mismatch
             print("Warning: Input and output coordinates inconsistent, skipping residual connection")
-            sparse_out_with_residual = sparse_out
+            sparse_out_with_residual = sparse_out # sparse_input.C: (n,4) sparse_input.F: (n,128)   
 
-        
         
         # todo ------------------------------------------------------------------------#
         # todo 高斯参数预测
-        gaussians = self.gaussian_head(sparse_out_with_residual) # todo MLP层网络
+        gaussians = self.gaussian_head(sparse_out_with_residual) 
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
+        # todo ----------------------#
+        # todo  这里进行了逐batch处理
         gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
         batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
 
@@ -210,7 +196,7 @@ class VolSplat(BaseModel):
             opacities = opacities,   # (b 1 n 1 1)
             raw_gaussians = rearrange(raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
             points = batched_points, # (b 1 n 3)
-            voxel_resolution = self.voxel_resolution, # 0.001     
+            voxel_resolution = self.voxel_resolution, # 0.001 体素网格尺寸 
         )
     
         return self.decoder(gaussians,data,mode=mode)

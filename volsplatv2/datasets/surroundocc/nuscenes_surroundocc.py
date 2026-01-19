@@ -59,7 +59,7 @@ class NuScenesSurroundOccDataset(Dataset):
         
         # todo -------------------------------#
         # todo 均匀抽取1/10 训练/评估
-        self.keyframes = self.keyframes[::10]
+        # self.keyframes = self.keyframes[::10]
         
         
         self.data_aug_conf = data_aug_conf
@@ -94,13 +94,12 @@ class NuScenesSurroundOccDataset(Dataset):
         return len(self.keyframes)
 
     def __getitem__(self, index: int) -> dict:
+        
         scene_token, sample_idx = self.keyframes[index] # todo 关键帧数据
         info = deepcopy(self.scene_infos[scene_token][sample_idx]) # todo 以场景为单位的数据
 
         input_dict = self.get_data_info(info)
-        
-        
-                 
+              
         if self.data_aug_conf is not None:
             input_dict["aug_configs"] = self._sample_augmentation()
 

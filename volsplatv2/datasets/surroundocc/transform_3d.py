@@ -106,7 +106,7 @@ class ResizeCropFlipImage(object):
         ida_tran = torch.zeros(2) # todo 平移
         # adjust image
         img = img.resize(resize_dims)
-        img = img.crop(crop) # todo 裁剪窗口左上角(crop_w,crop_h)
+        img = img.crop(crop) 
         if flip:
             img = img.transpose(method=Image.FLIP_LEFT_RIGHT)
         img = img.rotate(rotate)

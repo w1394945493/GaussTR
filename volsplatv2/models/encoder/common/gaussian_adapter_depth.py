@@ -21,7 +21,6 @@ class GaussianAdapter_depth(nn.Module):
                  gaussian_scale_min = 1e-10,
                  gaussian_scale_max = 3.0,
                  sh_degree=2,
-                 num_class = 18,
                  ):
         super().__init__()
         
@@ -44,19 +43,25 @@ class GaussianAdapter_depth(nn.Module):
         else:
             self.d_sh = None
         
-        self.num_class = num_class
     
     def forward(
         self,
         opacities: Tensor,
-        raw_gaussians: Tensor, #[1, 1, N, 37]
+        raw_gaussians: Tensor, #[1, 1, N, C]
         points: Optional[Tensor] = None,
         voxel_resolution: float = 0.01,
         eps: float = 1e-8,
     ) :
-        offset_xyz, scales, rotations, sh, semantics = raw_gaussians.split((3, 3, 4, 3 * self.d_sh 
-                                                                 if self.d_sh is not None else 3, self.num_class), 
-                                                                dim=-1) #[1, 1, N, 1, 1, c]
+        # offset_xyz, scales, rotations, sh, semantics = raw_gaussians.split((3, 3, 4, 3 * self.d_sh 
+        #                                                          if self.d_sh is not None else 3, 
+        #                                                          self.num_class), 
+        #                                                         dim=-1) #[1, 1, N, 1, 1, c]
+        
+        sh_dim = 3 * self.d_sh if self.d_sh is not None else 3
+        fixed_len = 3 + 3 + 4 + sh_dim
+        
+        fixed_part, semantics = raw_gaussians.split([fixed_len, raw_gaussians.shape[-1] - fixed_len], dim=-1)
+        offset_xyz, scales, rotations, sh = fixed_part.split((3, 3, 4, sh_dim), dim=-1)
         # todo --------------------------------------------#
         # todo 尺度
         # scales = torch.clamp(F.softplus(scales - 4.),
@@ -70,27 +75,43 @@ class GaussianAdapter_depth(nn.Module):
         # Normalize the quaternion features to yield a valid quaternion.
         rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps)
         
+        # todo --------------------------------------------#
+        # todo 颜色    
         if self.d_sh:
             sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)    # [1, 1, 256000, 1, 1, 3, 9]
             sh = sh.broadcast_to((*opacities.shape, 3, self.d_sh)) * self.sh_mask
         else:
             sh = torch.sigmoid(sh)
         
+
+        # todo --------------------------------------------#
+        # todo 协方差   
         # Create world-space covariance matrices.
         covariances = build_covariance(scales, rotations)  #[1, 1, 256000, 1, 1, 3, 3]
 
+        # todo -------------------------------------------------#
+        # todo 期望(位置)
         xyz = points
         if xyz.ndim == 2:
             xyz = rearrange(xyz, "n c -> 1 1 n () () c")
         elif xyz.ndim == 4:
             xyz = rearrange(xyz, "b v n c -> b v n () () c")
 
-        # todo -------------------------------------------------#
-        # todo 期望(位置)
         offset_xyz = offset_xyz.sigmoid()
         offset_world = (offset_xyz - 0.5) *voxel_resolution*3  # [1,1,N,1,1, 3] # 高斯点偏移 -0.5~0.5之间；voxel_resolution * 3高斯点可以在以自己为中心，3x3x3体素范围内活动
-        # todo 得到体素点在真实世界中的位置
+        # offset_world = (offset_xyz - 0.5) * voxel_resolution * 5      
         means = xyz + offset_world  # [1,1,N, 1,1,3]
+        '''
+        import numpy as np
+        means_save = rearrange(means.detach(), "b v r srf spp xyz -> b (v r srf spp) xyz")[0]
+        np.save("means3d_224x400_2.npy", means_save.cpu().numpy())
+        
+        '''  
+
+        # todo -------------------------------------------------#
+        # todo 语义特征 
+        # semantics = semantics.softmax(dim=-1)     
+        semantics = F.softplus(semantics)
 
         gaussians = Gaussians(rearrange(means,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]
             rearrange(scales,"b v r srf spp xyz -> b (v r srf spp) xyz"), # [b, 1, 256000, 1, 1, 3] -> [b, 256000, 3]

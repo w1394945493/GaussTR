@@ -249,7 +249,7 @@ class GaussSplatting3D(torch.autograd.Function):
         
         grid_density = torch.zeros(grid_shape, device=device)
         grid_feats = torch.zeros((*grid_shape, n_dims), device=device)     
-        grid_feats[..., -1] = 1e-5  # todo 初始化最后一维为极小数，确保默认预测为背景，避免预测第0类  
+        grid_feats[..., -1] = 1e-5  # todo 初始化最后一维，确保默认预测为背景，避免预测第0类  
         _splat_fwd_kernel_opt[(N,)](
             means3d, inv_covs.reshape(N, 9), opacities, radii, features,
             grid_density, grid_feats,
@@ -330,7 +330,7 @@ class GaussSplatting3DCuda(torch.autograd.Function):
         # grid_feats: [dim_x, dim_y, dim_z, n_dims]
         grid_density = torch.zeros(grid_shape, device=device, dtype=torch.float32)
         grid_feats = torch.zeros((*grid_shape, n_dims), device=device, dtype=torch.float32)
-        grid_feats[..., -1] = 1e-5 
+        grid_feats[..., -1] = 1e-5
         
         # 3. 调用 CUDA 前向传播
         # 注意传参顺序要和 splatting_cuda.cpp 中的 m.def("forward", ...) 一致
@@ -436,12 +436,26 @@ class GaussianVoxelizer(nn.Module):
             covs=covariances,
             opacities=opacities,
             features=features,)
-        if self.filter_gaussians:
-            for i in range(3):
-                mask = (means3d[:, i] >= self.vol_range[i]) & (
-                        means3d[:, i] <= self.vol_range[i + 3])
-            gaussians = apply_to_items(lambda x: x[mask], gaussians)
+        
+        
+        '''
+        import numpy as np
+        # 保存为 numpy
+        np.save("means3d.npy", means3d.detach().cpu().numpy())
+        np.save("vol_range.npy", self.vol_range.detach().cpu().numpy())
+
+        print("保存完毕: means3d.npy, vol_range.npy")
+        '''
+        
+        # if self.filter_gaussians:
+        #     mask = opacities > 1e-6
+        #     for i in range(3):
+        #         mask &= (means3d[:, i] >= self.vol_range[i]) & (
+        #                 means3d[:, i] <= self.vol_range[i + 3])
+        #     gaussians = apply_to_items(lambda x: x[mask], gaussians)
             
+        
+        
         # todo trion 版本
         # density, grid_feats = GaussSplatting3D.apply(
         #     gaussians['means3d'], 

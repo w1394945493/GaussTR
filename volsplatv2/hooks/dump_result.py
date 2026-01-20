@@ -91,10 +91,18 @@ class DumpResultHook(Hook):
                     pickle.dump(output, f)  
                 
                 if 'gaussian' in outputs[0]:
-                    means = outputs[0]['gaussian'].means[i].cpu().numpy()
+                    # 1. 均值 (N, 3)
+                    means = outputs[0]['gaussian']['means'][i].cpu().numpy()
+
+                    # 2. 类别 (N, 1)
+                    semantics = outputs[0]['gaussian']['semantics'][i]
+                    probs = semantics.argmax(-1).cpu().numpy().reshape(-1, 1)
+                    res_data =  np.concatenate([means, probs], axis=1)
+                    
                     save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.npy"
                     save_path = os.path.join(self.occ_depth, save_name)
-                    np.save(save_path,means)
+                    np.save(save_path,res_data)
+                                        
             
         return
 

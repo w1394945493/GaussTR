@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis10'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis13'
 
 custom_hooks = [
     dict(type='DumpResultHook',
@@ -38,17 +38,19 @@ far = 1000.
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
 
-with_empty = False # 是否使用空高斯
+# with_empty = False # 是否使用空高斯
+with_empty = True # 是否使用空高斯
 
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
-out_channels += num_class-1 if with_empty else num_class
+# out_channels += num_class-1 if with_empty else num_class
+out_channels += num_class
 
 #! 高斯尺度相关
 # voxel_resolution = 0.5
 voxel_resolution = 0.1
 gaussian_scale_min = 0.1
-gaussian_scale_max = 0.5 * 2
+gaussian_scale_max = 0.5
 
 use_checkpoint = True
 _dim_ = 128
@@ -118,9 +120,10 @@ model = dict(
         
         with_empty = with_empty,
         empty_args=dict(
-            _delete_=True,
-            mean=[0, 0, -1.0],
-            scale=[100, 100, 8.0],
+            # mean=[0, 0, -1.0],
+            # scale=[100, 100, 8.0],
+            vol_range = vol_range,
+            voxel_size = voxel_size
         ),
         
         near = near,
@@ -279,7 +282,22 @@ test_cfg = dict(type='TestLoop')
 optim_wrapper = dict(
     type='OptimWrapper',   # 避免混合精度(AMP)
     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
-    clip_grad=dict(max_norm=35, norm_type=2))
+    clip_grad=dict(max_norm=35, norm_type=2),
+    
+    # paramwise_cfg=dict(
+    #         custom_keys={
+    #             # 匹配背景透明度，学习率设为基础值的 10 倍 (2e-3)
+    #             'decoder.empty_opa': dict(lr_mult=10.0),
+    #             # 匹配背景强度标量，学习率设为基础值的 5 倍 (1e-3)
+    #             'decoder.empty_scalar': dict(lr_mult=5.0),
+                
+                
+    #             # 如果你有 backbone 且想让它收敛慢一点 (2e-5)
+    #             'backbone': dict(lr_mult=0.1)
+    #         }
+    #     ),    
+    
+    )
 
 param_scheduler = [
     dict(type='LinearLR', start_factor=1e-3, begin=0, end=200, by_epoch=False),

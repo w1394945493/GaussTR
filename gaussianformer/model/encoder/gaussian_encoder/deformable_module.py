@@ -62,8 +62,8 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
 
         gs_scales = anchor[..., None, 3:6] # todo 尺度
         if self.scale_act == "sigmoid":
-            gs_scales = safe_sigmoid(gs_scales)
-        gs_scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * gs_scales
+            gs_scales = safe_sigmoid(gs_scales) # todo 预测值 -> sigmoid归一化 -> 实际尺度
+        gs_scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * gs_scales # todo scale_range: 0.08 ~ 0.64
 
         key_points = scale * gs_scales
         rots = anchor[..., 6:10] # (b,25600,4)
@@ -82,12 +82,12 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
         zzz = xyz[..., 2] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2]
         xyz = torch.stack([xxx, yyy, zzz], dim=-1)
 
-        key_points = key_points + xyz.unsqueeze(2)
+        key_points = key_points + xyz.unsqueeze(2) # todo 在尺度基础上进行微调
         return key_points # todo (b 25600 9 3) 生成一组三维稀疏的高斯关键点
 
 
 @MODELS.register_module()
-class DeformableFeatureAggregation(BaseModule):
+class DeformableFeatureAggregation(BaseModule): # todo 可变形注意力模块
     def __init__(
         self,
         embed_dims: int = 256,
@@ -150,7 +150,7 @@ class DeformableFeatureAggregation(BaseModule):
     ):
         bs, num_anchor = instance_feature.shape[:2]
         # todo ------------------------#
-        # todo 生成一组三维稀疏的高斯关键点
+        # todo 生成一组三维稀疏的高斯关键点: 采样点
         key_points = self.kps_generator(anchor, instance_feature) # todo instance_feature: 查询向量 + anchor: 相应属性(均值,方差和语义): 高斯属性
         temp_key_points_list = (
             feature_queue
@@ -179,10 +179,10 @@ class DeformableFeatureAggregation(BaseModule):
                     .reshape(
                         bs,
                         num_anchor,
-                        self.num_pts,
-                        self.num_cams,
-                        self.num_levels,
-                        self.num_groups,
+                        self.num_pts, # todo 采样点数量 9
+                        self.num_cams, # todo 相机数 6
+                        self.num_levels, # todo 特征层数 4
+                        self.num_groups, # todo 组数 4
                     )
                 ) # todo (b 25600 num_pts num_cams)
                 weight_mask = (

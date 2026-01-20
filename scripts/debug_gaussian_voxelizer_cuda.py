@@ -43,7 +43,50 @@ def splat_into_3d(grid_coords, # 体素网格坐标 (N,3)
     return grid_density, grid_feats
 
 
+import torch
+from einops import rearrange
+from jaxtyping import Float
+from torch import Tensor
 
+
+# https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
+def quaternion_to_matrix(
+    quaternions: Float[Tensor, "*batch 4"],
+    eps: float = 1e-8,
+) -> Float[Tensor, "*batch 3 3"]:
+    # Order changed to match scipy format!
+    i, j, k, r = torch.unbind(quaternions, dim=-1)
+    two_s = 2 / ((quaternions * quaternions).sum(dim=-1) + eps)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return rearrange(o, "... (i j) -> ... i j", i=3, j=3)
+
+
+def build_covariance(
+    scale: Float[Tensor, "*#batch 3"],
+    rotation_xyzw: Float[Tensor, "*#batch 4"],
+) -> Float[Tensor, "*batch 3 3"]:
+    scale = scale.diag_embed()
+    rotation = quaternion_to_matrix(rotation_xyzw) # todo 将四元数转换为(3 3)的旋转矩阵
+    return (
+        rotation
+        @ scale
+        @ rearrange(scale, "... i j -> ... j i") # 转置
+        @ rearrange(rotation, "... i j -> ... j i")
+    )
 
 
 class GaussSplatting3DCuda(torch.autograd.Function):
@@ -93,7 +136,7 @@ class GaussSplatting3DCuda(torch.autograd.Function):
 
         # 4. 归一化特征
         eps = 1e-6
-        grid_feats_norm = grid_feats / grid_density.unsqueeze(-1).clamp(min=eps)
+        grid_feats_norm = grid_feats / grid_density.unsqueeze(-1).clamp(min=eps) # todo 这里还有一步归一化
 
         # 5. 保存给反向传播用的变量
         ctx.save_for_backward(means3d, inv_covs, opacities, radii, features, grid_density, grid_feats_norm) # todo 在backward函数里一定注意不要修改save_tensors这些变量
@@ -165,11 +208,11 @@ if __name__=='__main__':
     device = torch.device("cuda")
     
     N = 1800
-    voxel_size = 0.4   # 网格尺寸
+    voxel_size = 0.5   # 网格尺寸
     n_class = 18
 
-    vol_min = torch.tensor([-40.0, -40.0, -1.0], device=device)
-    vol_max = torch.tensor([40.0, 40.0, 5.4], device=device)
+    vol_min = torch.tensor([-50.0, -50.0, -5.0], device=device)
+    vol_max = torch.tensor([50.0, 50.0, 3.0], device=device)
     vol_range = torch.cat([vol_min, vol_max]) 
 
     # 网格形状 (200, 200, 16)
@@ -184,7 +227,26 @@ if __name__=='__main__':
     opacities = torch.rand((N,), device=device)
     
     features = torch.rand((N, n_class), device=device)
-    
+
+    with_empty = False
+    if with_empty:
+        empty_args=dict(
+            mean=[0, 0, -1.0],
+            scale=[100, 100, 8.0]
+        )
+        empty_mean=torch.tensor(empty_args['mean'],device=device)[None, :]  
+        empty_scale=torch.tensor(empty_args['scale'],device=device)[None, :]    
+        empty_rot = torch.tensor([1., 0., 0., 0.],device=device)[None, :] 
+        empty_covs = build_covariance(empty_scale,empty_rot)
+        empty_sem =  torch.zeros(n_class,device=device)[None,:]
+        empty_opa =  torch.ones(1,device=device)
+        
+        means3d = torch.cat([means3d,empty_mean])       
+        features = torch.cat([features,empty_sem])
+        covs = torch.cat([covs,empty_covs])
+        opacities = torch.cat([opacities,empty_opa])
+
+
     # 1. 生成真值标签：形状为 (200, 200, 16)，值在 [0, 17]
     target_labels = torch.randint(0, n_class, grid_shape, device=device)
     print('target_labels.shape:',target_labels.shape)

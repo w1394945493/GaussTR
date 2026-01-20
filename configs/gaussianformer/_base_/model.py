@@ -84,7 +84,7 @@ model = dict(
                 embed_dims=embed_dims,
                 phi_activation=phi_activation,
                 xyz_coordinate=xyz_coordinate,
-                num_learnable_pts=6,
+                num_learnable_pts=6, # todo 可学习的点
                 fix_scale=[
                     [0, 0, 0],
                     [0.45, 0, 0],
@@ -93,7 +93,7 @@ model = dict(
                     [0, -0.45, 0],
                     [0, 0, 0.45],
                     [0, 0, -0.45],
-                ],
+                ], # todo 这里定义的7组尺度
                 pc_range=pc_range,
                 scale_range=scale_range
             ),

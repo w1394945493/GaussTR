@@ -76,7 +76,7 @@ model = dict(
                 embed_dims=embed_dims,
                 phi_activation=phi_activation,
                 xyz_coordinate=xyz_coordinate,
-                num_learnable_pts=2,
+                num_learnable_pts=2, # todo 2个
                 pc_range=pc_range,
                 scale_range=scale_range
             ),

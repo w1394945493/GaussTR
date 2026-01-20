@@ -56,13 +56,56 @@ class GaussianDecoder(BaseModule):
         self.lovasz_ignore = num_class - 1
         self.num_classes = num_class
         if with_empty:
-            self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0)
-            self.register_buffer('empty_mean', torch.tensor(empty_args['mean'])[None, None, :]) # (3,) -> (1,1,3)
-            self.register_buffer('empty_scale', torch.tensor(empty_args['scale'])[None, None, :]) # (1, 1, 3)
-            self.register_buffer('empty_rot', torch.tensor([1., 0., 0., 0.])[None, None, :]) # (1 1 4)
-            self.register_buffer('empty_covs', build_covariance(self.empty_scale,self.empty_rot))
-            self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :]) # (1 1 18)
-            self.register_buffer('empty_opa', torch.ones(1)[None,:])  # (1 1)
+            
+            # 构造 20x20x8=3200个空高斯用以填充背景
+            voxel_size = empty_args['voxel_size']
+            vol_range = empty_args['vol_range'] # [min_x, min_y, min_z, max_x, max_y, max_z]
+            x_step = voxel_size * 10
+            y_step = voxel_size * 10
+            z_step = voxel_size * 2    
+
+            x_coords = torch.arange(vol_range[0] + x_step/2, vol_range[3], x_step)
+            y_coords = torch.arange(vol_range[1] + y_step/2, vol_range[4], y_step)
+            z_coords = torch.arange(vol_range[2] + z_step/2, vol_range[5], z_step)
+
+            # 
+            grid_x, grid_y, grid_z = torch.meshgrid(x_coords, y_coords, z_coords, indexing='ij')
+            means = torch.stack([grid_x, grid_y, grid_z], dim=-1).reshape(-1, 3)
+            num_empty = means.shape[0]
+
+            # 3. 尺度 3-sigma(radius = 3 * scale)
+            # overlap_factor = 6.0
+            overlap_factor = 4.5
+            s_x = x_step / overlap_factor
+            s_y = y_step / overlap_factor
+            s_z = z_step / overlap_factor
+                
+            scales = torch.tensor([s_x, s_y, s_z]).repeat(num_empty, 1)
+
+            # 4. 旋转 (单位四元数)
+            rots = torch.tensor([1., 0., 0., 0.]).repeat(num_empty, 1)
+
+            # 5. 注册到 buffer, 增加 Batch 维度
+            self.register_buffer('empty_mean', means[None, :])           # (1, N_empty, 3)
+            self.register_buffer('empty_scale', scales[None, :])         # (1, N_empty, 3)
+            self.register_buffer('empty_rot', rots[None, :])             # (1, N_empty, 4)
+            
+            # 计算对应的协方差
+            self.register_buffer('empty_covs', build_covariance(self.empty_scale, self.empty_rot))
+            
+            # 语义特征 (全0) 和 透明度 
+            self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :].repeat(1, num_empty, 1)) 
+            
+            # self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0)
+            self.empty_scalar = nn.Parameter(torch.full((1, num_empty), 10.0, dtype=torch.float)) # (1,N)
+            
+            # self.register_buffer('empty_opa', torch.ones(num_empty)[None, :]) # (1, N_empty)        
+            init_opa_val = 0.1
+            raw_val = torch.log(torch.tensor(init_opa_val / (1 - init_opa_val)))
+            self.empty_opa = nn.Parameter(torch.full((1, num_empty), raw_val, dtype=torch.float))    
+            
+        
+        
         self.with_empty = with_empty
         self.class_weights = torch.tensor(manual_class_weight)
         
@@ -85,30 +128,38 @@ class GaussianDecoder(BaseModule):
         features = gaussians.semantics # (b n num_class)
 
         if self.with_empty:
-            assert features.shape[-1] == self.num_classes - 1
+            
             bs = means3d.shape[0] # 获取当前 Batch Size
 
-            empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, 1, 3)
-            empty_covs = self.empty_covs.expand(bs, -1, -1, -1) # (B, 1, 3, 3) 如果是矩阵
-            empty_sem = self.empty_sem.clone().expand(bs, -1, -1)       # (B, 1, num_classes)
-            empty_opa = self.empty_opa.expand(bs, -1)       # (B, 1)         
+            empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, n_bg, 3)
+            empty_covs = self.empty_covs.expand(bs, -1, -1, -1) # (B, n_bg, 3, 3) 如果是矩阵
+            empty_sem = self.empty_sem.clone().expand(bs, -1, -1)       # (B, n_bg, num_classes)
             
-            features = torch.cat([features, torch.zeros_like(features[..., :1])], dim=-1) 
-            empty_sem[..., self.lovasz_ignore] += self.empty_scalar
+            empty_opa = torch.sigmoid(self.empty_opa).expand(bs, -1)       # (B, 1)         
+            
+            # todo 强行让高斯点只能预测前景类别
+            # assert features.shape[-1] == self.num_classes - 1
+            # features = torch.cat([features, torch.zeros_like(features[..., :1])], dim=-1) 
+            
+            empty_scalar = F.softplus(self.empty_scalar) # 确保背景增益＞0
+            empty_sem[..., self.lovasz_ignore] += empty_scalar.expand(bs, -1)
+            
+            
             features = torch.cat([features, empty_sem], dim=1)
               
             means3d = torch.cat([means3d, empty_mean], dim=1)
             covariances = torch.cat([covariances,empty_covs],dim=1)
+            
             opacities = torch.cat([opacities,empty_opa],dim=1)
 
-        
-        # todo 视图渲染
+
+        # 视图渲染
         # colors, rendered_depth = self.render_gaussians(extrinsics, intrinsics, 
         #                                                means3d, harmonics,opacities,scales,rotations,covariances,
         #                                                (h,w),device,)
         
         # todo --------------------------------------#
-        # todo 占用预测：需要逐bs进行
+        # todo 占用预测
         density, grid_feats = self.voxelizer(means3d, covariances, opacities, features) # (b,200,200,16) (b,200,200,16,18)
         occ_mask, occ_gt = data_samples['occ_cam_mask'],data_samples['occ_label'] # (b,200,200,16) (b,200,200,16)
         
@@ -123,7 +174,10 @@ class GaussianDecoder(BaseModule):
                 'occ_pred': occ_pred, # (b,200,200,16)
                 'occ_mask': occ_mask, # (b,200,200,16)
                 'occ_gt': occ_gt,     # (b,200,200,16)
-                'gaussian': gaussians, # 
+                'gaussian': dict(
+                        means = means3d,
+                        semantics = features,
+                    ) # 
             }]
             return outputs
 

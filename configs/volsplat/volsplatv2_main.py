@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis13'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis15'
 
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir, 
-         save_occ=True,
-         save_gaussian=True,    
-        ),]  #  # 保存结果
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir, 
+#          save_occ=True,
+#          save_gaussian=True,    
+#         ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -49,52 +49,77 @@ out_channels += num_class
 #! 高斯尺度相关
 # voxel_resolution = 0.5
 voxel_resolution = 0.1
+
 gaussian_scale_min = 0.1
 gaussian_scale_max = 0.5
 
 use_checkpoint = True
 _dim_ = 128
+feat_dims = 768
+
+
+#! depth_unet 相关
+num_heads = 8
+num_layers = 1
+num_cams = 6
+patch_sizes=[8, 8, 4, 2]
+
 
 model = dict(
     type = 'VolSplat',
 
     use_checkpoint = use_checkpoint,
+    
+    # refine_voxel_resolution = refine_voxel_resolution,
     voxel_resolution = voxel_resolution,
     
-    backbone=dict(
-        type='mmdet.ResNet',
-        depth=50,
-        in_channels=3,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,
-        norm_cfg=dict(type='BN', requires_grad=False),
-        norm_eval=True,
-        style='pytorch',
-        init_cfg=dict(
-            type='Pretrained',
-            # checkpoint='pretrained/dino_resnet50_pretrain.pth',
-            checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
-            prefix=None)),
+    # backbone=dict(
+    #     type='mmdet.ResNet',
+    #     depth=50,
+    #     in_channels=3,
+    #     num_stages=4,
+    #     out_indices=(0, 1, 2, 3),
+    #     frozen_stages=-1,
+    #     norm_cfg=dict(type='BN', requires_grad=False),
+    #     norm_eval=True,
+    #     style='pytorch',
+    #     init_cfg=dict(
+    #         type='Pretrained',
+    #         # checkpoint='pretrained/dino_resnet50_pretrain.pth',
+    #         checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
+    #         prefix=None)),
 
+    # neck=dict(
+    #     type='mmdet.FPN',
+    #     in_channels=[256, 512, 1024, 2048],
+    #     out_channels=_dim_,
+    #     # start_level=1,
+    #     start_level = 0,
+    #     add_extra_convs='on_input',
+    #     num_outs=4),
+    model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     neck=dict(
-        type='mmdet.FPN',
-        in_channels=[256, 512, 1024, 2048],
+        type='ViTDetFPN',
+        in_channels=feat_dims,
         out_channels=_dim_,
-        # start_level=1,
-        start_level = 0,
-        add_extra_convs='on_input',
-        num_outs=4),
+        norm_cfg=dict(type='LN2d')),    
     
     
     sparse_unet=dict(
-        type='SparseUNetWithAttention',
+        type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互
         in_channels=_dim_, # 128
         out_channels=_dim_, # 128
         num_blocks=3,
         use_attention=False, 
         # use_attention=True, # 是否引入一个注意力层   
         ), 
+    
+    # sparse_unet=dict(
+    #     type='FullResSparseUNet',
+    #     in_channels=_dim_, # 128
+    #     out_channels=_dim_, # 128        
+    #     num_blocks=3,
+    # ),
     
     sparse_gs=dict(
         type='SparseGaussianHead',
@@ -120,8 +145,6 @@ model = dict(
         
         with_empty = with_empty,
         empty_args=dict(
-            # mean=[0, 0, -1.0],
-            # scale=[100, 100, 8.0],
             vol_range = vol_range,
             voxel_size = voxel_size
         ),

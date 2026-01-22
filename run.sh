@@ -109,35 +109,6 @@ PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs
     -G 1 \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/monosplat/ours/test
 
-# todo GaussTRV2
-# todo 训练
-export CUDA_VISIBLE_DEVICES=4
-PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train8 \
-    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train7/epoch_20.pth
-
-# todo train脚本位置：/home/lianghao/anaconda3/envs/wangyushentemp/lib/python3.11/site-packages/mmdet3d/.mim/tools/train.py
-
-
-# todo 评估/可视化
-export CUDA_VISIBLE_DEVICES=6
-PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6/epoch_24.pth \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/test
-
-export CUDA_VISIBLE_DEVICES=6
-PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv3_base.py \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv3/ours/train \
-
-
-export CUDA_VISIBLE_DEVICES=6
-PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv4_base.py \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv4/ours/train
-
 # todo  gaussianformer
 # todo 评估：
 export CUDA_VISIBLE_DEVICES=0
@@ -207,6 +178,8 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/train4 \
     --load-from /home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/r101_dcn_fcos3d_pretrain.pth \
 
+
+
 export CUDA_VISIBLE_DEVICES=2
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformerv2/gaussianformer_base.py \
@@ -262,17 +235,18 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 # todo ---------------------------------------------------------#
 # todo volsplatv2 使用整个nuscenes数据集(1/10)进行训练
 # todo 单卡训练
+export CUDA_LAUNCH_BLOCKING=1
 export CUDA_VISIBLE_DEVICES=6
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5 \
-    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_24.pth
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train6/epoch_2.pth
 
 # todo 评估
 export CUDA_VISIBLE_DEVICES=6
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_24.pth \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train6/epoch_24.pth \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
 
 
@@ -297,3 +271,50 @@ export CUDA_VISIBLE_DEVICES=3
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/c3g_base.py\
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/c3g/train \
+
+# todo ---------------------------------------------------------#
+# todo omniscene
+export CUDA_VISIBLE_DEVICES=5
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/omniscene_base.py \
+    --work-dir "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/omniscene/train"
+
+
+# todo ---------------------------------------------------------#
+# todo GaussTRV2
+# todo 训练
+export CUDA_VISIBLE_DEVICES=4
+PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train8 \
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train7/epoch_20.pth
+
+# todo train脚本位置：/home/lianghao/anaconda3/envs/wangyushentemp/lib/python3.11/site-packages/mmdet3d/.mim/tools/train.py
+
+
+# todo 评估/可视化
+export CUDA_VISIBLE_DEVICES=6
+PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
+    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/train6/epoch_24.pth \
+    -G 1 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/ours/test
+
+
+
+export CUDA_LAUNCH_BLOCKING=1
+export CUDA_VISIBLE_DEVICES=6
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/customs/gausstrv2_base.py \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/train \
+
+# todo 评估
+export CUDA_VISIBLE_DEVICES=6
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/train/epoch_24.pth \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
+
+
+
+
+

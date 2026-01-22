@@ -171,7 +171,8 @@ class VolSplat(BaseModel):
             mat = repeat(mat,"i j -> () () i j")
             img_aug_mat = mat @ img_aug_mat
             depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
-
+        # todo ----------------------------------------#
+        # todo 将2D图像特征投影到3D体素空间
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)                
@@ -183,9 +184,10 @@ class VolSplat(BaseModel):
                 img_aug_mat=img_aug_mat,
                 ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
-        # todo 残差连接
+        # todo -----------------------------------------------------#
+        # todo 3D UNet网络 进行细化
         sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
-
+        # todo 残差连接
         if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
             # Create new feature tensor
             new_features = sparse_out.F + sparse_input.F # todo 见论文 3(C).1) Feature Refinement 的 公式(8)
@@ -203,6 +205,7 @@ class VolSplat(BaseModel):
         gaussians = self.gaussian_head(sparse_out_with_residual)
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
+        # todo 还原bs维度
         gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
         batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
 
@@ -215,7 +218,7 @@ class VolSplat(BaseModel):
         opacities = opacity_raw.sigmoid().unsqueeze(-1)  #[b, 1, N_max, 1, 1]
         raw_gaussians = gaussian_params[..., 1:]    #[b, 1, N_max, 37]
         raw_gaussians = rearrange(raw_gaussians,"... (srf c) -> ... srf c",srf=1,)
-        
+        # todo 预测高斯后处理
         gaussians = self.gaussian_adapter.forward(
             extrinsics = extrinsics, # (b v 4 4)
             intrinsics = intrinsics, # (b v 3 3) #! 这里也用到了相机内参
@@ -230,6 +233,6 @@ class VolSplat(BaseModel):
             voxel_resolution = self.voxel_resolution, # 0.001  
             normal=False,      
         )
-    
+        # todo 占用预测
         return self.decoder(gaussians,data,mode=mode)
 

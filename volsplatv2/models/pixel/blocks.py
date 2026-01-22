@@ -64,17 +64,17 @@ class MVDownsample2D(nn.Module):
             in_channels = in_channels if i == 0 else out_channels
             resnets.append(
                 ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    temb_channels=None,
-                    eps=resnet_eps,
+                    in_channels=in_channels, # todo 输入特征图通道数
+                    out_channels=out_channels, # todo 输出特征图通道数
+                    temb_channels=None, # todo 时间步嵌入维度：扩散模型中，用于注入“
+                    eps=resnet_eps, # todo 归一化层分母中的常数，避免除以0
                     groups=resnet_groups,
-                    dropout=dropout,
+                    dropout=dropout, # todo 丢弃率：训练时随机关闭部分神经元以防止过拟合
                     time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                )
+                    non_linearity=resnet_act_fn, # todo 定义激活函数(如swish或relu)
+                    output_scale_factor=output_scale_factor, # todo 输出缩放因子：残差相加后，对结果乘以该因子
+                    pre_norm=resnet_pre_norm, # todo 决定归一化放在卷积之前(pre-norm)还是之后
+                ) 
             )
             attn_procs = KVCompressCrossViewAttnProcessor(
                 out_channels, sr_ratio=kv_compress_ratio, num_views=num_views)
@@ -91,7 +91,7 @@ class MVDownsample2D(nn.Module):
                     upcast_softmax=True,
                     _from_deprecated_attn_block=True,
                     processor=attn_procs,
-                )
+                ) # todo 注意力模块 
             )
 
         self.attentions = nn.ModuleList(attentions)
@@ -111,16 +111,18 @@ class MVDownsample2D(nn.Module):
     def forward(self, hidden_states: torch.FloatTensor, scale: float = 1.0) -> torch.FloatTensor:
         output_states = ()
         for resnet, attn in zip(self.resnets, self.attentions):
-            hidden_states = resnet(hidden_states, temb=None, scale=scale)
+            hidden_states = resnet(hidden_states, temb=None, scale=scale) # todo (bv c h w)
             cross_attention_kwargs = {"scale": scale}
-            hidden_states = attn(hidden_states, **cross_attention_kwargs)
+            hidden_states = attn(hidden_states, **cross_attention_kwargs) # todo 注意力模块, 跟在resnetblock2D之后，共同组成完整的特征增强层
             output_states = output_states + (hidden_states, )
 
-        if self.downsamplers is not None:
+        if self.downsamplers is not None: # todo 下采样模块
             for downsampler in self.downsamplers:
                 hidden_states = downsampler(hidden_states, scale)
 
         return hidden_states, output_states
+
+
 
 @MODELS.register_module()
 class MVUpsample2D(nn.Module):

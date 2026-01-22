@@ -126,6 +126,7 @@ class SparseConvBlock(nn.Module):
             stride=stride, # todo 步长 stride=2：下采样：将空间网格坐标除以2
             dimension=3 # todo 维度: 声明在3D空间进行操作
         ) # todo 注：不需要手动设置padding: 稀疏卷积中，以“点”为中心
+        
         self.norm = ME.MinkowskiBatchNorm(out_channels)
         self.act = ME.MinkowskiReLU(inplace=True)
         
@@ -150,7 +151,12 @@ class SparseUpConvBlock(nn.Module):
 
 @MODELS.register_module()
 class SparseUNetWithAttention(nn.Module):
-    def __init__(self, in_channels, out_channels, num_blocks=4, use_attention=False):
+    def __init__(self, 
+                 in_channels, 
+                 out_channels, 
+                 num_blocks=4, 
+                 
+                 use_attention=False):
         super().__init__()
         self.encoders = nn.ModuleList()
         self.decoder_blocks = nn.ModuleList() 
@@ -173,7 +179,7 @@ class SparseUNetWithAttention(nn.Module):
         self.bottleneck.append(SparseConvBlock(bottleneck_in, bottleneck_out, kernel_size=3, stride=2))
         
         # todo -------------------------#
-        # todo 是否引入注意力层
+        # todo 是否引入注意力层(未使用)
         if use_attention:
             self.bottleneck.append(AttentionBlock(bottleneck_out))
         

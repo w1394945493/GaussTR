@@ -1,3 +1,3 @@
-from .pixel_gauss import PixelGaussian
+from .depth_unet import DepthUNet
 from .blocks import MVDownsample2D, MVUpsample2D, MVMiddle2D
-__all__ = ['MVDownsample2D', 'MVUpsample2D', 'MVMiddle2D', 'PixelGaussian']
+__all__ = ['MVDownsample2D', 'MVUpsample2D', 'MVMiddle2D', 'DepthUNet']

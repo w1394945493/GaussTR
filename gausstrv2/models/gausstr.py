@@ -19,7 +19,7 @@ def cyan(text: str) -> str:
 
 
 @MODELS.register_module()
-class GaussTRV3(BaseModel):
+class GaussTR(BaseModel):
 
     def __init__(self,
                  neck,
@@ -155,9 +155,9 @@ class GaussTRV3(BaseModel):
             x = x.mT.reshape(bs * n, -1,
                                 concat.shape[-2] // self.patch_size,
                                 concat.shape[-1] // self.patch_size)
-        feats = self.neck(x)
+        feats = self.neck(x) # (36, 64)
 
-        decoder_inputs = self.pre_transformer(feats)
+        decoder_inputs = self.pre_transformer(feats) # todo (bv 256 144, 256) (bv 256 72 128) (bv 256 36 64) (bv 256 18 32) 
         feats = flatten_multi_scale_feats(feats)[0]
         decoder_inputs.update(self.pre_decoder(feats))
 

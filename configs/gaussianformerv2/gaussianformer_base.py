@@ -31,7 +31,8 @@ include_opa = True
 
 semantics = True
 semantic_dim = 17
-with_empty = False
+# with_empty = False
+with_empty = True
 
 # ----------------------------
 # pixel_gauss
@@ -141,6 +142,7 @@ model = dict(
         phi_activation=phi_activation,
         semantics=semantics,
         semantic_dim=semantic_dim if with_empty else semantic_dim + 1,
+        # semantic_dim=semantic_dim + 1, # todo 17 + 1 = 18
         include_opa=include_opa,
     ),
     encoder=dict(
@@ -151,6 +153,8 @@ model = dict(
             include_opa=include_opa,
             semantics=semantics,
             semantic_dim=semantic_dim if with_empty else semantic_dim + 1,
+            # semantic_dim=semantic_dim + 1,
+        
         ),
         norm_layer=dict(type="LN", normalized_shape=embed_dims),
         ffn=dict(
@@ -181,6 +185,7 @@ model = dict(
             phi_activation=phi_activation,
             semantics=semantics,
             semantic_dim=semantic_dim if with_empty else semantic_dim + 1,
+            # semantic_dim=semantic_dim + 1,
             include_opa=include_opa,
             xyz_coordinate=xyz_coordinate,
             semantics_activation='softplus',
@@ -219,8 +224,10 @@ model = dict(
         num_classes=semantic_dim + 1,
         empty_args=dict(
             _delete_=True,
-            mean=[0, 0, -1.0],
-            scale=[100, 100, 8.0],
+            # mean=[0, 0, -1.0],
+            # scale=[100, 100, 8.0],
+            vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0],
+            voxel_size=0.5,          
         ),
         with_empty=with_empty,
         cuda_kwargs=dict(

@@ -190,7 +190,7 @@ def lovasz_softmax_flat(probas, labels, classes='present'):
     for c in class_to_sum: # todo 遍历每个类别C:
         fg = (labels == c).float() # foreground for class c # todo 构造前景掩码
         if (classes is 'present' and fg.sum() == 0):
-            continue # todo 如果该类在GT里没有出现过,跳过
+            continue # todo 如果真值没有该类别,跳过
         if C == 1: # todo 处理二分类的特例
             if len(classes) > 1:
                 raise ValueError('Sigmoid output possible only with 1 class')

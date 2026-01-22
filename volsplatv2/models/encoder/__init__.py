@@ -6,3 +6,5 @@ from .geometry import *
 from .costvolume import *
 
 from .common import *
+
+from .vitdet_fpn import ViTDetFPN

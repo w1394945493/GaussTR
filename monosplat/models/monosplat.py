@@ -367,6 +367,8 @@ class MonoSplat(BaseModel):
 
         features_mv = mv_feature_add_position(features_mv, 2, feature_channels=64)
         features_mv_list = list(torch.unbind(rearrange(features_mv, "(b v) c h w -> b v c h w", b=bs, v=n), dim=1))
+        # todo ------------------------------#
+        # todo 多视图特征注意力交互
         features_mv_list = self.transformer(
             features_mv_list,
             attn_num_splits=2,

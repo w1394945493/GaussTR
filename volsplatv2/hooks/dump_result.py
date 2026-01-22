@@ -74,6 +74,10 @@ class DumpResultHook(Hook):
                         data_batch=None,
                         outputs=None):
         
+        
+        
+        
+        
         bs, n = data_batch['cam2img'].shape[:2]   
 
         if self.save_occ and ('occ_pred' in outputs[0]):

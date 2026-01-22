@@ -1,21 +1,6 @@
-# gaussianformer
-# 数据集：使用surroundocc
-# 评估：
-export CUDA_VISIBLE_DEVICES=0
-PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train/epoch_16.pth \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test
-
-export CUDA_VISIBLE_DEVICES=0
-PYTHONPATH=. mim test mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    -C /home/lianghao/wangyushen/data/wangyushen/Weights/gaussianformer/custom/state_dict.pth \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/test
-
-# 训练：
-export CUDA_VISIBLE_DEVICES=3
-PYTHONPATH=. mim train mmdet3d /home/lianghao/wangyushen/Projects/GaussTR/configs/gaussianformer/gaussianformer_base.py \
-    -G 1 \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformer/train
-
+寻找 段错误（核心已转储）的原因：
+1.开启限制：在终端输入 ulimit -c unlimited（仅对当前终端有效）
+2.export CUDA_LAUNCH_BLOCKING=1
+3.在train.py 或 main.py 最开头添加
+import faulthandler
+faulthandler.enable()

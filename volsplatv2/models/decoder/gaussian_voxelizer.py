@@ -447,12 +447,12 @@ class GaussianVoxelizer(nn.Module):
         print("保存完毕: means3d.npy, vol_range.npy")
         '''
         
-        # if self.filter_gaussians:
-        #     mask = opacities > 1e-6
-        #     for i in range(3):
-        #         mask &= (means3d[:, i] >= self.vol_range[i]) & (
-        #                 means3d[:, i] <= self.vol_range[i + 3])
-        #     gaussians = apply_to_items(lambda x: x[mask], gaussians)
+        if self.filter_gaussians: # todo 剔除一下透明度过低的高斯点(多bs时，可能是为对齐bs的填充高斯)
+            mask = opacities > 1e-6
+            # for i in range(3):
+            #     mask &= (means3d[:, i] >= self.vol_range[i]) & (
+            #             means3d[:, i] <= self.vol_range[i + 3])
+            gaussians = apply_to_items(lambda x: x[mask], gaussians)
             
         
         

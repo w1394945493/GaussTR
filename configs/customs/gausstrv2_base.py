@@ -1,12 +1,12 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 import os
-work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv3/debug' # todo
+work_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gausstrv2/debug' # todo
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 
-custom_imports = dict(imports=['gausstrv3']) # todo
+custom_imports = dict(imports=['gausstrv2']) # todo
 
 mean = [123.675, 116.28, 103.53]
 std  = [58.395, 57.12, 57.375]
@@ -19,26 +19,27 @@ depth_limit = 51.2
 d_sh = None
 use_sh = d_sh is not None
 
-# input_size = (112,192)
-# input_size = (448,800)
 input_size = (504, 896)
-resize_lim=[0.1244, 0.12]  #! 这个是提供了一个随机缩放比例的取值范围！(ImageAug3D中取消使用)
-ori_image_shape = (900,1600)
+ori_image_shape = (900, 1600)
 
+# scale_min = 1
+# scale_max = 16
+# num_queries=300
 
+scale_min = 0.1
+scale_max = 0.5
+num_queries=2400
 
 # train_ann_file='nuscenes_mini_infos_train.pkl'
 train_ann_file='nuscenes_mini_infos_val.pkl'
 val_ann_file='nuscenes_mini_infos_val.pkl'
 
-
-
 embed_dims = 256
 feat_dims = 768
 
 model = dict(
-    type = 'GaussTRV3',
-    num_queries=300,
+    type = 'GaussTR',
+    num_queries=num_queries,
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据预处理，打包为patch
         mean=mean,
@@ -62,11 +63,23 @@ model = dict(
         type='GaussTRHead',
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),
         opacity_head=dict(type='MLP', input_dim=embed_dims, output_dim=1, mode='sigmoid'),
-        scale_head=dict(type='MLP',input_dim=embed_dims,output_dim=3,mode='sigmoid',range=(1, 16)),
+        scale_head=dict(type='MLP',input_dim=embed_dims,output_dim=3,mode='sigmoid',range=(scale_min, scale_max)),
         rot_head=dict(type='MLP', input_dim=embed_dims, output_dim=4,mode = 'normalize'),
         rgb_head=dict(type='MLP', input_dim=embed_dims, output_dim=3, mode='sigmoid'),
-        semantic_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes-1,mode = 'softplus',),
+        semantic_head=dict(type='MLP', input_dim=embed_dims, output_dim=num_classes,mode = 'softplus',),
 
+        near = near,
+        far = far,
+        ori_image_shape = ori_image_shape,
+        depth_limit = depth_limit,
+        use_sh = use_sh,
+        num_classes = 18,
+        
+        with_empty = True,
+        empty_args=dict(
+            vol_range=[-40, -40, -1, 40, 40, 5.4],
+            voxel_size=0.4,
+        ),
         voxelizer=dict(
             type='GaussianVoxelizer',
             vol_range=[-40, -40, -1, 40, 40, 5.4],
@@ -79,11 +92,6 @@ model = dict(
             type='LossLpips',
             weight = 0.05,
             ),
-        near = near,
-        far = far,
-        ori_image_shape = ori_image_shape,
-        depth_limit = depth_limit,
-        use_sh = use_sh,
     ),
     model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     ori_image_shape = ori_image_shape,
@@ -114,7 +122,6 @@ train_pipeline = [
     dict(
         type='ImageAug3D', # todo 对图像数据进行缩放
         final_dim=input_size,
-        resize_lim=resize_lim,
         # is_train=True # todo 训练时，先只做缩放，其他均不考虑
 
         ),
@@ -157,7 +164,6 @@ test_pipeline = [
     # dict(type='ImageAug3D', final_dim=input_size, resize_lim=[0.56, 0.56]),
     dict(type='ImageAug3D',
          final_dim=input_size,
-         resize_lim=resize_lim,
          ),
     dict(
         type='LoadFeatMaps',
@@ -203,7 +209,7 @@ train_dataloader = dict(
     # num_workers=4,
     # num_workers=1,
     # persistent_workers=True,
-    num_workers=0,
+    num_workers=4,
     persistent_workers=False,
     pin_memory=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -214,11 +220,11 @@ train_dataloader = dict(
         pipeline=train_pipeline,
         **shared_dataset_cfg))
 val_dataloader = dict(
-    batch_size=2,
+    batch_size=1,
     # num_workers=4,
     # num_workers=1,
     # persistent_workers=True,
-    num_workers=0,
+    num_workers=4,
     persistent_workers=False,
     pin_memory=True,
     drop_last=False,
@@ -248,8 +254,10 @@ optim_wrapper = dict(
     optimizer=dict(type='AdamW', lr=2e-4, weight_decay=5e-3),
     clip_grad=dict(max_norm=35, norm_type=2))
 
-# train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=24, val_interval=1)
+train_cfg = dict(type='EpochBasedTrainLoop', 
+                 max_epochs=24, 
+                 val_interval=1, # todo 评估间隔
+                 ) 
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
@@ -259,7 +267,17 @@ param_scheduler = [
 ]
 
 default_hooks = dict(
-    logger=dict(type='LoggerHook', interval=20),
-    checkpoint=dict(type='CheckpointHook', interval=1,max_keep_ckpts=1)
+    logger=dict(type='LoggerHook', interval=1), # todo 管理打印间隔
+    checkpoint=dict(type='CheckpointHook', 
+                    interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。
+                    max_keep_ckpts=1,     # 最大保留数量（不包含“最优”权重）。
+                    save_best='miou',     # 开启“最优模型”保存机制。
+                    rule='greater',       # 越大越好
+                    # published_keys=['miou','iou', 'psnr', 'ssim', 'lpips']
+                    )
 )
 
+log_processor = dict(
+    type='LogProcessor', window_size=50, by_epoch=True,
+    mean_pattern=r'.*(time|data_time).*', # todo 对指定指标做滑动平均，其他则直接记录当前步的结果
+    )  

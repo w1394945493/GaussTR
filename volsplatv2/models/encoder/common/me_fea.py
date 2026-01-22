@@ -36,6 +36,8 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
         coordinates = rearrange(coordinates[...,:-1], "b v n xy -> b v n () () xy")
     else:
         coordinates = repeat(coordinates, "h w c -> 1 v (h w) () () c", v=v)
+    
+    
     origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
     world_coords = origins + directions * depths[..., None] # todo 计算得到每个像素的3D坐标
     world_coords = world_coords.squeeze(3).squeeze(3)  # [B, V, N, 3]

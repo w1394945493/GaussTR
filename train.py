@@ -2,6 +2,10 @@
 from setproctitle import setproctitle
 setproctitle("wys")
 
+import faulthandler
+faulthandler.enable()
+
+
 import argparse
 import logging
 import os

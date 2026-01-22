@@ -46,13 +46,8 @@ class NuScenesSurroundOccDataset(Dataset):
                     
                     'cam_positions', # todo 
                     'focal_positions', # todo 
-
                     'img',
 
-                    "cam2img", # todo (wys 12.30) 用于视图合成
-                    "cam2ego",
-                    "cam2lidar",
-                    "img_aug_mat",
 
                     "scene_token",
                     "token",                      
@@ -157,10 +152,6 @@ class NuScenesSurroundOccDataset(Dataset):
                        
             image_paths.append(os.path.join(self.data_path, info['data'][cam_type]['filename']))
             
-            
-
-            
-            
         input_dict =dict(
             scene_token = info['scene_token'],
             token = info['token'],
@@ -174,10 +165,7 @@ class NuScenesSurroundOccDataset(Dataset):
             ego2img=np.asarray(ego2image_rts),
             cam_positions=np.asarray(cam_positions), # todo 
             focal_positions=np.asarray(focal_positions),
-            
-            
-            
-            
+
             ) # todo 
 
         return input_dict

@@ -1,11 +1,14 @@
 import numpy as np
 import torch, torch.nn as nn
+import torch.nn.functional as F
 
 from mmdet3d.registry import MODELS
 from .base_head import BaseTaskHead
 from ..utils.utils import get_rotation_matrix
 
 from .gaussian_voxelizer import GaussSplatting3D,GaussSplatting3DCuda
+from ..encoder.common.gaussians import build_covariance  
+
 
 @MODELS.register_module()
 class GaussianHead(BaseTaskHead):
@@ -44,16 +47,59 @@ class GaussianHead(BaseTaskHead):
         self.voxel_size = voxel_size
         self.grid_shape = grid_shape
 
-        # if with_empty:
-        #     self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0) # todo nn.Parameter: 可训练参数
-        #     self.register_buffer('empty_mean', torch.tensor(empty_args['mean'])[None, None, :]) # todo register_buffer: 跟着模型走，但不训练的状态量
-        #     self.register_buffer('empty_scale', torch.tensor(empty_args['scale'])[None, None, :])
-        #     self.register_buffer('empty_rot', torch.tensor([1., 0., 0., 0.])[None, None, :])
-        #     self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :])
-        #     self.register_buffer('empty_opa', torch.ones(1)[None, None, :])
+        if with_empty:
+            # 构造 20x20x8=3200个空高斯用以填充背景
+            voxel_size = empty_args['voxel_size']
+            vol_range = empty_args['vol_range'] # [min_x, min_y, min_z, max_x, max_y, max_z]
+            x_step = voxel_size * 10
+            y_step = voxel_size * 10
+            z_step = voxel_size * 2    
+
+            x_coords = torch.arange(vol_range[0] + x_step/2, vol_range[3], x_step)
+            y_coords = torch.arange(vol_range[1] + y_step/2, vol_range[4], y_step)
+            z_coords = torch.arange(vol_range[2] + z_step/2, vol_range[5], z_step)
+
+            # 
+            grid_x, grid_y, grid_z = torch.meshgrid(x_coords, y_coords, z_coords, indexing='ij')
+            means = torch.stack([grid_x, grid_y, grid_z], dim=-1).reshape(-1, 3)
+            num_empty = means.shape[0]
+
+            # 3. 尺度 3-sigma(radius = 3 * scale)
+            # overlap_factor = 6.0
+            overlap_factor =6.0
+            s_x = x_step / overlap_factor
+            s_y = y_step / overlap_factor
+            s_z = z_step / overlap_factor
+                
+            scales = torch.tensor([s_x, s_y, s_z]).repeat(num_empty, 1)
+
+            # 4. 旋转 (单位四元数)
+            rots = torch.tensor([1., 0., 0., 0.]).repeat(num_empty, 1)
+
+            # 5. 注册到 buffer, 增加 Batch 维度
+            self.register_buffer('empty_mean', means[None, :])           # (1, N_empty, 3)
+            self.register_buffer('empty_scale', scales[None, :])         # (1, N_empty, 3)
+            self.register_buffer('empty_rot', rots[None, :])             # (1, N_empty, 4)
+            
+            # 计算对应的协方差
+            self.register_buffer('empty_covs', build_covariance(self.empty_scale, self.empty_rot))
+            
+            # 语义特征 (全0) 和 透明度 
+            self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :].repeat(1, num_empty, 1)) 
+            
+            # self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0)
+            # self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float))
+            self.empty_scalar = nn.Parameter(torch.full((1, num_empty), 1.0, dtype=torch.float)) # (1,N)
+            
+            # self.register_buffer('empty_opa', torch.ones(num_empty)[None, :]) # (1, N_empty)        
+            init_opa_val = 0.1
+            raw_val = torch.log(torch.tensor(init_opa_val / (1 - init_opa_val)))
+            self.empty_opa = nn.Parameter(torch.full((1, num_empty), raw_val, dtype=torch.float))    
+            # self.register_buffer('empty_opa', torch.full((1, num_empty), raw_val, dtype=torch.float))
+            
         
         
-        self.with_emtpy = with_empty
+        self.with_empty = with_empty
         self.empty_args = empty_args
         self.dataset_type = dataset_type
         self.empty_label = empty_label
@@ -87,42 +133,43 @@ class GaussianHead(BaseTaskHead):
         return gt_xyz, gt_label
 
     def prepare_gaussian_args(self, gaussians):
-        means = gaussians.means # b, g, 3
+        means3d = gaussians.means # b, g, 3
         scales = gaussians.scales # b, g, 3
         rotations = gaussians.rotations # b, g, 4
-        opacities = gaussians.semantics # b, g, c # todo (b 25600 17)
-        origi_opa = gaussians.opacities # b, g, 1
-        if origi_opa.numel() == 0:
-            origi_opa = torch.ones_like(opacities[..., :1], requires_grad=False)
+        features = gaussians.semantics # b, g, c # todo (b 25600 17)
+        opacities = gaussians.opacities.squeeze(-1) # b, g
         
-        # if self.with_emtpy: # todo True
-        #     assert opacities.shape[-1] == self.num_classes - 1 # todo self.num_classes: 18
-        #     if 'kitti' in self.dataset_type:
-        #         opacities = torch.cat([torch.zeros_like(opacities[..., :1]), opacities], dim=-1)
-        #     else: # todo 拼接了一个全0列
-        #         opacities = torch.cat([opacities, torch.zeros_like(opacities[..., :1])], dim=-1) # todo cat -> (1 25600 18)
-        #     means = torch.cat([means, self.empty_mean], dim=1) # todo self.empty_mean: (1 1 3) 内容是(0.,0.,-1)
-        #     scales = torch.cat([scales, self.empty_scale], dim=1) # todo self.empty_scale: (1 1 3) 内容是(100 100 8)
-        #     rotations = torch.cat([rotations, self.empty_rot], dim=1) # todo self.empty_rot: (1 1 4) 内容是(1 0 0 0)
-        #     empty_sem = self.empty_sem.clone() # (1 1 18) # todo self.empty_sem: (1 1 18) 内容全为0
-        #     empty_sem[..., self.empty_label] += self.empty_scalar # todo self.empty_scaler: 10.2920 self.empty_label: 17
-        #     opacities = torch.cat([opacities, empty_sem], dim=1) # todo
-        #     origi_opa = torch.cat([origi_opa, self.empty_opa], dim=1) # todo self.empty_opa: (1 1 1) 内容为1
-
-
-
-        bs, g, _ = means.shape
-        S = torch.zeros(bs, g, 3, 3, dtype=means.dtype, device=means.device)
+        bs, g, _ = means3d.shape
+        S = torch.zeros(bs, g, 3, 3, dtype=means3d.dtype, device=means3d.device)
         S[..., 0, 0] = scales[..., 0]
         S[..., 1, 1] = scales[..., 1]
         S[..., 2, 2] = scales[..., 2]
         R = get_rotation_matrix(rotations) # b, g, 3, 3
         M = torch.matmul(S, R)
-        covs = torch.matmul(M.transpose(-1, -2), M)
-        return means, origi_opa, opacities, scales, covs
+        covariances = torch.matmul(M.transpose(-1, -2), M)        
+        
+        if self.with_empty:
+            empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, n_bg, 3)
+            empty_covs = self.empty_covs.expand(bs, -1, -1, -1) # (B, n_bg, 3, 3) 如果是矩阵
+            empty_sem = self.empty_sem.clone().expand(bs, -1, -1)       # (B, n_bg, num_classes)
+            
+            empty_opa = torch.sigmoid(self.empty_opa).expand(bs, -1)       # (B, 1)         
+            
+            empty_scalar = F.softplus(self.empty_scalar) # 确保背景增益＞0
+            empty_sem[..., -1] += empty_scalar.expand(bs, -1)
+            
+            assert features.shape[-1] == self.num_classes - 1
+            features = torch.cat([features, torch.zeros_like(features[..., :1])], dim=-1)
+            
+            features = torch.cat([features, empty_sem], dim=1)
+              
+            means3d = torch.cat([means3d, empty_mean], dim=1)
+            covariances = torch.cat([covariances,empty_covs],dim=1)
+            
+            opacities = torch.cat([opacities,empty_opa],dim=1)
+
+        return means3d, opacities, features,  covariances
     
-        # CovInv =covs.cpu().inverse().cuda() # b, g, 3, 3 # todo g = 25600 + 1 = 25601
-        # return means, origi_opa, opacities, scales, CovInv
 
     def forward(
         self,
@@ -154,9 +201,10 @@ class GaussianHead(BaseTaskHead):
         occ_label = metas['occ_label'].to(self.zero_tensor.device)
         occ_cam_mask = metas['occ_cam_mask'].to(self.zero_tensor.device)
         sampled_xyz, sampled_label = self._sampling(occ_xyz, occ_label, None)
+        
         for idx in apply_loss_layers:
             gaussians = representation[idx]['gaussian']
-            means3d, opacities, features, scales, covs = self.prepare_gaussian_args(gaussians)
+            means3d, opacities, features, covs = self.prepare_gaussian_args(gaussians)
             
             means3d = means3d.squeeze(0)
             opacities = opacities.squeeze(0)

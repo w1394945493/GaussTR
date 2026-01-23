@@ -59,6 +59,8 @@ model = dict(
             cross_attn_cfg=dict(embed_dims=embed_dims, num_levels=4),
             ffn_cfg=dict(embed_dims=embed_dims, feedforward_channels=2048)),
         post_norm_cfg=None),
+    
+    
     gauss_head=dict(
         type='GaussTRHead',
         regress_head=dict(type='MLP', input_dim=embed_dims, output_dim=3),

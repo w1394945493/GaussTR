@@ -4,3 +4,7 @@
 3.在train.py 或 main.py 最开头添加
 import faulthandler
 faulthandler.enable()
+
+报错：
+ERROR: Unexpected bus error encountered in worker. This might be caused by insufficient shared memory (shm).
+ERROR: Unexpected bus error encountered in worker. This might be caused by insufficient shared memory (shm).

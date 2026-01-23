@@ -96,10 +96,10 @@ class DumpResultHook(Hook):
                 
                 if 'gaussian' in outputs[0]:
                     # 1. 均值 (N, 3)
-                    means = outputs[0]['gaussian']['means'][i].cpu().numpy()
+                    means = outputs[0]['gaussian'].means[i].cpu().numpy()
 
                     # 2. 类别 (N, 1)
-                    semantics = outputs[0]['gaussian']['semantics'][i]
+                    semantics = outputs[0]['gaussian'].semantics[i]
                     probs = semantics.argmax(-1).cpu().numpy().reshape(-1, 1)
                     res_data =  np.concatenate([means, probs], axis=1)
                     

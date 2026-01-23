@@ -166,10 +166,7 @@ class GaussianDecoder(BaseModule):
                 'occ_pred': occ_pred, # (b,200,200,16)
                 'occ_mask': occ_mask, # (b,200,200,16)
                 'occ_gt': occ_gt,     # (b,200,200,16)
-                'gaussian': dict(
-                        means = means3d,
-                        semantics = features,
-                    ) # 
+                'gaussian': gaussians,
             }]
             return outputs
 

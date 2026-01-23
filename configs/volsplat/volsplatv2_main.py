@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis15'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis16'
 
-# custom_hooks = [
-#     dict(type='DumpResultHook',
-#          save_dir = save_dir, 
-#          save_occ=True,
-#          save_gaussian=True,    
-#         ),]  #  # 保存结果
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir, 
+         save_occ=True,
+         save_gaussian=True,    
+        ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -97,6 +97,7 @@ model = dict(
     #     start_level = 0,
     #     add_extra_convs='on_input',
     #     num_outs=4),
+    num_queries=2400,
     model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     neck=dict(
         type='ViTDetFPN',
@@ -104,6 +105,24 @@ model = dict(
         out_channels=_dim_,
         norm_cfg=dict(type='LN2d')),    
     
+    
+    transformer_decoder=dict(
+        type='TransformerDecoder',
+        num_layers=3,
+        return_intermediate=True,
+        layer_cfg=dict(
+            self_attn_cfg=dict(
+                embed_dims=_dim_, num_heads=8, dropout=0.0),
+            cross_attn_cfg=dict(embed_dims=_dim_, num_levels=4),
+            ffn_cfg=dict(embed_dims=_dim_, feedforward_channels=2048)),
+        post_norm_cfg=None),    
+    
+    regress_head=dict(type='MLP', input_dim=_dim_, output_dim=3),
+    gauss_head=dict(type='MLP', input_dim=_dim_, output_dim=out_channels-3),
+    foreground_head=dict(
+        type='SparseGaussianHead',
+        in_channels=_dim_, 
+        out_channels=num_class),     
     
     sparse_unet=dict(
         type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互
@@ -126,6 +145,7 @@ model = dict(
         in_channels=_dim_, 
         out_channels=out_channels),       
     
+    
     gaussian_adapter=dict(
         type='GaussianAdapter_depth',
         gaussian_scale_min = gaussian_scale_min,
@@ -133,6 +153,7 @@ model = dict(
         
         sh_degree=sh_degree,
     ),
+    
     decoder = dict(
         type='GaussianDecoder',
         voxelizer = dict(

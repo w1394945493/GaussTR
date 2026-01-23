@@ -81,7 +81,7 @@ def cam2world(points, cam2img, cam2ego, img_aug_mat=None): # points: (b,v,n,3) i
         combine = cam2ego[..., :3, :3] @ torch.inverse(cam2img) # 像素 -> 相机 -> 自车
         points = points.float()
         points = torch.cat(
-            [points[..., :2] * points[..., 2:3], points[..., 2:3]], dim=-1) # 去除相机内参的像素缩放影响
+            [points[..., :2] * points[..., 2:3], points[..., 2:3]], dim=-1) # 像素坐标 * 深度 
         points = combine.unsqueeze(2) @ points.unsqueeze(-1)
     points = points.squeeze(-1) + cam2ego[..., None, :3, 3]
     return points

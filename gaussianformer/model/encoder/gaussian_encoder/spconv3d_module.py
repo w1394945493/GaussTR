@@ -6,7 +6,7 @@ from functools import partial
 from .utils import spherical2cartesian, cartesian
 
 # from spconv.pytorch import SparseConv3d #! 避免与此重复
-import mmdet3d.models.layers.spconv.overwrite_spconv.write_spconv2 # todo 这里也对SparseConv3d进行了注册
+# import mmdet3d.models.layers.spconv.overwrite_spconv.write_spconv2 # todo 这里也对SparseConv3d进行了注册
 
 # @MODELS.register_module(name='SparseConv3D')
 @MODELS.register_module(name='CustomSparseConv3D')
@@ -22,7 +22,6 @@ class SparseConv3D(BaseModule):
         kernel_size=5,
         use_multi_layer=False,
         init_cfg=None,
-        **kwargs,
     ):
         super().__init__(init_cfg)
 

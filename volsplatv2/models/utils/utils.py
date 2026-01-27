@@ -1,5 +1,5 @@
 from functools import reduce
-
+import torch.nn.functional as F
 import numpy as np
 import torch
 from pyquaternion import Quaternion
@@ -39,7 +39,15 @@ def flatten_multi_scale_feats(feats):
         torch.tensor(feat.shape[2:], device=feat_flatten.device)
         for feat in feats
     ])
-    return feat_flatten, shapes
+    
+    num_points_per_level = shapes.prod(dim=1)
+    
+    scale_start_index = torch.cat([
+        num_points_per_level.new_zeros(1), 
+        num_points_per_level.cumsum(0)[:-1]
+    ])
+    
+    return feat_flatten, shapes, scale_start_index
 
 
 def get_level_start_index(shapes):
@@ -125,6 +133,57 @@ def quat_to_rotmat(quats):
     R[..., 2, 1] = 2 * (y * z + r * x)
     R[..., 2, 2] = 1 - 2 * (x * x + y * y)
     return R
+
+def get_rotation_matrix(tensor):
+    assert tensor.shape[-1] == 4
+
+    tensor = F.normalize(tensor, dim=-1)
+    mat1 = torch.zeros(*tensor.shape[:-1], 4, 4, dtype=tensor.dtype, device=tensor.device)
+    mat1[..., 0, 0] = tensor[..., 0]
+    mat1[..., 0, 1] = - tensor[..., 1]
+    mat1[..., 0, 2] = - tensor[..., 2]
+    mat1[..., 0, 3] = - tensor[..., 3]
+
+    mat1[..., 1, 0] = tensor[..., 1]
+    mat1[..., 1, 1] = tensor[..., 0]
+    mat1[..., 1, 2] = - tensor[..., 3]
+    mat1[..., 1, 3] = tensor[..., 2]
+
+    mat1[..., 2, 0] = tensor[..., 2]
+    mat1[..., 2, 1] = tensor[..., 3]
+    mat1[..., 2, 2] = tensor[..., 0]
+    mat1[..., 2, 3] = - tensor[..., 1]
+
+    mat1[..., 3, 0] = tensor[..., 3]
+    mat1[..., 3, 1] = - tensor[..., 2]
+    mat1[..., 3, 2] = tensor[..., 1]
+    mat1[..., 3, 3] = tensor[..., 0]
+
+    mat2 = torch.zeros(*tensor.shape[:-1], 4, 4, dtype=tensor.dtype, device=tensor.device)
+    mat2[..., 0, 0] = tensor[..., 0]
+    mat2[..., 0, 1] = - tensor[..., 1]
+    mat2[..., 0, 2] = - tensor[..., 2]
+    mat2[..., 0, 3] = - tensor[..., 3]
+
+    mat2[..., 1, 0] = tensor[..., 1]
+    mat2[..., 1, 1] = tensor[..., 0]
+    mat2[..., 1, 2] = tensor[..., 3]
+    mat2[..., 1, 3] = - tensor[..., 2]
+
+    mat2[..., 2, 0] = tensor[..., 2]
+    mat2[..., 2, 1] = - tensor[..., 3]
+    mat2[..., 2, 2] = tensor[..., 0]
+    mat2[..., 2, 3] = tensor[..., 1]
+
+    mat2[..., 3, 0] = tensor[..., 3]
+    mat2[..., 3, 1] = tensor[..., 2]
+    mat2[..., 3, 2] = - tensor[..., 1]
+    mat2[..., 3, 3] = tensor[..., 0]
+
+    mat2 = torch.conj(mat2).transpose(-1, -2)
+
+    mat = torch.matmul(mat1, mat2)
+    return mat[..., 1:, 1:]
 
 
 def get_covariance(s, r):

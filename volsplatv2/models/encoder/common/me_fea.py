@@ -22,6 +22,8 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     depths = rearrange(depth, "b v h w -> b v (h w) () ()")
 
     coordinates = sample_image_grid((h, w), device,normal=normal)[0]
+    
+    
     if img_aug_mat is not None:
         coordinates = repeat(coordinates, "h w c -> 1 v (h w) c", v=v)
         # 齐次化 (b, v, n, 3)

@@ -102,10 +102,10 @@ class GaussianOccEncoder(BaseEncoder):
             elif op == "deformable":
                 # todo 图像交叉注意力模块：用于聚合视觉信息
                 instance_feature = self.layers[i](
-                    instance_feature,
-                    anchor, # todo 初始的28维的高斯属性
-                    anchor_embed, # todo 编码后的锚框: 128维
-                    feature_maps, # todo 多尺度特征图
+                    instance_feature, # todo (b 25600 18)
+                    anchor, # todo 初始的28维的高斯属性 (b 25600 28)
+                    anchor_embed, # todo 编码后的锚框: 128维 (1 25600 128)
+                    feature_maps, # todo 多尺度特征图(4层) # (1 6,128 112 200) 56x100 28x50 14x25
                     metas, # todo metas: 元数据：
                 )
             # todo --------------------------------

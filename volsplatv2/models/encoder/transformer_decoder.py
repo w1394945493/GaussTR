@@ -152,15 +152,25 @@ class TransformerDecoder(DetrTransformerDecoder):
         """
         intermediate = []
         intermediate_reference_points = []
+        
+        # todo -----------------------------------------------------#
+        # todo 3. 把3维参考点变换回2维图像坐标下
+        
+        
+        # todo 4. 重新计算key_padding_mask
+        
+        # todo 5. 注意力解码
+        
         for lid, layer in enumerate(self.layers): # todo 3层解码层
+            
+            # todo 采样点
             if reference_points.shape[-1] == 4:
-                reference_points_input = \
-                    reference_points[:, :, None] * torch.cat([
+                reference_points_input = reference_points[:, :, None] * torch.cat([
                         valid_ratios, valid_ratios], -1)[:, None]
             else:
                 assert reference_points.shape[-1] == 2
-                reference_points_input = \
-                    reference_points[:, :, None] * valid_ratios[:, None] # todo 每个查询4个参考点
+                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None] # todo 一个尺度特征图 对应一个采样点
+            
             
             
             # todo 把坐标转换成Transformer可以用的位置编码，
@@ -181,15 +191,26 @@ class TransformerDecoder(DetrTransformerDecoder):
                 level_start_index=level_start_index,
                 valid_ratios=valid_ratios,
                 reference_points=reference_points_input,
-                **kwargs) # todo 解码层：查询特征和特征图进行注意力交互
+                **kwargs) 
+            
+            
+            
+            
             # todo ---------------------------------#
             # todo 回归分支：更新参考点
-            
-            
             if reg_branches is not None:
                 tmp_reg_preds = reg_branches[lid](query)[..., :2] # reg_branchs: 3维预测结果
+                
+                '''
+                last_layer = reg_branches[lid].layers[1] # mlp: 2层mlp
+
+                print(f"--- Layer {lid} Weights ---")
+                print(last_layer.weight)
+                print(f"--- Layer {lid} Bias ---")
+                print(last_layer.bias)
+                '''
                 new_reference_points = tmp_reg_preds + inverse_sigmoid(
-                    reference_points) # todo 参考点在0-1有节空间，网络预测结果是无界的偏移量，先将参考点inverse_sigmoid, 再和预测量相加
+                    reference_points) # todo 参考点在0-1有界空间，网络预测结果是无界的偏移量，先将参考点inverse_sigmoid, 再和预测量相加
                 new_reference_points = new_reference_points.sigmoid() # todo 最后在sigmoid回0-1区间
                 reference_points = new_reference_points.detach() # todo detach() 不让梯度回传到参考点本身
 
@@ -218,11 +239,11 @@ class TransformerDecoderLayer(DetrTransformerDecoderLayer):
         self.norms = nn.ModuleList(norms_list)
 
     def forward(self,
-                query,
-                key=None,
-                value=None,
-                query_pos=None,
-                key_pos=None,
+                query, # todo query: 目标查询(b n 128)
+                key=None, # todo 不传key时，把value作为key
+                value=None, # todo 图像的encoder输出特征图
+                query_pos=None, # todo 由坐标生成的嵌入
+                key_pos=None,   # todo 
                 self_attn_mask=None,
                 cross_attn_mask=None,
                 key_padding_mask=None,
@@ -266,9 +287,15 @@ class TransformerDecoderLayer(DetrTransformerDecoderLayer):
             attn_mask=cross_attn_mask,
             key_padding_mask=key_padding_mask,
             **kwargs)
+        
+        
+        
+        
+        
         query = self.norms[0](query)
 
-        
+        # ?------------------------------#
+        # ??? 自注意力 计算量问题，可能无法做自注意力
         query = self.self_attn(
             query=query,
             key=query,

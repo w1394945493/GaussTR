@@ -42,48 +42,51 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
 
     def init_weight(self):
         if self.num_learnable_pts > 0:
-            xavier_init(self.learnable_fc, distribution="uniform", bias=0.0)
-
+            xavier_init(self.learnable_fc, distribution="uniform", bias=0.0) # todo 将相关全连接层进行参数初始化
+    
     def forward(
         self,
         anchor,
-        instance_feature=None,
-    ):
-        bs, num_anchor = anchor.shape[:2] # todo (b,M,28)
-        fix_scale = anchor.new_tensor(self.fix_scale) # todo self.fix_scale: (7,3)
-        scale = fix_scale[None, None].tile([bs, num_anchor, 1, 1])
+        instance_feature=None, # todo (1 25600 128) 值全为0
+    ): 
+        bs, num_anchor = anchor.shape[:2] # todo (1 25600 28)
+        
+        #? 据预测的anchor，通过旋转、平移和缩放，计算出一组相对于中心点的关键点
+        #? 1.缩放基础构建：由两部分组成：固定比例和可学习偏移
+        fix_scale = anchor.new_tensor(self.fix_scale) # todo  self.fix_scale: (7 3) fix_scale: (7 3)
+        scale = fix_scale[None, None].tile([bs, num_anchor, 1, 1]) # todo scale: (1 25600 7 3) .tile(): 按倍数铺平张量
         if self.num_learnable_pts > 0 and instance_feature is not None: # todo num_learnable_pts: 2
             learnable_scale = (
                 safe_sigmoid(self.learnable_fc(instance_feature)
                 .reshape(bs, num_anchor, self.num_learnable_pts, 3))
-                - 0.5
-            )
-            scale = torch.cat([scale, learnable_scale * self.learnable_fixed_scale], dim=-2)
+                - 0.5 
+            ) # todo (1 25600 2 3)  -0.5：让偏移量分布在[-0.5,0.5]之间
+            scale = torch.cat([scale, learnable_scale * self.learnable_fixed_scale], dim=-2) # todo (1 25600 9 3)
 
-        gs_scales = anchor[..., None, 3:6] # todo 尺度
+        gs_scales = anchor[..., None, 3:6] # todo (1 25600 1 3)
         if self.scale_act == "sigmoid":
-            gs_scales = safe_sigmoid(gs_scales) # todo 预测值 -> sigmoid归一化 -> 实际尺度
+            gs_scales = safe_sigmoid(gs_scales) #  todo torch.clamp(tensor, -9.21, 9.21) + torch.sigmoid
         gs_scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * gs_scales # todo scale_range: 0.08 ~ 0.64
 
-        key_points = scale * gs_scales
-        rots = anchor[..., 6:10] # (b,25600,4)
-        rotation_mat = get_rotation_matrix(rots).transpose(-1, -2) # todo 根据四元数计算旋转矩阵
+        key_points = scale * gs_scales # todo (1 25600 9 3)
+        rots = anchor[..., 6:10] # todo (b,25600,4)
+        rotation_mat = get_rotation_matrix(rots).transpose(-1, -2) # todo (1 25600 3 3)
 
         key_points = torch.matmul(
-            rotation_mat[:, :, None], key_points[..., None] # (b 25600 1 3 3) x (b 25600 9 3 1) 旋转每个关键点
-        ).squeeze(-1)
+            rotation_mat[:, :, None], key_points[..., None] 
+        ).squeeze(-1) # todo (1 25600 9 3)
 
-        xyz = anchor[..., :3]
+        xyz = anchor[..., :3] # todo (1 25600 3)
         if self.xyz_act == 'sigmoid':
-            xyz = safe_sigmoid(xyz)
+            xyz = safe_sigmoid(xyz) # todo (1 25600 3)
 
-        xxx = xyz[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0]
+        xxx = xyz[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0] # todo self.pc_range: [-50, -50, -5, 50, 50, 3]
         yyy = xyz[..., 1] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1]
         zzz = xyz[..., 2] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2]
         xyz = torch.stack([xxx, yyy, zzz], dim=-1)
 
-        key_points = key_points + xyz.unsqueeze(2) # todo 在尺度基础上进行微调
-        return key_points # todo (b 25600 9 3) 生成一组三维稀疏的高斯关键点
+        key_points = key_points + xyz.unsqueeze(2) 
+        return key_points # todo (1 25600 9 3)
 
 
 @MODELS.register_module()
@@ -151,7 +154,7 @@ class DeformableFeatureAggregation(BaseModule): # todo 可变形注意力模块
         bs, num_anchor = instance_feature.shape[:2]
         # todo ------------------------#
         # todo 生成一组三维稀疏的高斯关键点: 采样点
-        key_points = self.kps_generator(anchor, instance_feature) # todo instance_feature: 查询向量 + anchor: 相应属性(均值,方差和语义): 高斯属性
+        key_points = self.kps_generator(anchor, instance_feature) # todo anchor: (1 25600 28) instance_feature: (1 25600 128)
         temp_key_points_list = (
             feature_queue
         ) = meta_queue = temp_anchor_embeds = []

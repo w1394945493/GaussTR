@@ -246,8 +246,8 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 export CUDA_VISIBLE_DEVICES=6
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_5.pth \
     --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5/epoch_4.pth \
 
 
 # todo 多卡训练

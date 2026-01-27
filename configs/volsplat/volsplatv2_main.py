@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis16'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis22'
 
 custom_hooks = [
     dict(type='DumpResultHook',
@@ -97,7 +97,7 @@ model = dict(
     #     start_level = 0,
     #     add_extra_convs='on_input',
     #     num_outs=4),
-    num_queries=2400,
+    num_queries=600,
     model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     neck=dict(
         type='ViTDetFPN',
@@ -117,12 +117,80 @@ model = dict(
             ffn_cfg=dict(embed_dims=_dim_, feedforward_channels=2048)),
         post_norm_cfg=None),    
     
-    regress_head=dict(type='MLP', input_dim=_dim_, output_dim=3),
-    gauss_head=dict(type='MLP', input_dim=_dim_, output_dim=out_channels-3),
+    # foreground_head=dict(
+    #     type='MLP',
+    #     input_dim=_dim_, 
+    #     output_dim=num_class),     
+
     foreground_head=dict(
         type='SparseGaussianHead',
         in_channels=_dim_, 
-        out_channels=num_class),     
+        out_channels=out_channels),     
+    
+
+    
+    encoder = dict(
+        type = 'GaussianOccEncoder',
+        num_decoder=4,
+        anchor_encoder=dict(
+            type='MLP',
+            input_dim=out_channels, 
+            output_dim=_dim_),      
+        norm_layer=dict(type="LN", normalized_shape=_dim_),
+        ffn=dict(
+            type="AsymmetricFFN",
+            in_channels=_dim_ * 2,
+            embed_dims=_dim_,
+            feedforward_channels=_dim_ * 4,
+        ),
+        deformable_layer=dict(
+                type='DeformableFeatureAggregation',
+                embed_dims=_dim_,
+                num_groups=4,
+                num_levels=4,
+                num_cams=num_cams,
+                attn_drop=0.15,
+                use_deformable_func=True,
+                use_camera_embed=True,
+                residual_mode="cat",
+                kps_generator=dict(
+                    type="SparseGaussian3DKeyPointsGenerator",
+                    embed_dims=_dim_,
+                    num_learnable_pts=2,
+                    fix_scale=[
+                        [0, 0, 0],
+                        [0.45, 0, 0],
+                        [-0.45, 0, 0],
+                        [0, 0.45, 0],
+                        [0, -0.45, 0],
+                        [0, 0, 0.45],
+                        [0, 0, -0.45],
+                    ],
+                    pc_range=vol_range,
+                    scale_range=[gaussian_scale_min,gaussian_scale_max],
+                ),
+            ),    
+        spconv_layer=dict(
+            type='SparseConv3DModule', 
+            in_channels=_dim_,
+            embed_channels=_dim_,
+            pc_range=vol_range,
+            grid_size=[voxel_size, voxel_size, voxel_size],
+        ),  
+        refine_layer=dict(
+            type='SparseGaussian3DRefinementModule',
+            embed_dims=_dim_,
+            output_dims = out_channels,
+            pc_range=vol_range,
+            scale_range=[gaussian_scale_min,gaussian_scale_max],
+            semantic_dim=num_class,
+            semantics_activation='softplus',
+        ), 
+                    
+    ),
+    
+    
+
     
     sparse_unet=dict(
         type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互

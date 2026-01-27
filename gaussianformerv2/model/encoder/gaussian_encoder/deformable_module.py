@@ -83,7 +83,7 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
         xyz = torch.stack([xxx, yyy, zzz], dim=-1)
 
         key_points = key_points + xyz.unsqueeze(2)
-        return key_points # todo (b 25600 9 3) 生成一组三维稀疏的高斯关键点
+        return key_points # todo (b 25600 9 3) 得到一组三维anchor对应的关键点
 
 
 @MODELS.register_module()
@@ -151,13 +151,15 @@ class DeformableFeatureAggregation(BaseModule):
         bs, num_anchor = instance_feature.shape[:2]
         # todo ------------------------#
         # todo 生成一组三维稀疏的高斯关键点
-        key_points = self.kps_generator(anchor, instance_feature) # todo instance_feature: 查询向量 + anchor: 相应属性(均值,方差和语义): 高斯属性
+        key_points = self.kps_generator(anchor, instance_feature) # todo anchor:(1,25600,28) feature: (1 25600 128) key_points: (1,25600,9,3)
         temp_key_points_list = (
             feature_queue
         ) = meta_queue = temp_anchor_embeds = []
-        if self.use_deformable_func:
+        
+        if self.use_deformable_func: # todo True: 输出的特征图：list: [0]: (1,6,total_num,128) [1]: (4,2)([112,200],[56,100],...) [2]:[4]:(0,22400 28000 29400)
             feature_maps = DAF.feature_maps_format(feature_maps) # todo 把多尺度特征图打包：1.拼接后的特征张量 2.每个尺度对应的空间索引列表 3.每个尺度对应的起始索引列表
-
+        
+        # todo list[(bs v 128 108 200) (bs v 128 54 100) (bs v 128 27 50) (bs v 128 14 25)] -> list[(bs v 108x200+... 128) (4 2) (4)]
         for (
             temp_feature_maps,
             temp_metas,
@@ -172,7 +174,7 @@ class DeformableFeatureAggregation(BaseModule):
             weights, weight_mask = self._get_weights(
                 instance_feature, temp_anchor_embed, metas # todo 嵌入了相机矩阵
             ) # todo 把查询特征整合为 (b 25600 num_cam num_level num_pt num_group) 的格式
-            if self.use_deformable_func:
+            if self.use_deformable_func: # todo True
                 weights = (
                     weights.permute(0, 1, 4, 2, 3, 5)
                     .contiguous()
@@ -197,14 +199,16 @@ class DeformableFeatureAggregation(BaseModule):
                         self.num_groups,
                     )
                 )
-                # todo ---------------------------------------------------------#
-                # todo GaussianFormer的思路是：先定义一组三维空间中的高斯点
-                # todo 然后将其投影到二维空间中，进行注意力交互
-                points_2d, mask = self.project_points( # todo 将3DKeypoints投影到2D图像上，获得2D坐标和可见性mask
-                    temp_key_points, # todo (b 25600 num_groups 3)
-                    temp_metas["projection_mat"],
-                    temp_metas.get("image_wh"),
-                ) # (b 25600 9 3) (b v 4 4) -> (b v 25600 9 2) 6个相机 9个尺度
+                
+                #???  ---------------------------------------------------------#
+                #??? GaussianFormer的思路是：先定义一组三维空间中的高斯点
+                #??? 然后将其投影到二维空间中，进行注意力交互
+                points_2d, mask = self.project_points( #??? 将3DKeypoints投影到2D图像上，以及2D坐标和可见性mask
+                    temp_key_points, # todo (1 25600 9 3)
+                    temp_metas["projection_mat"], # todo (1 6 4 4) lidar2img
+                    temp_metas.get("image_wh"), # todo (1 6 2) [1600 896]... 图像宽高
+                ) # (b 25600 9 3) (b v 4 4) -> (b v 25600 9 2) (b v 25600 9) 每个点的可见性
+                
                 points_2d = points_2d.permute(0, 2, 3, 1, 4).reshape(
                     bs, num_anchor * self.num_pts, self.num_cams, 2) # (b,25600x9 6 2)
                 mask = mask.permute(0, 2, 3, 1) # (b,25600 9 6)
@@ -226,7 +230,7 @@ class DeformableFeatureAggregation(BaseModule):
                 # todo ------------------------------------------#
                 temp_features_next = DAF.apply(
                     *temp_feature_maps, points_2d, weights  # points_2d (b 25600xnum_pts,num_cam,2) weights: (b 25600xnum_pts,)
-                ).reshape(bs, num_anchor, self.num_pts, self.embed_dims) # 进行特征聚合
+                ).reshape(bs, num_anchor, self.num_pts, self.embed_dims) # 进行特征聚合 # todo 这里应该是注意力了
             else:
                 temp_features_next = self.feature_sampling(
                     temp_feature_maps,
@@ -240,11 +244,11 @@ class DeformableFeatureAggregation(BaseModule):
 
             features = temp_features_next # todo (b 25600 9 128)
 
-        features = features.sum(dim=2)  # fuse multi-point features
+        features = features.sum(dim=2)  # fuse multi-point features # todo 这里采用的是融合多个采样点的特征
         output = self.proj_drop(self.output_proj(features))
-        if self.residual_mode == "add":
+        if self.residual_mode == "add": 
             output = output + instance_feature
-        elif self.residual_mode == "cat": # todo 'cat'
+        elif self.residual_mode == "cat": # todo 使用的是cat
             output = torch.cat([output, instance_feature], dim=-1)
         return output
 
@@ -258,6 +262,7 @@ class DeformableFeatureAggregation(BaseModule):
                 ) # todo : metas["projection_mat"]: (4 4)
             ) # todo (b v 128) 相机嵌入
             feature = feature[:, :, None] + camera_embed[:, None] # todo (b 25600 1 128) -> (b 25600 6 128)
+        
         weights = (
             self.weights_fc(feature)
             .reshape(bs, num_anchor, -1, self.num_groups) # (b 25600 6 144) -> (b 25600 216 4)

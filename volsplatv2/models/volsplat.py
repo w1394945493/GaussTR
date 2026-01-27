@@ -284,45 +284,6 @@ class VolSplat(BaseModel):
         selected_anchors = rearrange(selected_anchors, 'b v n c -> b (v n) c') # todo (1 25600 32)
         selected_points = rearrange(selected_points, 'b v n c -> b (v n) c') # todo (1 25600 3)
         selected_feats = rearrange(selected_feats,'b v n c -> b (v n) c') # todo (1 25600 128)
-
-        offset_xyz = selected_anchors[...,:3]
-        offset_xyz = offset_xyz.sigmoid()
-        offset_world = (offset_xyz - 0.5) *voxel_resolution*3
-        means = selected_points + offset_world
-        
-        anchor = torch.cat([means,selected_anchors[...,3:]],dim=2)
-        instance_feature = selected_feats
-        
-        
-        # todo ----------------------------------------------------------#
-        # todo 2. 可变形多尺度特征聚合  ---> 把这部分完成！！
-        lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
-        cam2img = data_samples['cam2img'] # todo (1 6 4 4)
-        projection_mat = img_aug_mat @ cam2img @ lidar2cam # todo (1 6 4 4)
-        featmap_wh = img_aug_mat.new_tensor([f_w,f_h])
-        featmap_wh = repeat(featmap_wh,"wh -> bs n wh",bs=bs,n=n) # todo (1 6 2)        
-        
-        self.encoder(anchor,instance_feature,feats,projection_mat,featmap_wh)
-
-
-        
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
         
         '''
         means = selected_points[0][...,:3] # (num,c)
@@ -335,112 +296,37 @@ class VolSplat(BaseModel):
             key_p = key_pos[:,i,:]
             np.save(f"keyp_{i}_{voxel_resolution}_{top_k}.npy", key_p.detach().cpu().numpy())
         
-        '''        
+        '''       
         
-        '''        
+        offset_xyz = selected_anchors[...,:3]
+        offset_xyz = offset_xyz.sigmoid()
+        offset_world = (offset_xyz - 0.5) *voxel_resolution*3
+        means = selected_points + offset_world
+        
+        anchor = torch.cat([means, selected_anchors[...,3:]],dim=2)
+        instance_feature = selected_feats
+        
+        
         # todo ----------------------------------------------------------#
-        # todo 1. 使用像素特征作为查询点：      
-        probs = self.foreground_head(img_feats.permute(0,2,3,1)) # (bsv c h w) -> (bsv h w c) -> (bsv h w num_class)
-        probs_softmax = F.softmax(probs, dim=-1)
-        num_classes = probs.shape[-1]
-        fg_probs, _ = probs_softmax[..., :num_classes-1].max(dim=-1)
-        bsv, h, w = fg_probs.shape
-        k = 2400
-        fg_probs_flat = fg_probs.view(bsv, -1)
-        topk_probs, topk_indices = torch.topk(fg_probs_flat, k=k, dim=-1) # (bsv, 1200)
-        topk_y = topk_indices // w
-        topk_x = topk_indices % w
+        # todo 2. 可变形多尺度特征聚合, 预测高斯点属性
+        lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
+        cam2img = data_samples['cam2img'] # todo (1 6 4 4)
+        projection_mat = img_aug_mat @ cam2img @ lidar2cam # todo (1 6 4 4)
+        featmap_wh = img_aug_mat.new_tensor([f_w,f_h])
+        featmap_wh = repeat(featmap_wh,"wh -> bs n wh",bs=bs,n=n) # todo (1 6 2)        
         
-        # todo top-k像素位置
-        topk_coords = torch.stack([topk_x, topk_y], dim=-1) # (bsv, 1200, 2)
-        scale = torch.tensor([w, h], device=topk_coords.device, dtype=torch.float32)
-        topk_coords_norm = (topk_coords.float() + 0.5) / scale # 像素中心归一化公式: (coord + 0.5) / size
-        topk_points = topk_coords_norm.clamp(0, 1)
-        
-        
-        img_feats_flat = img_feats.permute(0, 2, 3, 1).view(bsv, -1, img_feats.shape[1])
-        feat_indices = topk_indices.unsqueeze(-1).expand(-1, -1, img_feats.shape[1])
-        # todo top-k像素特征
-        topk_feats = torch.gather(img_feats_flat, dim=1, index=feat_indices) # (bsv, 1200, c)
-        '''
-        
-        '''
-        # todo ---------------------------------------------------#
-        # todo 可视化一下 获取的各相机前top-k个特征点在3D空间中的位置分布
-        # 1. 获取 Top-K 像素对应的深度值
-        depth_flat = depth.view(bsv, -1)
-        topk_depths = torch.gather(depth_flat, dim=1, index=topk_indices)
-        ones = torch.ones_like(topk_x)
-        topk_coords_homo = torch.stack([topk_x, topk_y, ones], dim=-1).float()
-        
-        img_aug_mat_flat = img_aug_mat.view(-1, 4, 4)
-        post_rots = img_aug_mat_flat[:, :3, :3]
-        post_trans = img_aug_mat_flat[:, :3, 3]
-        # 逆平移 -> 逆旋转
-        topk_coords_unaug = topk_coords_homo - post_trans.unsqueeze(1)
-        topk_coords_unaug = torch.matmul(
-            torch.inverse(post_rots).unsqueeze(1), 
-            topk_coords_unaug.unsqueeze(-1)
-        ).squeeze(-1) # (bsv, 1200, 3)    
-        
-        # 4. 投影到 3D 空间 (Camera to World)    
-        # 准备内参和外参 (bsv, 3, 3) 和 (bsv, 4, 4)
-        intrinsics_flat = intrinsics.view(-1, 3, 3)
-        extrinsics_flat = extrinsics.view(-1, 4, 4)  
-        # 计算相机坐标系下的归一化方向: K^-1 * [x, y, 1]^T
-        cam_dirs = torch.matmul(
-            torch.inverse(intrinsics_flat).unsqueeze(1),
-            topk_coords_unaug.unsqueeze(-1)
-        ).squeeze(-1)
-        # 获取相机在外参下的平移和旋转 (Cam to World)
-        cam2world_rot = extrinsics_flat[:, :3, :3]
-        cam2world_trans = extrinsics_flat[:, :3, 3]
-        topk_world_coords = torch.matmul(
-            cam2world_rot.unsqueeze(1),
-            (cam_dirs * topk_depths.unsqueeze(-1)).unsqueeze(-1)
-        ).squeeze(-1) + cam2world_trans.unsqueeze(1)
-        topk_world_coords = topk_world_coords.view(bs, n, k, 3)
-        topk_world_coords = rearrange(topk_world_coords,'b v n xyz -> b (v n) xyz')          
-        
-        # todo 保存结果
-        means3d = topk_world_coords[0] # (num,c)
-        import numpy as np
-        # 保存为 numpy
-        np.save("means3d_select_img_feats_2400x6_2.npy", means3d.detach().cpu().numpy())        
-        '''
-        
-        '''        
-        decoder_inputs = self.pre_transformer(feats) 
-        feats_flatten = flatten_multi_scale_feats(feats)[0]
-        
-        # todo ------------------------------------------------------------------#
-        # todo 2. 将筛选出来的top-k个特征 + 固定数量的可学习特征，一同作为解码的目标查询query
-        decoder_inputs.update(self.pre_decoder(feats_flatten,
-                                                topk_feats,topk_points, 
-                                               )) # todo 准备查询query
-        
-    
-        
-        query, reference_points = self.forward_decoder(
-                                                    #    reg_branches=self.reg_branches,
-                                                       
-                                                       **decoder_inputs) # (num_layers,(bs,v),n_query,dim) (num_layers,(bs,v),n_query,3)  
-        # query, reference_points = decoder_inputs['query'].unsqueeze(0),decoder_inputs['reference_points'].unsqueeze(0)
-        
+        predictions = self.encoder(anchor,instance_feature,feats,projection_mat,featmap_wh)
+
         if mode == 'predict':
-            query_gaussians = self.query_gaussian(-1,query[-1],reference_points[-1],depth,
-                                                  intrinsics, extrinsics, img_aug_mat)            
-            return self.decoder(query_gaussians,data,mode=mode)
+            return self.decoder(predictions[-1],data,mode=mode)
         
         losses = {}
-        num_layers = query.shape[0]
-        for i in range(num_layers):
-            query_gaussians = self.query_gaussian(i,query[i],reference_points[i],depth,
-                                                  intrinsics, extrinsics, img_aug_mat)
-            loss = self.decoder(query_gaussians,data,mode=mode)
+        for i in range(len(predictions)):
+            loss = self.decoder(predictions[i],data,mode=mode)
             for k, v in loss.items():
                 losses[f'{k}/{i}'] = v
-        return losses'''
+        
+        return losses
                 
 
         # # gaussians = self.voxel_gaussian(bs,n,
@@ -449,15 +335,8 @@ class VolSplat(BaseModel):
         
         # # # todo 占用预测
         # # return self.decoder(gaussians,data,mode=mode)
-        
-        return 
-    
-    
-        
-    
-    
-    
-    
+
+
     def voxel_gaussian(self,
                        bs, n,
                        input_size,
@@ -555,171 +434,6 @@ class VolSplat(BaseModel):
         
         return gaussians
     
-    
-    def query_gaussian(self, i,
-                       x, ref_pts, depth,
-                       intrinsics, extrinsics, img_aug_mat):
-        
-
-        bs, n, d_h, d_w = depth.shape #! shape
-
-        x = x.reshape(bs, n, *x.shape[1:])
-        deltas = self.reg_branches[i](x) 
-        # todo 参考点加上偏移量
-        # ref_pts = (deltas[..., :2] + inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid()  # todo 这里是sigmoid结果！！！           
-        ref_pts = (inverse_sigmoid(ref_pts.reshape(*x.shape[:-1], -1))).sigmoid()
-        
-        
-        sample_depth = flatten_bsn_forward(F.grid_sample, depth[:, :n, None], ref_pts.unsqueeze(2) * 2 - 1) 
-        sample_depth = sample_depth[:, :, 0, 0, :, None] # (b v 1 1 n) -> (b v n 1)
-        
-        # todo d_w 和 d_h
-        # points = torch.cat([ref_pts * torch.tensor([d_w, d_h]).to(x), sample_depth * (1 + deltas[..., 2:3])], -1)
-        # ! 未加偏移量
-        points = torch.cat([ref_pts * torch.tensor([d_w, d_h]).to(x), sample_depth], -1)
-        
-        
-        means = cam2world(points, intrinsics, extrinsics, img_aug_mat) # (b v n 3)
-        
-        raw_gaussians = self.gauss_branches[i](x) # (b v n 1+3+4+3+18=29)
-        sh_dim = 3 * self.gaussian_adapter.d_sh if self.gaussian_adapter.d_sh is not None else 3
-        fixed_len = 1 + 3 + 4 + sh_dim
-        fixed_part, semantics = raw_gaussians.split([fixed_len, raw_gaussians.shape[-1] - fixed_len], dim=-1)
-        opacity_raw, scales, rotations, sh = fixed_part.split((1, 3, 4, sh_dim), dim=-1)
-        
-        opacities = opacity_raw.sigmoid().unsqueeze(-1) # (b v n 1 1)
-        
-        if self.gaussian_adapter.d_sh:
-            sh = rearrange(sh, "... (xyz d_sh) -> ... xyz d_sh", xyz=3)    # [b, v, n, (xyz d_sh)] -> [b, v, n, xyz, d_sh]
-            sh = sh.broadcast_to((*opacities.shape, 3, self.gaussian_adapter.d_sh)) * self.gaussian_adapter.sh_mask
-        else:
-            sh = torch.sigmoid(sh)            
-        
-        scales = self.gaussian_adapter.gaussian_scale_min + (self.gaussian_adapter.gaussian_scale_max - self.gaussian_adapter.gaussian_scale_min) * torch.sigmoid(scales) # (b v n 3)
-        rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + 1e-8) # (b v n 4)
-        semantics = F.softplus(semantics) # (b v n 18)
-        covariances = build_covariance(scales, rotations) # (b v n 3 3)
-        c2w_rotations = extrinsics[..., :3, :3] # (b v 3 3)         
-        c2w_rotations = rearrange(c2w_rotations,"b v i j -> b v () i j") 
-        covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2) # (b v n 3 3)
-        
-        gaussians = Gaussians(rearrange(means,"b v n xyz -> b (v n) xyz"), 
-            rearrange(scales,"b v n xyz -> b (v n) xyz"), 
-            rearrange(rotations,"b v n d -> b (v n) d"),                             
-            rearrange(covariances,"b v n i j -> b (v n) i j",), 
-            rearrange(sh,"b v n c d_sh -> b (v n) c d_sh",) \
-                if self.gaussian_adapter.d_sh is not None else rearrange(sh,"b v n rgb -> b (v n) rgb",),
-            rearrange(opacities,   "b v n srf spp -> b (v n srf spp)"), 
-            rearrange(semantics,"b v n dim -> b (v n) dim")       
-        )      
-        return gaussians
-    
-    def pre_transformer(self, mlvl_feats):
-        batch_size = mlvl_feats[0].size(0)
-
-        mlvl_masks = []
-        for feat in mlvl_feats:
-            mlvl_masks.append(None)
-
-        feat_flatten = []
-        mask_flatten = []
-        spatial_shapes = []
-        for lvl, (feat, mask) in enumerate(zip(mlvl_feats, mlvl_masks)):
-            batch_size, c, h, w = feat.shape
-            spatial_shape = torch._shape_as_tensor(feat)[2:].to(feat.device) # todo 记录空间形状，存储每一层原始尺寸HxW
-            # [bs, c, h_lvl, w_lvl] -> [bs, h_lvl*w_lvl, c]
-            feat = feat.view(batch_size, c, -1).permute(0, 2, 1) # (bv c h w) -> (bv hxw c) # todo 将特征图铺平并交换维度
-            # [bs, h_lvl, w_lvl] -> [bs, h_lvl*w_lvl]
-            if mask is not None:
-                mask = mask.flatten(1)
-
-            feat_flatten.append(feat)
-            mask_flatten.append(mask)
-            spatial_shapes.append(spatial_shape)
-
-        # (bs, num_feat_points, dim)
-        feat_flatten = torch.cat(feat_flatten, 1) # todo 将所有层级的序列首尾相连，让transformer在同一个注意机制下同时观察高层和底层特征
-        # (bs, num_feat_points), where num_feat_points = sum_lvl(h_lvl*w_lvl)
-        if mask_flatten[0] is not None:
-            mask_flatten = torch.cat(mask_flatten, 1)
-        else:
-            mask_flatten = None
-
-        # (num_level, 2)
-        spatial_shapes = torch.cat(spatial_shapes).view(-1, 2)
-        level_start_index = torch.cat((
-            spatial_shapes.new_zeros((1, )),  # (num_level)
-            spatial_shapes.prod(1).cumsum(0)[:-1]))
-        if mlvl_masks[0] is not None:
-            valid_ratios = torch.stack(  # (bs, num_level, 2)
-                [self.get_valid_ratio(m) for m in mlvl_masks], 1)
-        else:
-            valid_ratios = mlvl_feats[0].new_ones(batch_size, len(mlvl_feats),
-                                                  2)
-
-        decoder_inputs_dict = dict(
-            memory_mask=mask_flatten,
-            spatial_shapes=spatial_shapes,
-            level_start_index=level_start_index,
-            valid_ratios=valid_ratios)
-        
-        return decoder_inputs_dict
-
-    def pre_decoder(self, memory, # (bsv,num_pixel,128)
-                    topk_feats, # (bsv top-k 128)
-                    topk_pts, # (bsv top-k 2)
-                    ):  
-        
-        bs, _, c = memory.shape
-        # query = self.query_embeds.weight.unsqueeze(0).expand(bs, -1, -1) # (bsv,300,128)
-        # reference_points = torch.rand((bs, query.size(1), 2)).to(query)  # (bsv,300,2)
-        
-        # query = torch.cat([topk_feats, query], dim=1)
-        # reference_points = torch.cat([topk_pts, reference_points], dim=1)
-        query = topk_feats
-        reference_points = topk_pts
-
-
-
-        # b, _, c = voxel_feats.shape
-        # query = self.query_embeds.weight.unsqueeze(0).expand(b, -1, -1) # (bs,300,128)
-        
-        # vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
-        
-        # device = query.device
-        # num_queries = query.size(1)
-        
-        # vol_min = torch.tensor(vol_range[:3], device=device)
-        # vol_max = torch.tensor(vol_range[3:], device=device)
-    
-        # query_reference_points = vol_min + (vol_max - vol_min) * torch.rand((b, num_queries, 3), device=device)
-        
-        # final_query = torch.cat([voxel_feats, query], dim=1) # todo 查询特征
-        # reference_points = torch.cat([voxel_pos, query_reference_points], dim=1) # todo 参考点
-        
-        '''
-        means3d = reference_points[0] # (num,c)
-        import numpy as np
-        # 保存为 numpy
-        np.save("all_reference_points_means_2e-1.npy", means3d.detach().cpu().numpy())
-        '''        
-        decoder_inputs_dict = dict(
-            query=query, memory=memory, reference_points=reference_points)
-        return decoder_inputs_dict
-    
-    def forward_decoder(self, query, memory, memory_mask, reference_points,
-                        spatial_shapes, level_start_index, valid_ratios,
-                        **kwargs):
-        inter_states, references = self.transformer_decoder(
-            query=query, # (b n dim)
-            value=memory, # (bs, pixel_n,dim)
-            key_padding_mask=memory_mask,
-            reference_points=reference_points, # (b n 3) 
-            spatial_shapes=spatial_shapes,
-            level_start_index=level_start_index,
-            valid_ratios=valid_ratios,
-            **kwargs)
-        return inter_states, references
     
     
 

@@ -107,15 +107,6 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
         ).squeeze(-1) # todo (1 25600 9 3)
 
         xyz = anchor[..., :3] # todo (1 25600 3)
-        # if self.xyz_act == 'sigmoid':
-        #     xyz = torch.sigmoid(xyz) # todo (1 25600 3)
-
-        # # todo 将 0-1 的 xyz 映射到真实的 pc_range (点云范围，如 -50m 到 50m)
-        # xxx = xyz[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0] # todo self.pc_range: [-50, -50, -5, 50, 50, 3]
-        # yyy = xyz[..., 1] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1]
-        # zzz = xyz[..., 2] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2]
-        # xyz = torch.stack([xxx, yyy, zzz], dim=-1)
-
         # todo 最终坐标 = 旋转缩放后的偏移点 + 中心点坐标
         key_points = key_points + xyz.unsqueeze(2) 
         

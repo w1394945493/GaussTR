@@ -116,11 +116,6 @@ model = dict(
             cross_attn_cfg=dict(embed_dims=_dim_, num_levels=4),
             ffn_cfg=dict(embed_dims=_dim_, feedforward_channels=2048)),
         post_norm_cfg=None),    
-    
-    # foreground_head=dict(
-    #     type='MLP',
-    #     input_dim=_dim_, 
-    #     output_dim=num_class),     
 
     foreground_head=dict(
         type='SparseGaussianHead',
@@ -131,7 +126,7 @@ model = dict(
     
     encoder = dict(
         type = 'GaussianOccEncoder',
-        num_decoder=4,
+        num_decoder=3,
         anchor_encoder=dict(
             type='MLP',
             input_dim=out_channels, 
@@ -180,11 +175,11 @@ model = dict(
         refine_layer=dict(
             type='SparseGaussian3DRefinementModule',
             embed_dims=_dim_,
-            output_dims = out_channels,
+            output_dim = out_channels,
+            semantic_dim = num_class,
             pc_range=vol_range,
+            voxel_size = voxel_size,
             scale_range=[gaussian_scale_min,gaussian_scale_max],
-            semantic_dim=num_class,
-            semantics_activation='softplus',
         ), 
                     
     ),

@@ -48,7 +48,7 @@ class GaussianLifter(BaseLifter):
         else:
             semantic_dim = 0
         semantic = torch.randn(num_anchor, semantic_dim, dtype=torch.float) # todo 正态分布，大部分在0-1之间
-
+        
         anchor = torch.cat([xyz, scale, rots, opacity, semantic], dim=-1) # todo (25600,3+3+4+1+17=28)
 
         self.num_anchor = num_anchor

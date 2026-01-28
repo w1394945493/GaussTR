@@ -48,10 +48,10 @@ class SparseGaussian3DRefinementModule(nn.Module):
         offset_world = (offset_xyz.sigmoid() - 0.5) * self.voxel_size * 3 
         
         means = anchor[...,:3] + offset_world # todo (1 25600 3)
-        
-
         anchor = torch.cat([means,scales,rotations,opacities,colors,semantics],dim=-1) # todo (1 25600 32)
         
+        #?----------------------------------------------?
+        #? 高斯参数解码
         scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * torch.sigmoid(scales) # todo (1 25600 3)
         rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps) # todo (1 25600 4)
         opacities = opacities.sigmoid() # todo (1 25600 1)

@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis22'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis24'
 
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir, 
-         save_occ=True,
-         save_gaussian=True,    
-        ),]  #  # 保存结果
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir, 
+#          save_occ=True,
+#          save_gaussian=True,    
+#         ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -48,7 +48,7 @@ out_channels += num_class
 
 #! 高斯尺度相关
 # voxel_resolution = 0.5
-voxel_resolution = 0.1
+voxel_resolution = 0.2
 
 gaussian_scale_min = 0.1
 gaussian_scale_max = 0.5
@@ -97,7 +97,7 @@ model = dict(
     #     start_level = 0,
     #     add_extra_convs='on_input',
     #     num_outs=4),
-    num_queries=600,
+    
     model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     neck=dict(
         type='ViTDetFPN',
@@ -105,24 +105,18 @@ model = dict(
         out_channels=_dim_,
         norm_cfg=dict(type='LN2d')),    
     
-    
-    transformer_decoder=dict(
-        type='TransformerDecoder',
-        num_layers=3,
-        return_intermediate=True,
-        layer_cfg=dict(
-            self_attn_cfg=dict(
-                embed_dims=_dim_, num_heads=8, dropout=0.0),
-            cross_attn_cfg=dict(embed_dims=_dim_, num_levels=4),
-            ffn_cfg=dict(embed_dims=_dim_, feedforward_channels=2048)),
-        post_norm_cfg=None),    
-
     foreground_head=dict(
         type='SparseGaussianHead',
         in_channels=_dim_, 
         out_channels=out_channels),     
     
-
+    lifer = dict(
+        type='GaussianLifter',
+        num_anchor=25600,
+        embed_dims=_dim_,
+        semantic_dim=num_class,
+        pc_range=vol_range,
+    ),
     
     encoder = dict(
         type = 'GaussianOccEncoder',
@@ -258,10 +252,10 @@ val_num_workers=num_workers
 
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录

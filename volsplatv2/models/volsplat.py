@@ -42,9 +42,6 @@ class VolSplat(BaseModel):
                 neck,
                 
                 model_url,
-                num_queries,
-                
-                transformer_decoder,
 
                 foreground_head,
                 encoder,
@@ -88,17 +85,9 @@ class VolSplat(BaseModel):
         
         self.neck = MODELS.build(neck)
         
-        
-        self.transformer_decoder = MODELS.build(transformer_decoder)
-        self.query_embeds = nn.Embedding(
-            num_queries, transformer_decoder.layer_cfg.self_attn_cfg.embed_dims) # self.query_embeds.weight.shape         
-        
-        
         self.foreground_head = MODELS.build(foreground_head)
+        
         self.encoder = MODELS.build(encoder)
-        
-        
-        
         
         self.sparse_unet = MODELS.build(sparse_unet)
         self.gaussian_head = MODELS.build(sparse_gs)
@@ -202,8 +191,6 @@ class VolSplat(BaseModel):
         img_aug_mat = data_samples['img_aug_mat'] #! ori_img -> inputs
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) #! cam -> ori_img
         extrinsics = data_samples['cam2lidar'] #! surroundocc: cam -> lidar
-        
-        
         resize = torch.diag(torch.tensor([d_w/input_w, d_h/input_h],
                                         dtype=img_aug_mat.dtype,
                                         device = img_aug_mat.device))
@@ -213,8 +200,9 @@ class VolSplat(BaseModel):
         mat = repeat(mat,"i j -> () () i j")
         img_aug_mat = mat @ img_aug_mat  #! ori_img -> img_feats
         
+        # todo 检查一下depth, intrinsics, extrinsics, img_aug_mat 是否正确
         '''        
-        # todo 这里检查一下depth, intrinsics, extrinsics, img_aug_mat 是否正确
+        
         device = depth.device
         coordinates = sample_image_grid((d_h, d_w), device,normal=False)[0]
         coordinates = repeat(coordinates, "h w c -> 1 v (h w) c", v=depth.shape[1])
@@ -241,72 +229,15 @@ class VolSplat(BaseModel):
         np.save("means3d.npy", means3d.detach().cpu().numpy())
         '''        
         
-        
         # todo ----------------------------------------------------------#
-        # todo 1. 体素化聚合像素特征，并筛选预测概率最大的前25600个特征点作为查询
-        voxel_resolution = 2e-1
-        
-        sparse_input, aggregated_points, counts = project_features_to_me(
-                intrinsics, # (b v 3 3)
-                extrinsics, # (b v 4 4)  #! 外参：确定是cam2lidar还是cam2ego!!!             
-                img_feats,  # (bv c h w)
-                depth=depth,
-                
-                voxel_resolution=voxel_resolution, 
-                b=bs, v=n,
-                normal=False,
-                img_aug_mat=img_aug_mat,
-                )  
-              
-        anchors_pred = self.foreground_head(sparse_input) # ((b n),32)
-        batched_anchors, valid_mask = self._sparse_to_batched(anchors_pred.F, anchors_pred.C, bs, return_mask=True)  # [b, 1, N_max, dim], [b, 1, N_max]
-        batched_points = self._sparse_to_batched(aggregated_points, anchors_pred.C, bs) # (b 1 N_max,3)  
-        batched_feats = self._sparse_to_batched(sparse_input.F, anchors_pred.C, bs)  # (b 1 N_max,128) 
-        
-        probs_params = batched_anchors[...,14:] # [14:32]: probs (1 1 N_max 18)
-        B, _, N, num_classes = probs_params.shape
-        
-        probs_softmax = F.softmax(probs_params, dim=-1)
-        fg_probs, _ = probs_softmax[..., :num_classes-1].max(dim=-1)
-        # fg_probs = 1 - probs_softmax[..., -1] # (b 1 n)
-        top_k = min(25600, N)
-        topk_probs, topk_indices = torch.topk(fg_probs, k=top_k, dim=-1)
-        
-        anchor_indices = topk_indices.unsqueeze(-1).expand(-1, -1, -1, batched_anchors.shape[-1])
-        selected_anchors = torch.gather(batched_anchors, dim=2, index=anchor_indices) 
-        
-        point_indices = topk_indices.unsqueeze(-1).expand(-1, -1, -1, batched_points.shape[-1])
-        selected_points = torch.gather(batched_points, dim=2, index=point_indices)
-        
-        feat_indices = topk_indices.unsqueeze(-1).expand(-1, -1, -1, batched_feats.shape[-1])
-        selected_feats = torch.gather(batched_feats, dim=2, index=feat_indices)
-        
-        selected_anchors = rearrange(selected_anchors, 'b v n c -> b (v n) c') # todo (1 25600 32)
-        selected_points = rearrange(selected_points, 'b v n c -> b (v n) c') # todo (1 25600 3)
-        selected_feats = rearrange(selected_feats,'b v n c -> b (v n) c') # todo (1 25600 128)
-        
-        '''
-        means = selected_points[0][...,:3] # (num,c)
-        import numpy as np
-        # 保存为 numpy
-        np.save(f"means_select_{voxel_resolution}_{top_k}.npy", means.detach().cpu().numpy())
-        
-        key_pos = key_points[0]
-        for i in range(key_pos.shape[1]):
-            key_p = key_pos[:,i,:]
-            np.save(f"keyp_{i}_{voxel_resolution}_{top_k}.npy", key_p.detach().cpu().numpy())
-        
-        '''       
-        
-        offset_xyz = selected_anchors[...,:3]
-        offset_xyz = offset_xyz.sigmoid()
-        offset_world = (offset_xyz - 0.5) *voxel_resolution*3
-        means = selected_points + offset_world
-        
-        anchor = torch.cat([means, selected_anchors[...,3:]],dim=2)
-        instance_feature = selected_feats
+        # todo 1. 体素化聚合像素特征，并筛选预测概率最大的前top_k个实例作为查询先验
+        topk_anchor, topk_instance_feature = self.select_topk_instance(intrinsics,extrinsics,img_feats,depth,img_aug_mat,top_k=25600)
+        # todo 1.2 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
         
         
+        
+        anchor = topk_anchor
+        instance_feature = topk_instance_feature
         # todo ----------------------------------------------------------#
         # todo 2. 可变形多尺度特征聚合, 预测高斯点属性
         lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
@@ -329,12 +260,63 @@ class VolSplat(BaseModel):
         return losses
                 
 
-        # # gaussians = self.voxel_gaussian(bs,n,
-        # #                                 input_size=(input_h,input_w),
-        # #                                 feats=feats,data_samples=data_samples)
+    
+    def select_topk_instance(self,intrinsics,extrinsics,img_feats,depth,img_aug_mat,top_k=25600):
+        bs,n = intrinsics.shape[:2]
+        sparse_input, aggregated_points, counts = project_features_to_me(
+                intrinsics, # (b v 3 3)
+                extrinsics, # (b v 4 4)    
+                img_feats,  # (bv c h w)
+                depth=depth,
+                
+                voxel_resolution=self.voxel_resolution, 
+                b=bs, v=n,
+                normal=False,
+                img_aug_mat=img_aug_mat,
+                )          
+        anchors_pred = self.foreground_head(sparse_input) # ((b n),32)
+        batched_anchors, valid_mask = self._sparse_to_batched(anchors_pred.F, anchors_pred.C, bs, return_mask=True)  # [b, 1, N_max, dim], [b, 1, N_max]
+        batched_points = self._sparse_to_batched(aggregated_points, anchors_pred.C, bs) # (b 1 N_max,3)  
+        batched_feats = self._sparse_to_batched(sparse_input.F, anchors_pred.C, bs)  # (b 1 N_max,128) 
+        probs_params = batched_anchors[...,14:] # [14:32]: probs (1 1 N_max 18)
+        B, _, N, num_classes = probs_params.shape
         
-        # # # todo 占用预测
-        # # return self.decoder(gaussians,data,mode=mode)
+        probs_softmax = F.softmax(probs_params, dim=-1)
+        fg_probs, _ = probs_softmax[..., :num_classes-1].max(dim=-1)
+        # fg_probs = 1 - probs_softmax[..., -1] # (b 1 n)
+        top_k = min(top_k, N)
+        topk_probs, topk_indices = torch.topk(fg_probs, k=top_k, dim=-1)
+        
+        anchor_indices = topk_indices.unsqueeze(-1).expand(-1, -1, -1, batched_anchors.shape[-1])
+        selected_anchors = torch.gather(batched_anchors, dim=2, index=anchor_indices) 
+        
+        point_indices = topk_indices.unsqueeze(-1).expand(-1, -1, -1, batched_points.shape[-1])
+        selected_points = torch.gather(batched_points, dim=2, index=point_indices)
+        
+        feat_indices = topk_indices.unsqueeze(-1).expand(-1, -1, -1, batched_feats.shape[-1])
+        selected_feats = torch.gather(batched_feats, dim=2, index=feat_indices)
+        
+        selected_anchors = rearrange(selected_anchors, 'b v n c -> b (v n) c') # todo (1 25600 32)
+        selected_points = rearrange(selected_points, 'b v n c -> b (v n) c') # todo (1 25600 3)
+        selected_feats = rearrange(selected_feats,'b v n c -> b (v n) c') # todo (1 25600 128)
+        
+        '''
+        means = selected_points[0][...,:3] # (num,c)
+        import numpy as np
+        # 保存为 numpy
+        np.save(f"means3d.npy", means.detach().cpu().numpy())
+        '''       
+        
+        offset_xyz = selected_anchors[...,:3]
+        offset_xyz = offset_xyz.sigmoid()
+        offset_world = (offset_xyz - 0.5) *self.voxel_resolution*3
+        means = selected_points + offset_world
+        
+        anchor = torch.cat([means, selected_anchors[...,3:]],dim=2)
+        instance_feature = selected_feats                
+
+        return anchor, instance_feature
+    
 
 
     def voxel_gaussian(self,

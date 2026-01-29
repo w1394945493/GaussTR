@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis24'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis25'
 
 # custom_hooks = [
 #     dict(type='DumpResultHook',
@@ -38,8 +38,8 @@ far = 1000.
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
 
-# with_empty = False # 是否使用空高斯
-with_empty = True # 是否使用空高斯
+with_empty = False # 是否使用空高斯
+# with_empty = True # 是否使用空高斯
 
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
@@ -110,12 +110,13 @@ model = dict(
         in_channels=_dim_, 
         out_channels=out_channels),     
     
-    lifer = dict(
+    lifter = dict(
         type='GaussianLifter',
-        num_anchor=25600,
+        num_anchor=12800,
         embed_dims=_dim_,
         semantic_dim=num_class,
         pc_range=vol_range,
+        scale_range=[gaussian_scale_min,gaussian_scale_max],
     ),
     
     encoder = dict(
@@ -252,10 +253,10 @@ val_num_workers=num_workers
 
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录

@@ -44,6 +44,7 @@ class VolSplat(BaseModel):
                 model_url,
 
                 foreground_head,
+                lifter,
                 encoder,
                 
                 
@@ -86,7 +87,7 @@ class VolSplat(BaseModel):
         self.neck = MODELS.build(neck)
         
         self.foreground_head = MODELS.build(foreground_head)
-        
+        self.lifter = MODELS.build(lifter)
         self.encoder = MODELS.build(encoder)
         
         self.sparse_unet = MODELS.build(sparse_unet)
@@ -231,13 +232,21 @@ class VolSplat(BaseModel):
         
         # todo ----------------------------------------------------------#
         # todo 1. 体素化聚合像素特征，并筛选预测概率最大的前top_k个实例作为查询先验
-        topk_anchor, topk_instance_feature = self.select_topk_instance(intrinsics,extrinsics,img_feats,depth,img_aug_mat,top_k=25600)
+        topk_anchor, topk_instance_feature = self.select_topk_instance(intrinsics,extrinsics,
+                                                                       img_feats,depth,
+                                                                       img_aug_mat,
+                                                                       top_k=25600)
         # todo 1.2 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
+        anchor, instance_feature = self.lifter(bs)
         
-        
-        
-        anchor = topk_anchor
-        instance_feature = topk_instance_feature
+        anchor = torch.cat([topk_anchor,anchor],dim=1)
+        instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
+        '''
+        means = anchor[0][...,:3] # (num,c)
+        import numpy as np
+        # 保存为 numpy
+        np.save(f"means3d_total.npy", means.detach().cpu().numpy())
+        '''      
         # todo ----------------------------------------------------------#
         # todo 2. 可变形多尺度特征聚合, 预测高斯点属性
         lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
@@ -300,12 +309,7 @@ class VolSplat(BaseModel):
         selected_points = rearrange(selected_points, 'b v n c -> b (v n) c') # todo (1 25600 3)
         selected_feats = rearrange(selected_feats,'b v n c -> b (v n) c') # todo (1 25600 128)
         
-        '''
-        means = selected_points[0][...,:3] # (num,c)
-        import numpy as np
-        # 保存为 numpy
-        np.save(f"means3d.npy", means.detach().cpu().numpy())
-        '''       
+ 
         
         offset_xyz = selected_anchors[...,:3]
         offset_xyz = offset_xyz.sigmoid()

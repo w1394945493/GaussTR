@@ -55,6 +55,8 @@ class GaussianDecoder(BaseModule):
         )
         self.lovasz_ignore = num_class - 1
         self.num_classes = num_class
+        
+        
         if with_empty:
             # 构造 20x20x8=3200个空高斯用以填充背景
             voxel_size = empty_args['voxel_size']

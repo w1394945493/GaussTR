@@ -58,6 +58,7 @@ class SparseGaussian3DRefinementModule(nn.Module):
         colors = colors.sigmoid() # todo (1 25600 3)
         covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
         semantics = F.softplus(semantics) # todo (1 25600 18)
+        
         gaussians = Gaussians(
             means,
             scales,

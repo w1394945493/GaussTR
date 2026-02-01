@@ -7,7 +7,7 @@ from terminaltables import AsciiTable
 from einops import rearrange
 
 from mmdet3d.registry import METRICS
-from .img_metrics import compute_psnr,compute_lpips,compute_ssim
+# from .img_metrics import compute_psnr,compute_lpips,compute_ssim
 
 
 

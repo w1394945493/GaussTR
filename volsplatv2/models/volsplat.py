@@ -14,7 +14,7 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-import MinkowskiEngine as ME
+# import MinkowskiEngine as ME
 
 from mmdet.models import inverse_sigmoid
 

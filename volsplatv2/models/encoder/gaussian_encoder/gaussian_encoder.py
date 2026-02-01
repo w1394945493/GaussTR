@@ -24,7 +24,7 @@ class GaussianOccEncoder(nn.Module):
         
         
     def forward(self,
-                anchor, # todo (1 25600 32)
+                anchor, # todo (1 25600 3)
                 instance_feature, # todo (1 25600 128)
                 ms_img_feats,
                 projection_mat,featmap_wh): # todo (1 6 4 4) (1 6 2)
@@ -35,6 +35,8 @@ class GaussianOccEncoder(nn.Module):
         for i in range(self.num_decoder):
             #?-----------------------------?
             instance_feature = self.deformable_layer(instance_feature, anchor, anchor_embed, ms_img_feats,projection_mat,featmap_wh) # todo (1 25600 256)
+            #?-----------------------------?
+            
             instance_feature = self.ffn(instance_feature) # todo (1 25600 128)
             instance_feature = self.norm_layer(instance_feature) # todo (1 25600 128)
             

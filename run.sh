@@ -203,17 +203,6 @@ python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
 
 # todo --------------------------------------------------------#
 # todo VolSplatv2
-# todo 训练
-export CUDA_VISIBLE_DEVICES=5
-python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_base.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train2
-
-
-python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_base.py \
-    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train3/epoch_24.pth \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/gaussianformerv2/test \
 
 # todo ---------------------------------------------------------#
 # todo 整理整个nuscenes数据集
@@ -235,12 +224,12 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 # todo ---------------------------------------------------------#
 # todo volsplatv2 使用整个nuscenes数据集(1/10)进行训练
 # todo 单卡训练
-export CUDA_LAUNCH_BLOCKING=1
+# export CUDA_LAUNCH_BLOCKING=1
 export CUDA_VISIBLE_DEVICES=6
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5 \
-    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train6/epoch_2.pth
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train6 \
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train7/epoch_3.pth
 
 # todo 评估
 export CUDA_VISIBLE_DEVICES=6

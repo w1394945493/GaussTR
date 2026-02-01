@@ -14,11 +14,11 @@ class DeformableAggregationFunction(Function):
         weights,
     ):
         # output: [bs, num_pts, num_embeds]
-        mc_ms_feat = mc_ms_feat.contiguous().float() # (b v N 128)
-        spatial_shape = spatial_shape.contiguous().int() # (4 2) 4表示4个特征层
+        mc_ms_feat = mc_ms_feat.contiguous().float() # todo (1 6 38752 128)
+        spatial_shape = spatial_shape.contiguous().int() # todo (4 2)
         scale_start_index = scale_start_index.contiguous().int() # (4)
         sampling_location = sampling_location.contiguous().float() # (b 25600xnum_pts num_cams(v) 2)
-        weights = weights.contiguous().float() # (b 25600xnum_pts num_cams 4 4)
+        weights = weights.contiguous().float() # todo (1 25600x9 6 4 4)
         output = deformable_aggregation_ext.deformable_aggregation_forward(
             mc_ms_feat,
             spatial_shape,

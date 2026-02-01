@@ -11,12 +11,10 @@ class GaussianLifter(nn.Module):
         embed_dims,
         semantic_dim,
         pc_range,
-        scale_range,
     ):
         super().__init__()
         self.embed_dims = embed_dims
         self.pc_range = pc_range
-        self.scale_range = scale_range
         
         xyz = torch.rand(num_anchor, 3, dtype=torch.float) 
         pc_min = torch.tensor(self.pc_range[:3], device=xyz.device)
@@ -24,8 +22,8 @@ class GaussianLifter(nn.Module):
         means = pc_min + (pc_max - pc_min) * xyz
         
         
-        scales = torch.rand_like(xyz)    
-        
+        scales = torch.rand_like(xyz) 
+           
         rots = torch.zeros(num_anchor, 4, dtype=torch.float)
         rots[:, 0] = 1
         

@@ -3,6 +3,9 @@ import numpy as np
 from typing import List, Optional
 from einops import rearrange,repeat
 
+# from mmcv.ops import MultiScaleDeformableAttention
+from mmcv.ops.multi_scale_deform_attn import multi_scale_deformable_attn_pytorch
+
 from mmdet3d.registry import MODELS
 from mmengine.model import BaseModule
 
@@ -112,6 +115,9 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
         
         return key_points # todo (1 25600 9 3)
 
+    
+    
+
 @MODELS.register_module()
 class DeformableFeatureAggregation(BaseModule):
     def __init__(
@@ -185,7 +191,7 @@ class DeformableFeatureAggregation(BaseModule):
         # todo 铺平后的多尺度特征图
         if self.use_deformable_func:
             feature_maps = list(flatten_multi_scale_feats(feature_maps))
-            feature_maps[0] = rearrange(feature_maps[0],"(bs v) n c -> bs v n c",v=n)
+            feature_maps[0] = rearrange(feature_maps[0],"(bs v) n c -> bs v n c",v=n) # todo (1 6 38752 128) 
         #?--------------------------------------------#
         #? 2.计算采样权重：把query的内容特征和位置特征相加，通过线性层预测每一个采样点权重       
         weights, weight_mask = self._get_weights(instance_feature, anchor_embed, projection_mat) # todo (1 25600 6 4 9 4) (1 25600 6 4 9 4)
@@ -194,7 +200,7 @@ class DeformableFeatureAggregation(BaseModule):
         #? 3.3D到2D的投影映射
         points_2d, mask = project_points(key_points, projection_mat, featmap_wh)
         _, _, num_anchor, num_pts, _ = points_2d.shape
-        points_2d = points_2d.permute(0,2,3,1,4).reshape(bs, num_anchor * num_pts, n, 2) # todo (1 230400 6 2)
+        points_2d = points_2d.permute(0,2,3,1,4).reshape(bs, num_anchor * num_pts, n, 2) # todo (1 230400 6 2) 
         mask = mask.permute(0, 2, 3, 1) # todo (1 25600 9 6)
         
         if self.use_deformable_func:
@@ -211,13 +217,30 @@ class DeformableFeatureAggregation(BaseModule):
         weights[~mask] = - torch.inf
         weights[all_miss] = 0.
         weights = weights.flatten(2, 4).softmax(dim=-2).reshape(bs,num_anchor * self.num_pts,self.num_cams,self.num_levels,self.num_groups) # todo (1 25600 9 6 4 4)
-        weights = weights * (1 - all_miss.flatten(1, 2).float())
+        weights = weights * (1 - all_miss.flatten(1, 2).float()) # todo (1 230400 6 4 4)
+        
+        #?--------------------------------------------#
+        '''
+        # todo 计算量超过了DAF.forward()
+        mc_ms_feature_maps = feature_maps[0] # todo (1 6 38752 128)
+        spatial_shape = feature_maps[1] # todo (4 2)
+        scale_start_index = feature_maps[2] # todo (4)
+        weights = weights # todo (1 115200 6 4 4)
+        points_2d = points_2d # todo (1 115200 6 2)
+        bs, v, n, c = mc_ms_feature_maps.shape
+        num_heads = 8
+        value = rearrange(mc_ms_feature_maps, 'b v n (h d) -> (b v) n h d', h=num_heads) # todo (6 38752 8 16)
+        locations = rearrange(points_2d, 'b q v xy -> (b v) q 1 1 1 xy').expand(-1, -1, 8, 4, 4, -1) # todo (6 230400 8 4 4 2)
+        attn_weights = rearrange(weights, 'b q v l p -> (b v) q 1 l p').expand(-1, -1, 8, -1, -1) # todo (6 230400 8 4 4)
+        output = multi_scale_deformable_attn_pytorch(value, spatial_shape, locations, attn_weights)        
+        '''
         features_next = DAF.apply(*feature_maps, points_2d, weights).reshape(bs, num_anchor, self.num_pts, self.embed_dims)  # todo (1 25600 9 128)  
         
         features = features_next # todo (1 25600 9 128)
         
         features = features.sum(dim=2) # todo (1 25600 128)
         output = self.proj_drop(self.output_proj(features)) # todo (1 25600 128)           
+        
         if self.residual_mode == "add":
             output = output + instance_feature
         elif self.residual_mode == "cat":

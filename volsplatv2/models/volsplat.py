@@ -42,7 +42,7 @@ class VolSplat(BaseModel):
                 neck,
                 
                 model_url,
-
+                top_k,
                 foreground_head,
                 lifter,
                 encoder,
@@ -83,7 +83,7 @@ class VolSplat(BaseModel):
         self.backbone.is_init = True
         self.patch_size = self.backbone.patch_size
         
-        
+        self.top_k = top_k
         self.neck = MODELS.build(neck)
         
         self.foreground_head = MODELS.build(foreground_head)
@@ -232,21 +232,26 @@ class VolSplat(BaseModel):
         
         # todo ----------------------------------------------------------#
         # todo 1. 体素化聚合像素特征，并筛选预测概率最大的前top_k个实例作为查询先验
-        topk_anchor, topk_instance_feature = self.select_topk_instance(intrinsics,extrinsics,
-                                                                       img_feats,depth,
-                                                                       img_aug_mat,
-                                                                       top_k=25600)
+        if self.top_k > 0:
+            topk_anchor, topk_instance_feature = self.select_topk_instance(intrinsics,extrinsics,
+                                                                        img_feats,depth,
+                                                                        img_aug_mat,
+                                                                        top_k=self.top_k)
+        
         # todo 1.2 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
         anchor, instance_feature = self.lifter(bs)
         
-        anchor = torch.cat([topk_anchor,anchor],dim=1)
-        instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
+        if self.top_k > 0:
+            anchor = torch.cat([topk_anchor,anchor],dim=1)
+            instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
+        
         '''
         means = anchor[0][...,:3] # (num,c)
         import numpy as np
         # 保存为 numpy
-        np.save(f"means3d_total.npy", means.detach().cpu().numpy())
+        np.save(f"means3d_total_2.npy", means.detach().cpu().numpy())
         '''      
+        
         # todo ----------------------------------------------------------#
         # todo 2. 可变形多尺度特征聚合, 预测高斯点属性
         lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
@@ -255,7 +260,7 @@ class VolSplat(BaseModel):
         featmap_wh = img_aug_mat.new_tensor([f_w,f_h])
         featmap_wh = repeat(featmap_wh,"wh -> bs n wh",bs=bs,n=n) # todo (1 6 2)        
         
-        predictions = self.encoder(anchor,instance_feature,feats,projection_mat,featmap_wh)
+        predictions = self.encoder(anchor, instance_feature,feats, projection_mat, featmap_wh)
 
         if mode == 'predict':
             return self.decoder(predictions[-1],data,mode=mode)
@@ -283,14 +288,16 @@ class VolSplat(BaseModel):
                 normal=False,
                 img_aug_mat=img_aug_mat,
                 )          
-        anchors_pred = self.foreground_head(sparse_input) # ((b n),32)
+        anchors_pred = self.foreground_head(sparse_input) # todo ((b n),18)
         batched_anchors, valid_mask = self._sparse_to_batched(anchors_pred.F, anchors_pred.C, bs, return_mask=True)  # [b, 1, N_max, dim], [b, 1, N_max]
+        
         batched_points = self._sparse_to_batched(aggregated_points, anchors_pred.C, bs) # (b 1 N_max,3)  
         batched_feats = self._sparse_to_batched(sparse_input.F, anchors_pred.C, bs)  # (b 1 N_max,128) 
-        probs_params = batched_anchors[...,14:] # [14:32]: probs (1 1 N_max 18)
-        B, _, N, num_classes = probs_params.shape
         
-        probs_softmax = F.softmax(probs_params, dim=-1)
+        batched_probs = batched_anchors[...,14:]
+        B, _, N, num_classes = batched_probs.shape
+        
+        probs_softmax = F.softmax(batched_probs, dim=-1)
         fg_probs, _ = probs_softmax[..., :num_classes-1].max(dim=-1)
         # fg_probs = 1 - probs_softmax[..., -1] # (b 1 n)
         top_k = min(top_k, N)
@@ -315,8 +322,8 @@ class VolSplat(BaseModel):
         offset_xyz = offset_xyz.sigmoid()
         offset_world = (offset_xyz - 0.5) *self.voxel_resolution*3
         means = selected_points + offset_world
-        
         anchor = torch.cat([means, selected_anchors[...,3:]],dim=2)
+        
         instance_feature = selected_feats                
 
         return anchor, instance_feature

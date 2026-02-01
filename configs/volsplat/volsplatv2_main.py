@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis25'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis27'
 
-# custom_hooks = [
-#     dict(type='DumpResultHook',
-#          save_dir = save_dir, 
-#          save_occ=True,
-#          save_gaussian=True,    
-#         ),]  #  # 保存结果
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir, 
+         save_occ=True,
+         save_gaussian=True,    
+        ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -38,8 +38,8 @@ far = 1000.
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
 
-with_empty = False # 是否使用空高斯
-# with_empty = True # 是否使用空高斯
+# with_empty = False # 是否使用空高斯
+with_empty = True # 是否使用空高斯
 
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
@@ -50,8 +50,10 @@ out_channels += num_class
 # voxel_resolution = 0.5
 voxel_resolution = 0.2
 
-gaussian_scale_min = 0.1
-gaussian_scale_max = 0.5
+# gaussian_scale_min = 0.1
+# gaussian_scale_max = 0.5
+gaussian_scale_min = 0.08
+gaussian_scale_max = 0.64
 
 use_checkpoint = True
 _dim_ = 128
@@ -105,10 +107,14 @@ model = dict(
         out_channels=_dim_,
         norm_cfg=dict(type='LN2d')),    
     
+    top_k = 25600,
+    # top_k = 0,
+    
     foreground_head=dict(
         type='SparseGaussianHead',
         in_channels=_dim_, 
-        out_channels=out_channels),     
+        out_channels=out_channels,
+        ),     
     
     lifter = dict(
         type='GaussianLifter',
@@ -116,7 +122,6 @@ model = dict(
         embed_dims=_dim_,
         semantic_dim=num_class,
         pc_range=vol_range,
-        scale_range=[gaussian_scale_min,gaussian_scale_max],
     ),
     
     encoder = dict(
@@ -126,6 +131,7 @@ model = dict(
             type='MLP',
             input_dim=out_channels, 
             output_dim=_dim_),      
+        
         norm_layer=dict(type="LN", normalized_shape=_dim_),
         ffn=dict(
             type="AsymmetricFFN",
@@ -146,7 +152,7 @@ model = dict(
                 kps_generator=dict(
                     type="SparseGaussian3DKeyPointsGenerator",
                     embed_dims=_dim_,
-                    num_learnable_pts=2,
+                    num_learnable_pts=2, # todo 定义了9个采样点
                     fix_scale=[
                         [0, 0, 0],
                         [0.45, 0, 0],
@@ -248,13 +254,17 @@ val_num_workers=num_workers
 
 # data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
 # anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
+# logger_interval = 100
 # train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
 # val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
+
+
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+logger_interval = 1
+train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
 val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
@@ -262,7 +272,7 @@ val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录
 # depth_path = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/mini'  # mini metric 3d depth
 occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/samples/" # all
-depth_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/samples_dptm_small" # all 使用omni-scene提供的深度信息
+depth_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_metric3d/samples_dptm_small" # 使用omni-scene提供的深度信息
     
 dataset_type = 'NuScenesSurroundOccDataset'
 
@@ -431,13 +441,13 @@ param_scheduler = [
 
 default_hooks = dict(
     logger=dict(type='LoggerHook', 
-                interval=1,
+                interval=logger_interval,
                 ), # todo 管理打印间隔
     checkpoint=dict(type='CheckpointHook', 
                     interval=1,           # 含义：保存频率 默认单位通常是 Epoch（轮次）。
                     max_keep_ckpts=1,     # 最大保留数量（不包含“最优”权重）。
-                    save_best='miou',     # 开启“最优模型”保存机制。
-                    rule='greater',       # 越大越好
+                    # save_best='miou',     # 开启“最优模型”保存机制。
+                    # rule='greater',       # 越大越好
                     # published_keys=['miou','iou', 'psnr', 'ssim', 'lpips']
                     )
 )

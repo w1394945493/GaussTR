@@ -47,10 +47,9 @@ class VolSplat(BaseModel):
                 lifter,
                 encoder,
                 
-                
-                sparse_unet,
-                sparse_gs,
-                gaussian_adapter,
+                # sparse_unet,
+                # sparse_gs,
+                # gaussian_adapter,
                 decoder,
 
                 use_checkpoint,
@@ -90,9 +89,11 @@ class VolSplat(BaseModel):
         self.lifter = MODELS.build(lifter)
         self.encoder = MODELS.build(encoder)
         
-        self.sparse_unet = MODELS.build(sparse_unet)
-        self.gaussian_head = MODELS.build(sparse_gs)
-        self.gaussian_adapter = MODELS.build(gaussian_adapter)
+        # self.sparse_unet = MODELS.build(sparse_unet)
+        # self.gaussian_head = MODELS.build(sparse_gs)
+        # self.gaussian_adapter = MODELS.build(gaussian_adapter)
+        
+        
         self.voxel_resolution = voxel_resolution
         
         self.decoder = MODELS.build(decoder)
@@ -249,7 +250,7 @@ class VolSplat(BaseModel):
         means = anchor[0][...,:3] # (num,c)
         import numpy as np
         # 保存为 numpy
-        np.save(f"means3d_total_2.npy", means.detach().cpu().numpy())
+        np.save(f"means3d_total_3.npy", means.detach().cpu().numpy())
         '''      
         
         # todo ----------------------------------------------------------#
@@ -288,11 +289,21 @@ class VolSplat(BaseModel):
                 normal=False,
                 img_aug_mat=img_aug_mat,
                 )          
-        anchors_pred = self.foreground_head(sparse_input) # todo ((b n),18)
-        batched_anchors, valid_mask = self._sparse_to_batched(anchors_pred.F, anchors_pred.C, bs, return_mask=True)  # [b, 1, N_max, dim], [b, 1, N_max]
         
-        batched_points = self._sparse_to_batched(aggregated_points, anchors_pred.C, bs) # (b 1 N_max,3)  
-        batched_feats = self._sparse_to_batched(sparse_input.F, anchors_pred.C, bs)  # (b 1 N_max,128) 
+        
+        anchors_pred = self.foreground_head(sparse_input) # todo ((b n),18)
+        
+        # batched_anchors, valid_mask = self._sparse_to_batched(anchors_pred.F, anchors_pred.C, bs, return_mask=True)  # [b, 1, N_max, dim], [b, 1, N_max]
+        
+        # batched_points = self._sparse_to_batched(aggregated_points, anchors_pred.C, bs) # (b 1 N_max,3)  
+        # batched_feats = self._sparse_to_batched(sparse_input.F, anchors_pred.C, bs)  # (b 1 N_max,128) 
+        batched_anchors, valid_mask = self._sparse_to_batched(anchors_pred.features, anchors_pred.indices, bs, return_mask=True)  # [b, 1, N_max, dim], [b, 1, N_max]
+        
+        batched_points = self._sparse_to_batched(aggregated_points, anchors_pred.indices, bs) # (b 1 N_max,3)  
+        batched_feats = self._sparse_to_batched(sparse_input.features, anchors_pred.indices, bs)  # (b 1 N_max,128) 
+        
+        
+        
         
         batched_probs = batched_anchors[...,14:]
         B, _, N, num_classes = batched_probs.shape
@@ -330,102 +341,102 @@ class VolSplat(BaseModel):
     
 
 
-    def voxel_gaussian(self,
-                       bs, n,
-                       input_size,
-                       feats,
-                       data_samples):
-        input_h,input_w = input_size
+    # def voxel_gaussian(self,
+    #                    bs, n,
+    #                    input_size,
+    #                    feats,
+    #                    data_samples):
+    #     input_h,input_w = input_size
         
-        img_feats = feats[0]  # (bv c h w)  
+    #     img_feats = feats[0]  # (bv c h w)  
 
         
-        depth = data_samples["depth"]  # (b v h w)
-        # todo ----------------------------------------#
-        # todo 将深度图缩放和2D特征图尺寸一致
-        f_h, f_w = img_feats.shape[-2:] 
-        d_h, d_w = depth.shape[-2:]    
-        if (d_w != f_w) or (d_h != f_h):
-            depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
+    #     depth = data_samples["depth"]  # (b v h w)
+    #     # todo ----------------------------------------#
+    #     # todo 将深度图缩放和2D特征图尺寸一致
+    #     f_h, f_w = img_feats.shape[-2:] 
+    #     d_h, d_w = depth.shape[-2:]    
+    #     if (d_w != f_w) or (d_h != f_h):
+    #         depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
             
-        # todo ----------------------------------------#
-        # todo 将2D图像特征投影到3D体素空间
-        img_aug_mat = data_samples['img_aug_mat']
-        intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) # todo 内参(相对于原图像)
-        extrinsics = data_samples['cam2lidar'] # todo          
+    #     # todo ----------------------------------------#
+    #     # todo 将2D图像特征投影到3D体素空间
+    #     img_aug_mat = data_samples['img_aug_mat']
+    #     intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) # todo 内参(相对于原图像)
+    #     extrinsics = data_samples['cam2lidar'] # todo          
         
         
-        # todo 这里用input_w, input_h没有问题，img_aug_mat是原图像到inputs的变换矩阵
-        resize = torch.diag(torch.tensor([f_w/input_w, f_h/input_h],
-                                        dtype=img_aug_mat.dtype,device = img_aug_mat.device))
+    #     # todo 这里用input_w, input_h没有问题，img_aug_mat是原图像到inputs的变换矩阵
+    #     resize = torch.diag(torch.tensor([f_w/input_w, f_h/input_h],
+    #                                     dtype=img_aug_mat.dtype,device = img_aug_mat.device))
         
         
-        mat = torch.eye(4).to(img_aug_mat.device)            
-        mat[:2,:2] = resize
-        mat = repeat(mat,"i j -> () () i j")
-        img_aug_mat = mat @ img_aug_mat        
+    #     mat = torch.eye(4).to(img_aug_mat.device)            
+    #     mat[:2,:2] = resize
+    #     mat = repeat(mat,"i j -> () () i j")
+    #     img_aug_mat = mat @ img_aug_mat        
         
-        sparse_input, aggregated_points, counts = project_features_to_me(
-                intrinsics, # (b v 3 3)
-                extrinsics, # (b v 4 4)  #! 外参：确定是cam2lidar还是cam2ego               
-                img_feats,  # (bv c h w)
-                depth=depth,
-                # voxel_resolution=self.refine_voxel_resolution,
-                voxel_resolution=self.voxel_resolution,
-                b=bs, v=n,
-                normal=False,
-                img_aug_mat=img_aug_mat,
-                ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
+    #     sparse_input, aggregated_points, counts = project_features_to_me(
+    #             intrinsics, # (b v 3 3)
+    #             extrinsics, # (b v 4 4)  #! 外参：确定是cam2lidar还是cam2ego               
+    #             img_feats,  # (bv c h w)
+    #             depth=depth,
+    #             # voxel_resolution=self.refine_voxel_resolution,
+    #             voxel_resolution=self.voxel_resolution,
+    #             b=bs, v=n,
+    #             normal=False,
+    #             img_aug_mat=img_aug_mat,
+    #             ) # sparse_input.C: (n,4) sparse_input.F: (n,128)         
         
-        # todo -----------------------------------------------------#
-        # todo 3D unet网络 进行细化
-        sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
-        # todo 残差连接
-        if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
-            # Create new feature tensor
-            new_features = sparse_out.F + sparse_input.F # todo 见论文 3(C).1) Feature Refinement 的 公式(8)
+    #     # todo -----------------------------------------------------#
+    #     # todo 3D unet网络 进行细化
+    #     sparse_out = self.sparse_unet(sparse_input)   # 3D Sparse UNet
+    #     # todo 残差连接
+    #     if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
+    #         # Create new feature tensor
+    #         new_features = sparse_out.F + sparse_input.F # todo 见论文 3(C).1) Feature Refinement 的 公式(8)
 
-            sparse_out_with_residual = ME.SparseTensor(
-                features=new_features,
-                coordinate_map_key=sparse_out.coordinate_map_key,
-                coordinate_manager=sparse_out.coordinate_manager
-            )
-        else:
-            # Handle coordinate mismatch
-            print("Warning: Input and output coordinates inconsistent, skipping residual connection")
-            sparse_out_with_residual = sparse_out        
+    #         sparse_out_with_residual = ME.SparseTensor(
+    #             features=new_features,
+    #             coordinate_map_key=sparse_out.coordinate_map_key,
+    #             coordinate_manager=sparse_out.coordinate_manager
+    #         )
+    #     else:
+    #         # Handle coordinate mismatch
+    #         print("Warning: Input and output coordinates inconsistent, skipping residual connection")
+    #         sparse_out_with_residual = sparse_out        
         
-        # todo ------------------------------------------------------------------------#
-        # todo 高斯参数预测
-        gaussians = self.gaussian_head(sparse_out_with_residual)
-        del sparse_out_with_residual,sparse_out,sparse_input,new_features
+    #     # todo ------------------------------------------------------------------------#
+    #     # todo 高斯参数预测
+    #     gaussians = self.gaussian_head(sparse_out_with_residual)
+    #     del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
 
-        # todo ----------------------#
-        # todo  这里进行了逐batch处理
-        gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
-        batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
+    #     # todo ----------------------#
+    #     # todo  这里进行了逐batch处理
+    #     gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
+    #     batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
 
-        opacity_raw = gaussian_params[..., :1]  # [b, 1, N_max, 1]
-        opacity_raw = torch.where(
-            valid_mask.unsqueeze(-1),  # [b, 1, N_max, 1]
-            opacity_raw,
-            torch.full_like(opacity_raw, -20.0)  # sigmoid(-20) ≈ 2e-9，
-        ) # todo 这里为了能保证多bs处理，将无效特征的透明度用-20填充了
-        opacities = opacity_raw.sigmoid().unsqueeze(-1)  #[b, 1, N_max, 1, 1]
-        raw_gaussians = gaussian_params[..., 1:]    #[b, 1, N_max, 37]
-        raw_gaussians = rearrange(raw_gaussians,"... (srf c) -> ... srf c",srf=1,)
+    #     opacity_raw = gaussian_params[..., :1]  # [b, 1, N_max, 1]
+    #     opacity_raw = torch.where(
+    #         valid_mask.unsqueeze(-1),  # [b, 1, N_max, 1]
+    #         opacity_raw,
+    #         torch.full_like(opacity_raw, -20.0)  # sigmoid(-20) ≈ 2e-9，
+    #     ) # todo 这里为了能保证多bs处理，将无效特征的透明度用-20填充了
+    #     opacities = opacity_raw.sigmoid().unsqueeze(-1)  #[b, 1, N_max, 1, 1]
+    #     raw_gaussians = gaussian_params[..., 1:]    #[b, 1, N_max, 37]
+    #     raw_gaussians = rearrange(raw_gaussians,"... (srf c) -> ... srf c",srf=1,)
         
-        # todo 预测高斯后处理
-        gaussians = self.gaussian_adapter.forward(
-            opacities = opacities,   # (b 1 n 1 1)
-            raw_gaussians = (raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
-            points = batched_points, # (b 1 n 3)
-            voxel_resolution = self.voxel_resolution, #! 体素网格尺寸 
-        )        
+    #     # todo 预测高斯后处理
+    #     gaussians = self.gaussian_adapter.forward(
+    #         opacities = opacities,   # (b 1 n 1 1)
+    #         raw_gaussians = (raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
+    #         points = batched_points, # (b 1 n 3)
+    #         voxel_resolution = self.voxel_resolution, #! 体素网格尺寸 
+    #     )        
         
         
-        return gaussians
+    #     return gaussians
     
     
     

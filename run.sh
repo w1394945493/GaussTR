@@ -228,7 +228,7 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 export CUDA_VISIBLE_DEVICES=6
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train6 \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train5 \
     --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train7/epoch_3.pth
 
 # todo 评估

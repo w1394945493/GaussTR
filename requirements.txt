@@ -19,3 +19,5 @@ xformers == 0.0.23 --index-url https://download.pytorch.org/whl/cu118
 numpy == 1.25.2
 supervision
 setproctitle
+
+spconv-cu118

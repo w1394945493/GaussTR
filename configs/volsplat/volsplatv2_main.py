@@ -188,14 +188,14 @@ model = dict(
     
 
     
-    sparse_unet=dict(
-        type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互
-        in_channels=_dim_, # 128
-        out_channels=_dim_, # 128
-        num_blocks=3,
-        use_attention=False, 
-        # use_attention=True, # 是否引入一个注意力层   
-        ), 
+    # sparse_unet=dict(
+    #     type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互
+    #     in_channels=_dim_, # 128
+    #     out_channels=_dim_, # 128
+    #     num_blocks=3,
+    #     use_attention=False, 
+    #     # use_attention=True, # 是否引入一个注意力层   
+    #     ), 
     
     # sparse_unet=dict(
     #     type='FullResSparseUNet',
@@ -204,19 +204,19 @@ model = dict(
     #     num_blocks=3,
     # ),
     
-    sparse_gs=dict(
-        type='SparseGaussianHead',
-        in_channels=_dim_, 
-        out_channels=out_channels),       
+    # sparse_gs=dict(
+    #     type='SparseGaussianHead',
+    #     in_channels=_dim_, 
+    #     out_channels=out_channels),       
     
     
-    gaussian_adapter=dict(
-        type='GaussianAdapter_depth',
-        gaussian_scale_min = gaussian_scale_min,
-        gaussian_scale_max = gaussian_scale_max,        
+    # gaussian_adapter=dict(
+    #     type='GaussianAdapter_depth',
+    #     gaussian_scale_min = gaussian_scale_min,
+    #     gaussian_scale_max = gaussian_scale_max,        
         
-        sh_degree=sh_degree,
-    ),
+    #     sh_degree=sh_degree,
+    # ),
     
     decoder = dict(
         type='GaussianDecoder',
@@ -263,8 +263,8 @@ val_num_workers=num_workers
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
 logger_interval = 1
-train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
 val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 

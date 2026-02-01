@@ -1,2 +1,2 @@
-from .sparse_net import SparseUNetWithAttention,SparseGaussianHead
-from .gaussian_adapter_depth import GaussianAdapter_depth
+# from .sparse_net import SparseUNetWithAttention,SparseGaussianHead
+# from .gaussian_adapter_depth import GaussianAdapter_depth

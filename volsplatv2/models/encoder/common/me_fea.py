@@ -3,9 +3,9 @@ from einops import rearrange, repeat
 from ....geometry.projection import get_world_rays
 from ....geometry.projection import sample_image_grid
 import torch.nn.functional as F
-import MinkowskiEngine as ME
 
-
+# import MinkowskiEngine as ME
+import spconv.pytorch as spconv 
 
 def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v,
                            normal=False, # 是否归一化
@@ -113,11 +113,20 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     #?--------------------------------------------------------------------------------------------------#
     #? 学习一下MinkowskiEngine的使用：将像素特征 -> 体素空间中的特征，并使用ME进行后续处理
     # Use correct coordinate format: batch index + quantized coordinates
-    sparse_tensor = ME.SparseTensor(
-        features=aggregated_feats, # todo 非空体素在3D空间的位置
-        coordinates=unique_coords.int(), # todo 每个坐标对应的向量信息 (N,4) -> [batch_index, x, y, z] bs + 体素点在体素网格中的索引
-        tensor_stride=1,
-        device=device
+    # sparse_tensor = ME.SparseTensor(
+    #     features=aggregated_feats, # todo 非空体素在3D空间的位置
+    #     coordinates=unique_coords.int(), # todo 每个坐标对应的向量信息 (N,4) -> [batch_index, x, y, z] bs + 体素点在体素网格中的索引
+    #     tensor_stride=1,
+    #     device=device
+    # )
+    
+    spatial_shape = unique_coords[:, 1:].max(0)[0].tolist()
+    spatial_shape = [s + 1 for s in spatial_shape]
+    sparse_tensor = spconv.SparseConvTensor(
+        features=aggregated_feats,
+        indices=unique_coords.int(),
+        spatial_shape=spatial_shape,
+        batch_size=b,
     )
 
     return sparse_tensor, aggregated_points, counts

@@ -16,7 +16,8 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from . import rasterize_gaussians, render_cuda
+# from . import rasterize_gaussians, render_cuda
+from . import rasterize_gaussians
 from ...loss import CE_ssc_loss, lovasz_softmax
 from ..encoder.common.gaussians import build_covariance       
 @MODELS.register_module()
@@ -225,35 +226,7 @@ class GaussianDecoder(BaseModule):
                          ):
         bs, n = extrinsics.shape[:2]
         h, w = image_shape
-        if self.renderer_type == "vanilla":
-
-            near = repeat(torch.tensor([self.near],device=device),"1 -> b v",b=bs,v=n)
-            far = repeat(torch.tensor([self.far],device=device),"1 -> b v",b=bs,v=n)
-            
-            colors, rendered_depth = render_cuda(
-                extrinsics=rearrange(extrinsics, "b v i j -> (b v) i j"),
-                intrinsics=rearrange(intrinsics, "b v i j -> (b v) i j"),
-                image_shape = (h,w),
-                near=rearrange(near, "b v -> (b v)"),
-                far=rearrange(far, "b v -> (b v)"),
-                background_color=repeat(self.background_color, "c -> (b v) c", b=bs, v=n),
-
-                gaussian_means=repeat(means3d, "b g xyz -> (b v) g xyz", v=n),
-                gaussian_sh_coefficients=
-                    repeat(harmonics, "b g c d_sh -> (b v) g c d_sh", v=n) if self.use_sh else repeat(harmonics, "b g rgb -> (b v) g rgb ()", v=n),
-                gaussian_opacities=repeat(opacities, "b g -> (b v) g", v=n),
-
-                gaussian_scales=repeat(scales, "b g c -> (b v) g c", v=n) if covariances is None else None,
-                gaussian_rotations=repeat(rotations, "b g c -> (b v) g c", v=n) if covariances is None else None,
-
-                gaussian_covariances=repeat(covariances, "b g i j -> (b v) g i j", v=n) if covariances is not None else None,
-                scale_invariant = False,
-                use_sh= self.use_sh,
-            )
-            colors = rearrange(colors,'(bs n) c h w -> bs n c h w',bs=bs) # (b v c h w)
-            rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs).squeeze(2) # (b v h w)
-
-        else:
+        if self.renderer_type == "gsplat":
             colors, rendered_depth = rasterize_gaussians(
                 extrinsics=extrinsics,
                 intrinsics=intrinsics,
@@ -271,6 +244,36 @@ class GaussianDecoder(BaseModule):
 
                 render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
                 channel_chunk=32)
+        # elif self.renderer_type == "vanilla":
+
+        #     near = repeat(torch.tensor([self.near],device=device),"1 -> b v",b=bs,v=n)
+        #     far = repeat(torch.tensor([self.far],device=device),"1 -> b v",b=bs,v=n)
+            
+        #     colors, rendered_depth = render_cuda(
+        #         extrinsics=rearrange(extrinsics, "b v i j -> (b v) i j"),
+        #         intrinsics=rearrange(intrinsics, "b v i j -> (b v) i j"),
+        #         image_shape = (h,w),
+        #         near=rearrange(near, "b v -> (b v)"),
+        #         far=rearrange(far, "b v -> (b v)"),
+        #         background_color=repeat(self.background_color, "c -> (b v) c", b=bs, v=n),
+
+        #         gaussian_means=repeat(means3d, "b g xyz -> (b v) g xyz", v=n),
+        #         gaussian_sh_coefficients=
+        #             repeat(harmonics, "b g c d_sh -> (b v) g c d_sh", v=n) if self.use_sh else repeat(harmonics, "b g rgb -> (b v) g rgb ()", v=n),
+        #         gaussian_opacities=repeat(opacities, "b g -> (b v) g", v=n),
+
+        #         gaussian_scales=repeat(scales, "b g c -> (b v) g c", v=n) if covariances is None else None,
+        #         gaussian_rotations=repeat(rotations, "b g c -> (b v) g c", v=n) if covariances is None else None,
+
+        #         gaussian_covariances=repeat(covariances, "b g i j -> (b v) g i j", v=n) if covariances is not None else None,
+        #         scale_invariant = False,
+        #         use_sh= self.use_sh,
+        #     )
+        #     colors = rearrange(colors,'(bs n) c h w -> bs n c h w',bs=bs) # (b v c h w)
+        #     rendered_depth = rearrange(rendered_depth,'(bs n) c h w -> bs n c h w',bs=bs).squeeze(2) # (b v h w)        
+        else:
+            raise ValueError(f"Unsupported renderer type: {self.renderer_type}.")
+            
         return colors, rendered_depth
 
     def depth_loss(self, pred, target, criterion='silog_l1'):

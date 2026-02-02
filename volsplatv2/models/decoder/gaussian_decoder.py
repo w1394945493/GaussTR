@@ -97,13 +97,14 @@ class GaussianDecoder(BaseModule):
             
             # self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0)
             # self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float))
-            self.empty_scalar = nn.Parameter(torch.full((1, num_empty), 1.0, dtype=torch.float)) # (1,N)
-            
+            # self.empty_scalar = nn.Parameter(torch.full((1, num_empty), 1.0, dtype=torch.float)) # (1,N)
+            self.register_buffer('empty_scalar', torch.full((1, num_empty), 10.0, dtype=torch.float))
+
             # self.register_buffer('empty_opa', torch.ones(num_empty)[None, :]) # (1, N_empty)        
             init_opa_val = 0.1
             raw_val = torch.log(torch.tensor(init_opa_val / (1 - init_opa_val)))
-            self.empty_opa = nn.Parameter(torch.full((1, num_empty), raw_val, dtype=torch.float))    
-            # self.register_buffer('empty_opa', torch.full((1, num_empty), raw_val, dtype=torch.float))
+            # self.empty_opa = nn.Parameter(torch.full((1, num_empty), raw_val, dtype=torch.float))    
+            self.register_buffer('empty_opa', torch.full((1, num_empty), raw_val, dtype=torch.float))
 
         self.with_empty = with_empty
         self.class_weights = torch.tensor(manual_class_weight)

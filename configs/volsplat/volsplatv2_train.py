@@ -118,7 +118,7 @@ model = dict(
     
     lifter = dict(
         type='GaussianLifter',
-        num_anchor=6400,
+        num_anchor=12800,
         embed_dims=_dim_,
         semantic_dim=num_class,
         pc_range=vol_range,
@@ -243,30 +243,40 @@ model = dict(
 
 # todo ----------------------------------#
 # todo 训练：
-batch_size=1
-num_workers=4
+# batch_size=1
+# batch_size=4
+# num_workers=4
+
+
+
+data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/' 
+anno_root = '/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-trainval/' # todo 全部训练
+logger_interval = 20
+val_interval=1
+batch_size=4
+num_workers=8
+train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+
+
+
+# data_root = '/c20250502/wangyushen/Datasets/nuscenes' # 数据集根目录
+# anno_root = "/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-mini/" # 标注根目录
+# logger_interval = 1
+# val_interval=1
+# batch_size=1
+# num_workers=4
+# # train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+
 
 train_batch_size=batch_size
 train_num_workers=num_workers
 
 val_batch_size=batch_size
 val_num_workers=num_workers
-
-# data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/' 
-# anno_root = '/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-trainval/' # todo 全部训练
-# logger_interval = 100
-# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
-
-
-
-data_root = '/c20250502/wangyushen/Datasets/nuscenes' # 数据集根目录
-anno_root = "/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-mini/" # 标注根目录
-logger_interval = 1
-# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 occ_path = "/c20250502/wangyushen/Datasets/surroundocc/samples/" # all
 depth_path = "/c20250502/wangyushen/Datasets/dataset_omniscene/samples_dptm_small" # 使用omni-scene提供的深度信息
@@ -382,7 +392,7 @@ test_evaluator = val_evaluator
 # todo 评估间隔
 train_cfg = dict(type='EpochBasedTrainLoop', 
                  max_epochs=24, 
-                 val_interval=1, # todo 评估间隔
+                 val_interval=val_interval, # todo 评估间隔
                 #  val_interval=2,
                  )
 val_cfg = dict(type='ValLoop') # todo
@@ -459,7 +469,7 @@ log_processor = dict(
 # ]
 # visualizer = dict(type='Visualizer',vis_backends=vis_backends,name='visualizer')
 
-# model_wrapper_cfg = dict(
-#     type='MMDistributedDataParallel',
-#     find_unused_parameters=True  # todo 多卡训练时设置，允许模型中有不参与计算的参数
-# )
+model_wrapper_cfg = dict(
+    type='MMDistributedDataParallel',
+    find_unused_parameters=True  # todo 多卡训练时设置，允许模型中有不参与计算的参数
+)

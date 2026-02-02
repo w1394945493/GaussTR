@@ -52,6 +52,13 @@ python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
     --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train \
     --resume /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_16.pth
 
+
+PYTHONPATH=. torchrun --nproc_per_node=2 \
+    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
+    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_train.py \
+    --launcher pytorch \
+    --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train
+
 # todo 评估
 export CUDA_VISIBLE_DEVICES=6
 python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py \

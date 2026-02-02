@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis27'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis28'
 
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir, 
-         save_occ=True,
-         save_gaussian=True,    
-        ),]  #  # 保存结果
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir, 
+#          save_occ=True,
+#          save_gaussian=True,    
+#         ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -152,16 +152,18 @@ model = dict(
                 kps_generator=dict(
                     type="SparseGaussian3DKeyPointsGenerator",
                     embed_dims=_dim_,
-                    num_learnable_pts=2, # todo 定义了9个采样点
-                    fix_scale=[
-                        [0, 0, 0],
-                        [0.45, 0, 0],
-                        [-0.45, 0, 0],
-                        [0, 0.45, 0],
-                        [0, -0.45, 0],
-                        [0, 0, 0.45],
-                        [0, 0, -0.45],
-                    ],
+                    num_learnable_pts=4, # todo 可学习尺寸采样点数
+                    learnable_fixed_scale=1,
+                    fix_scale=None, # todo 固定尺寸采样点数：若为None，则为1
+                    # fix_scale=[
+                    #     [0, 0, 0],
+                    #     [0.45, 0, 0],
+                    #     [-0.45, 0, 0],
+                    #     [0, 0.45, 0],
+                    #     [0, -0.45, 0],
+                    #     [0, 0, 0.45],
+                    #     [0, 0, -0.45],
+                    # ],
                     pc_range=vol_range,
                     scale_range=[gaussian_scale_min,gaussian_scale_max],
                 ),
@@ -185,39 +187,6 @@ model = dict(
                     
     ),
     
-    
-
-    
-    # sparse_unet=dict(
-    #     type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互
-    #     in_channels=_dim_, # 128
-    #     out_channels=_dim_, # 128
-    #     num_blocks=3,
-    #     use_attention=False, 
-    #     # use_attention=True, # 是否引入一个注意力层   
-    #     ), 
-    
-    # sparse_unet=dict(
-    #     type='FullResSparseUNet',
-    #     in_channels=_dim_, # 128
-    #     out_channels=_dim_, # 128        
-    #     num_blocks=3,
-    # ),
-    
-    # sparse_gs=dict(
-    #     type='SparseGaussianHead',
-    #     in_channels=_dim_, 
-    #     out_channels=out_channels),       
-    
-    
-    # gaussian_adapter=dict(
-    #     type='GaussianAdapter_depth',
-    #     gaussian_scale_min = gaussian_scale_min,
-    #     gaussian_scale_max = gaussian_scale_max,        
-        
-    #     sh_degree=sh_degree,
-    # ),
-    
     decoder = dict(
         type='GaussianDecoder',
         voxelizer = dict(
@@ -237,7 +206,10 @@ model = dict(
         near = near,
         far = far,
         use_sh = use_sh,
-        renderer_type = renderer_type,        
+        renderer_type = renderer_type,
+
+        scale_range=[gaussian_scale_min,gaussian_scale_max],        
+        semantic_dim = num_class,
     )
 )
 
@@ -249,7 +221,7 @@ num_workers=4
 train_batch_size=batch_size
 train_num_workers=num_workers
 
-val_batch_size=batch_size
+val_batch_size=2
 val_num_workers=num_workers
 
 # data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
@@ -301,11 +273,14 @@ test_pipeline = [
 
 # final_dim = (112,200)
 final_dim = (448,800)
+patch_size = 14
+featmap_dim = [int(final_dim[0]/patch_size*4),int(final_dim[1]/patch_size*4)]
 # final_dim = (896,1600)
 # output_dim = (112,200)
 
 data_aug_conf = {
     "final_dim": final_dim,
+    "featmap_dim": featmap_dim,
     "bot_pct_lim": (0.0, 0.0),
     "rot_lim": (0.0, 0.0),
     "H": 900,
@@ -366,7 +341,6 @@ test_dataloader = val_dataloader
 randomness = dict(
     seed=seed,
     deterministic=False,
-    # deterministic=True, # todo 是否开启确定性计算，默认False
     # diff_rank_seed=False, # todo 默认False
 ) # todo 随机数种子设置
 
@@ -462,7 +436,7 @@ log_processor = dict(
 # ]
 # visualizer = dict(type='Visualizer',vis_backends=vis_backends,name='visualizer')
 
-# model_wrapper_cfg = dict(
-#     type='MMDistributedDataParallel',
-#     find_unused_parameters=True  # todo 多卡训练时设置，允许模型中有不参与计算的参数
-# )
+model_wrapper_cfg = dict(
+    type='MMDistributedDataParallel',
+    find_unused_parameters=True  # todo 多卡训练时设置，允许模型中有不参与计算的参数
+)

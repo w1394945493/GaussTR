@@ -64,7 +64,7 @@ class DefaultFormatBundle(object):
 class ResizeCropFlipImage(object):
     def __call__(self, results):
         aug_configs = results.get("aug_configs")
-        resize, resize_dims, crop, flip, rotate = aug_configs
+        resize, resize_dims,featmap_dims, crop, flip, rotate = aug_configs
         
         imgs = results["img"]
         N = len(imgs)
@@ -89,8 +89,28 @@ class ResizeCropFlipImage(object):
 
         results["img"] = new_imgs
         results["img_shape"] = [x.shape[:2] for x in new_imgs]
-        # todo (wys 12.30)
-        results["img_aug_mat"] = np.array(transforms).astype(np.float32)         
+        
+        # todo ----------------------------------------------------#
+        # results["img_aug_mat"] = np.array(transforms).astype(np.float32) 
+        input_w, input_h = resize_dims
+        f_w, f_h = featmap_dims
+        resize = np.diag([f_w / input_w, f_h / input_h])
+        mat = np.eye(4, dtype=np.float32) # todo (4 4)
+        mat[0, 0] = f_w / input_w
+        mat[1, 1] = f_h / input_h
+        
+        img_aug_mat = mat[None] @ np.array(transforms, dtype=np.float32) # todo (6,4,4)
+        results["img_aug_mat"] = img_aug_mat
+        
+        cam2img = results['cam2img']
+        cam2lidar = results['cam2lidar']
+        lidar2cam = np.linalg.inv(cam2lidar)
+        projection_mat = img_aug_mat @ cam2img @ lidar2cam
+        results['projection_mat'] = projection_mat
+        
+        featmap_wh = np.array([f_w, f_h], dtype=img_aug_mat.dtype)
+        featmap_wh = np.tile(featmap_wh, (N, 1))
+        results['featmap_wh'] = featmap_wh # todo (6,2)
         return results
 
     def _get_rot(self, h):
@@ -143,8 +163,10 @@ class LoadFeatMaps(ResizeCropFlipImage):
     def __call__(self, results):
         #! 加载输入图像的深度图 跟着输入图像的预处理对深度图进行处理！
         aug_configs = results.get("aug_configs")
-        resize, resize_dims, crop, flip, rotate = aug_configs
-
+        _, _, featmap_dims, crop, flip, rotate = aug_configs
+        
+        f_w, f_h = featmap_dims # todo 特征图尺寸
+        
         feats = [] 
         for i, filename in enumerate(results['filename']):
             # feat = np.load(
@@ -157,10 +179,16 @@ class LoadFeatMaps(ResizeCropFlipImage):
             cv2.imwrite('depth_0.png',feat.astype(np.uint8))
             '''
             h, w = feat.shape
+            resize = [1.0, 1.0]
+            if (w != f_w) or (h != f_h):
+                resize = [f_w/w, f_h/h]
+                w = f_w
+                h = f_h
+            
             feat = Image.fromarray(feat)
-            feat, ida_mat = self._img_transform(
+            feat, _ = self._img_transform(
                 feat,
-                resize=[1.0, 1.0],
+                resize=resize,
                 resize_dims=(w,h),
                 crop=(0,0,w,h),
                 flip=flip,

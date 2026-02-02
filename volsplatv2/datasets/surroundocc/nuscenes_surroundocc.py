@@ -45,6 +45,9 @@ class NuScenesSurroundOccDataset(Dataset):
                     "cam2lidar",
                     "img_aug_mat",
                     
+                    "projection_mat", # todo (wys 02.02)
+                    "featmap_wh",     # todo (wys 02.02)
+                    
                     "scene_token",
                     "token",                      
                  ],
@@ -160,6 +163,9 @@ class NuScenesSurroundOccDataset(Dataset):
         H, W = self.data_aug_conf["H"], self.data_aug_conf["W"] # todo 原图大小
         fH, fW = self.data_aug_conf["final_dim"]  # todo 网络输入尺寸
         
+        featmap_h,feat_map_w = self.data_aug_conf["featmap_dim"]
+        featmap_dims = (feat_map_w, featmap_h)
+        
         resize = [fW/W, fH/H]
         resize_dims = (fW, fH) # todo fW, fH
         newW, newH = resize_dims        
@@ -178,7 +184,7 @@ class NuScenesSurroundOccDataset(Dataset):
             rotate = np.random.uniform(*self.data_aug_conf["rot_lim"])
            
         
-        return resize,  resize_dims,  crop,  flip,  rotate
+        return resize,  resize_dims, featmap_dims, crop,  flip,  rotate
 
 
 if __name__=='__main__':

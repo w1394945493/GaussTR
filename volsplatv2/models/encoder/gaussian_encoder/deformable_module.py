@@ -59,10 +59,12 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
         self.embed_dims = embed_dims
         self.num_learnable_pts = num_learnable_pts
         self.learnable_fixed_scale = learnable_fixed_scale
+        
         if fix_scale is None:
             fix_scale = ((0.0, 0.0, 0.0),)
         self.fix_scale = np.array(fix_scale)
         self.num_pts = len(self.fix_scale) + num_learnable_pts
+        
         if num_learnable_pts > 0:
             self.learnable_fc = nn.Linear(self.embed_dims, num_learnable_pts * 3)
 
@@ -88,6 +90,7 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
         fix_scale = anchor.new_tensor(self.fix_scale) # todo  self.fix_scale: (7 3) fix_scale: (7 3)
         scale = fix_scale[None, None].tile([bs, num_anchor, 1, 1]) # todo scale: (1 25600 7 3) .tile(): 按倍数铺平张量
         if self.num_learnable_pts > 0 and instance_feature is not None: # todo num_learnable_pts: 2
+            
             learnable_scale = (
                 torch.sigmoid(self.learnable_fc(instance_feature)
                 .reshape(bs, num_anchor, self.num_learnable_pts, 3))
@@ -95,6 +98,7 @@ class SparseGaussian3DKeyPointsGenerator(BaseModule):
             ) # todo (1 25600 2 3)  -0.5：让偏移量分布在[-0.5,0.5]之间
             scale = torch.cat([scale, learnable_scale * self.learnable_fixed_scale], dim=-2) # todo (1 25600 9 3)
 
+        
         #? 2. 全局尺寸调整
         gs_scales = anchor[..., None, 3:6] # todo (1 25600 1 3)
         if self.scale_act == "sigmoid":
@@ -187,7 +191,14 @@ class DeformableFeatureAggregation(BaseModule):
         #? 1.生成3D采样点
         # todo 采样点
         key_points = self.kps_generator(anchor, instance_feature) # todo (1 25600 9 3)
-        
+        '''
+        means_kp = key_points[0] # (num, kps, c)
+        import numpy as np
+        # 保存为 numpy
+        for i in range(means_kp.shape[1]):
+            means = means_kp[:,i,:]
+            np.save(f"means3d_kp_{i}.npy", means.detach().cpu().numpy())
+        '''          
         # todo 铺平后的多尺度特征图
         if self.use_deformable_func:
             feature_maps = list(flatten_multi_scale_feats(feature_maps))
@@ -219,21 +230,6 @@ class DeformableFeatureAggregation(BaseModule):
         weights = weights.flatten(2, 4).softmax(dim=-2).reshape(bs,num_anchor * self.num_pts,self.num_cams,self.num_levels,self.num_groups) # todo (1 25600 9 6 4 4)
         weights = weights * (1 - all_miss.flatten(1, 2).float()) # todo (1 230400 6 4 4)
         
-        #?--------------------------------------------#
-        '''
-        # todo 计算量超过了DAF.forward()
-        mc_ms_feature_maps = feature_maps[0] # todo (1 6 38752 128)
-        spatial_shape = feature_maps[1] # todo (4 2)
-        scale_start_index = feature_maps[2] # todo (4)
-        weights = weights # todo (1 115200 6 4 4)
-        points_2d = points_2d # todo (1 115200 6 2)
-        bs, v, n, c = mc_ms_feature_maps.shape
-        num_heads = 8
-        value = rearrange(mc_ms_feature_maps, 'b v n (h d) -> (b v) n h d', h=num_heads) # todo (6 38752 8 16)
-        locations = rearrange(points_2d, 'b q v xy -> (b v) q 1 1 1 xy').expand(-1, -1, 8, 4, 4, -1) # todo (6 230400 8 4 4 2)
-        attn_weights = rearrange(weights, 'b q v l p -> (b v) q 1 l p').expand(-1, -1, 8, -1, -1) # todo (6 230400 8 4 4)
-        output = multi_scale_deformable_attn_pytorch(value, spatial_shape, locations, attn_weights)        
-        '''
         features_next = DAF.apply(*feature_maps, points_2d, weights).reshape(bs, num_anchor, self.num_pts, self.embed_dims)  # todo (1 25600 9 128)  
         
         features = features_next # todo (1 25600 9 128)

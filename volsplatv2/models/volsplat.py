@@ -239,12 +239,14 @@ class VolSplat(BaseModel):
                                                                         img_aug_mat,
                                                                         top_k=self.top_k)
         
+        anchor = topk_anchor
+        instance_feature = topk_instance_feature
         # todo 1.2 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
-        anchor, instance_feature = self.lifter(bs)
+        # anchor, instance_feature = self.lifter(bs)
         
-        if self.top_k > 0:
-            anchor = torch.cat([topk_anchor,anchor],dim=1)
-            instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
+        # if self.top_k > 0:
+        #     anchor = torch.cat([topk_anchor,anchor],dim=1)
+        #     instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
         
         '''
         means = anchor[0][...,:3] # (num,c)

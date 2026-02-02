@@ -46,10 +46,12 @@ class GaussianOccEncoder(nn.Module):
             
             
             #?-----------------------------?
-            anchor, gaussians = self.refine_layer(instance_feature,anchor,anchor_embed)
+            # anchor, gaussians = self.refine_layer(instance_feature,anchor,anchor_embed)
+            anchor = self.refine_layer(instance_feature,anchor,anchor_embed)
             anchor_embed = self.anchor_encoder(anchor)
             
-            predictions.append(gaussians)
+            # predictions.append(gaussians)
+            predictions.append(anchor)
         return predictions
         
         

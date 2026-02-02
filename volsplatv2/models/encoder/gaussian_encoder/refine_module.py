@@ -52,31 +52,30 @@ class SparseGaussian3DRefinementModule(nn.Module):
         #?----------------------------------------------?
         # offset_world = (offset_xyz.sigmoid() - 0.5) * self.voxel_size * 3 
         offset_world = (offset_xyz.sigmoid() - 0.5) * ((self.pc_max - self.pc_min) * 0.1)
-        
         means = anchor[...,:3] + offset_world # todo (1 25600 3)
-        
-        
+
         anchor = torch.cat([means,scales,rotations,opacities,colors,semantics],dim=-1) # todo (1 25600 32)
         
         #?----------------------------------------------?
         #? 高斯参数解码
-        scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * torch.sigmoid(scales) # todo (1 25600 3)
-        rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps) # todo (1 25600 4)
-        opacities = opacities.sigmoid().squeeze(-1) # todo (1 25600)
-        colors = colors.sigmoid() # todo (1 25600 3)
-        covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
-        semantics = F.softplus(semantics) # todo (1 25600 18)
+        # scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * torch.sigmoid(scales) # todo (1 25600 3)
+        # rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + eps) # todo (1 25600 4)
+        # opacities = opacities.sigmoid().squeeze(-1) # todo (1 25600)
+        # colors = colors.sigmoid() # todo (1 25600 3)
+        # covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
+        # semantics = F.softplus(semantics) # todo (1 25600 18)
         
-        gaussians = Gaussians(
-            means,
-            scales,
-            rotations,
-            covariances,
-            colors,
-            opacities,
-            semantics,)
+        # gaussians = Gaussians(
+        #     means,
+        #     scales,
+        #     rotations,
+        #     covariances,
+        #     colors,
+        #     opacities,
+        #     semantics,)
         
-        return anchor, gaussians
+        # return anchor, gaussians
+        return anchor
             
     
     

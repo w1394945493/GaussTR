@@ -102,35 +102,56 @@ class VolSplat(BaseModel):
     def _sparse_to_batched(self, features, coordinates, batch_size, return_mask=False):
 
         device = features.device
-        _, c = features.shape
+        num_voxels, c = features.shape
 
-        batch_features_list = []
-        batch_sizes = []
-        max_voxels = 0
-
-        for batch_idx in range(batch_size):
-            mask = coordinates[:, 0] == batch_idx
-            batch_feats = features[mask]  # [N_i, C]
-            batch_features_list.append(batch_feats)
-            batch_sizes.append(batch_feats.shape[0])
-            max_voxels = max(max_voxels, batch_feats.shape[0])
-
-        # Create padded tensor [b, 1, N_max, C]
+        # todo -----------------------------------#
+        batch_indices = coordinates[:, 0].long()
+        v_counts = torch.bincount(batch_indices, minlength=batch_size) # [batch_size]
+        max_voxels = v_counts.max().item()
+        
+        order = torch.arange(num_voxels, device=device)
+        # 按照 batch_indices 排序后的偏移量
+        batch_offsets = torch.zeros(batch_size + 1, dtype=torch.long, device=device)
+        batch_offsets[1:] = torch.cumsum(v_counts, dim=0)
+        # 计算每个点在自己 batch 内的相对位置索引 [0, 1, 2, ..., n_i-1]
+        local_idx = order - batch_offsets[batch_indices]
+        
+        # 初始化稠密张量 [b, 1, N_max, C]
         batched_features = torch.zeros(batch_size, 1, max_voxels, c, device=device)
-
-        # Create valid data mask [b, 1, N_max]
+        batched_features[batch_indices, 0, local_idx] = features
         if return_mask:
             valid_mask = torch.zeros(batch_size, 1, max_voxels, dtype=torch.bool, device=device)
-
-        for batch_idx, batch_feats in enumerate(batch_features_list):
-            n_voxels = batch_feats.shape[0]
-            batched_features[batch_idx, 0, :n_voxels, :] = batch_feats
-            if return_mask:
-                valid_mask[batch_idx, 0, :n_voxels] = True
-
-        if return_mask:
+            valid_mask[batch_indices, 0, local_idx] = True
             return batched_features, valid_mask
         return batched_features
+        
+        
+        # batch_features_list = []
+        # batch_sizes = []
+        # max_voxels = 0
+
+        # for batch_idx in range(batch_size):
+        #     mask = coordinates[:, 0] == batch_idx
+        #     batch_feats = features[mask]  # [N_i, C]
+        #     batch_features_list.append(batch_feats)
+        #     batch_sizes.append(batch_feats.shape[0])
+        #     max_voxels = max(max_voxels, batch_feats.shape[0])
+        # # Create padded tensor [b, 1, N_max, C]
+        # batched_features = torch.zeros(batch_size, 1, max_voxels, c, device=device)
+
+        # # Create valid data mask [b, 1, N_max]
+        # if return_mask:
+        #     valid_mask = torch.zeros(batch_size, 1, max_voxels, dtype=torch.bool, device=device)
+
+        # for batch_idx, batch_feats in enumerate(batch_features_list):
+        #     n_voxels = batch_feats.shape[0]
+        #     batched_features[batch_idx, 0, :n_voxels, :] = batch_feats
+        #     if return_mask:
+        #         valid_mask[batch_idx, 0, :n_voxels] = True
+
+        # if return_mask:
+        #     return batched_features, valid_mask
+        # return batched_features
 
     def extract_img_feat(self, img, status="train"):
         """Extract features of images."""
@@ -178,29 +199,30 @@ class VolSplat(BaseModel):
         
         # todo transformer 解码器 -> 解码得到查询特征和特征在2D图像的位置
         depth = data_samples["depth"]  # (b v h w)
-        d_h, d_w = depth.shape[-2:]
+        # d_h, d_w = depth.shape[-2:]
 
         # todo ----------------------------------------#
         # todo 将深度图缩放和2D特征图尺寸一致
-        img_feats = feats[0]  # (bv c h w)  
-        f_h, f_w = img_feats.shape[-2:] 
-        d_h, d_w = depth.shape[-2:]    
-        if (d_w != f_w) or (d_h != f_h):
-            depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False)
-            d_h, d_w = depth.shape[-2:]
+        img_feats = feats[0]  # todo (6 128 128 228)
+        # f_h, f_w = img_feats.shape[-2:] 
+        # d_h, d_w = depth.shape[-2:]    
+        # if (d_w != f_w) or (d_h != f_h):
+        #     depth = F.interpolate(depth,size=(f_h,f_w),mode='bilinear',align_corners=False) # todo (1 6 128 228)
+        #     d_h, d_w = depth.shape[-2:] # todo 128 228
             
         
         img_aug_mat = data_samples['img_aug_mat'] #! ori_img -> inputs
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) #! cam -> ori_img
         extrinsics = data_samples['cam2lidar'] #! surroundocc: cam -> lidar
-        resize = torch.diag(torch.tensor([d_w/input_w, d_h/input_h],
-                                        dtype=img_aug_mat.dtype,
-                                        device = img_aug_mat.device))
         
-        mat = torch.eye(4).to(img_aug_mat.device)            
-        mat[:2,:2] = resize
-        mat = repeat(mat,"i j -> () () i j")
-        img_aug_mat = mat @ img_aug_mat  #! ori_img -> img_feats
+        # resize = torch.diag(torch.tensor([d_w/input_w, d_h/input_h], # todo 228/800 128/448
+        #                                 dtype=img_aug_mat.dtype,
+        #                                 device = img_aug_mat.device)) # todo [[0.2850,0],[0,0.2857]]
+        
+        # mat = torch.eye(4).to(img_aug_mat.device)            
+        # mat[:2,:2] = resize
+        # mat = repeat(mat,"i j -> () () i j")
+        # img_aug_mat = mat @ img_aug_mat  #! ori_img -> img_feats
         
         # todo 检查一下depth, intrinsics, extrinsics, img_aug_mat 是否正确
         '''        
@@ -233,37 +255,38 @@ class VolSplat(BaseModel):
         
         # todo ----------------------------------------------------------#
         # todo 1. 体素化聚合像素特征，并筛选预测概率最大的前top_k个实例作为查询先验
+        anchor, instance_feature = self.lifter(bs)
         if self.top_k > 0:
             topk_anchor, topk_instance_feature = self.select_topk_instance(intrinsics,extrinsics,
                                                                         img_feats,depth,
                                                                         img_aug_mat,
                                                                         top_k=self.top_k)
+            # todo 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
+            anchor = torch.cat([topk_anchor,anchor],dim=1)
+            instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
+        # anchor = topk_anchor
+        # instance_feature = topk_instance_feature
         
-        anchor = topk_anchor
-        instance_feature = topk_instance_feature
-        # todo 1.2 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
-        # anchor, instance_feature = self.lifter(bs)
-        
-        # if self.top_k > 0:
-        #     anchor = torch.cat([topk_anchor,anchor],dim=1)
-        #     instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
-        
+        # todo ----------------------------------------------------------#
+        # todo 初始的anchor和instance_feature也解码得到高斯点属性        
         '''
-        means = anchor[0][...,:3] # (num,c)
+        means = anchor[1][...,:3] # (num,c)
         import numpy as np
         # 保存为 numpy
-        np.save(f"means3d_total_3.npy", means.detach().cpu().numpy())
+        np.save(f"means3d_total_6_1.npy", means.detach().cpu().numpy())
         '''      
         
         # todo ----------------------------------------------------------#
         # todo 2. 可变形多尺度特征聚合, 预测高斯点属性
-        lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
-        cam2img = data_samples['cam2img'] # todo (1 6 4 4)
-        projection_mat = img_aug_mat @ cam2img @ lidar2cam # todo (1 6 4 4)
-        featmap_wh = img_aug_mat.new_tensor([f_w,f_h])
-        featmap_wh = repeat(featmap_wh,"wh -> bs n wh",bs=bs,n=n) # todo (1 6 2)        
-        
-        predictions = self.encoder(anchor, instance_feature,feats, projection_mat, featmap_wh)
+        # todo 参数计算(可以放到dataset中处理)
+        # lidar2cam = torch.inverse(extrinsics) # todo (1 6 4 4)
+        # cam2img = data_samples['cam2img'] # todo (1 6 4 4)
+        # projection_mat = img_aug_mat @ cam2img @ lidar2cam # todo (1 6 4 4)
+        # featmap_wh = img_aug_mat.new_tensor([f_w,f_h])
+        # featmap_wh = repeat(featmap_wh,"wh -> bs n wh",bs=bs,n=n) # todo (1 6 2)        
+        projection_mat = data_samples['projection_mat']
+        featmap_wh = data_samples['featmap_wh']
+        predictions = self.encoder(anchor, instance_feature, feats, projection_mat, featmap_wh)
 
         if mode == 'predict':
             return self.decoder(predictions[-1],data,mode=mode)

@@ -228,25 +228,6 @@ if __name__=='__main__':
     
     features = torch.rand((N, n_class), device=device)
 
-    with_empty = False
-    if with_empty:
-        empty_args=dict(
-            mean=[0, 0, -1.0],
-            scale=[100, 100, 8.0]
-        )
-        empty_mean=torch.tensor(empty_args['mean'],device=device)[None, :]  
-        empty_scale=torch.tensor(empty_args['scale'],device=device)[None, :]    
-        empty_rot = torch.tensor([1., 0., 0., 0.],device=device)[None, :] 
-        empty_covs = build_covariance(empty_scale,empty_rot)
-        empty_sem =  torch.zeros(n_class,device=device)[None,:]
-        empty_opa =  torch.ones(1,device=device)
-        
-        means3d = torch.cat([means3d,empty_mean])       
-        features = torch.cat([features,empty_sem])
-        covs = torch.cat([covs,empty_covs])
-        opacities = torch.cat([opacities,empty_opa])
-
-
     # 1. 生成真值标签：形状为 (200, 200, 16)，值在 [0, 17]
     target_labels = torch.randint(0, n_class, grid_shape, device=device)
     print('target_labels.shape:',target_labels.shape)

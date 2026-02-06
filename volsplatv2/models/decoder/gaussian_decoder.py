@@ -100,6 +100,7 @@ class GaussianDecoder(BaseModule):
             self.register_buffer('empty_sem', torch.zeros(self.num_classes)[None, None, :].repeat(1, num_empty, 1)) 
             
             # self.empty_scalar = nn.Parameter(torch.ones(1, dtype=torch.float) * 10.0)
+
             # self.empty_scalar = nn.Parameter(torch.full((1, num_empty), 1.0, dtype=torch.float)) # (1,N)
             self.register_buffer('empty_scalar', torch.full((1, num_empty), 10.0, dtype=torch.float))
             
@@ -128,7 +129,7 @@ class GaussianDecoder(BaseModule):
         opacities = opacities.sigmoid().squeeze(-1) # todo (1 25600)
         colors = colors.sigmoid() # todo (1 25600 3)
         covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
-        semantics = F.softplus(features) # todo (1 25600 18)
+        features = F.softplus(features) # todo (1 25600 18)
                 
         # means3d = gaussians.means # todo (b n 3)
         # # harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
@@ -183,7 +184,7 @@ class GaussianDecoder(BaseModule):
                 covariances,
                 colors,
                 opacities,
-                semantics,)            
+                features,)            
             
             outputs = [{
                 # 'depth_pred': rendered_depth, # (b v h w)

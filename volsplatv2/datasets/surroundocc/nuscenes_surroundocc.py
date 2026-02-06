@@ -61,8 +61,8 @@ class NuScenesSurroundOccDataset(Dataset):
         self.keyframes = sorted(self.keyframes, key=lambda x: x[0] + "{:0>3}".format(str(x[1])))
         
         # todo -------------------------------#
-        # todo 均匀抽取1/10 训练/评估
-        # self.keyframes = self.keyframes[::10]
+        # todo 均匀抽取1/N 训练/评估
+        # self.keyframes = self.keyframes[::100]
         
         
         self.data_aug_conf = data_aug_conf

@@ -86,7 +86,42 @@ class ResizeCropFlipImage(object):
             new_imgs.append(np.array(img).astype(np.float32))
             # todo (wys 12.30)
             transforms.append(mat) # todo img2img' 矩阵
+        '''
+        import os
+        import cv2
+        import numpy as np
+        from datetime import datetime
 
+        # 1. 准备基础路径
+        base_dir = "/home/lianghao/wangyushen/Projects/GaussTR/temp"
+        current_date = datetime.now().strftime("%Y%m%d")  # 例如 20260205
+        save_dir = os.path.join(base_dir, current_date, "imgs")
+
+        # 创建目录（如果不存在）
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 2. 遍历并保存图片
+        for i, img_data in enumerate(new_imgs):
+            # 获取原始文件名（例如 '...862404.jpg'）
+            original_full_path = results['filename'][i]
+            file_name = os.path.basename(original_full_path)
+            
+            # 拼接目标路径
+            target_path = os.path.join(save_dir, file_name)
+            
+            # 注意：如果 img_data 是 float 类型且范围在 0-255，需要转为 uint8
+            if img_data.dtype != np.uint8:
+                img_data = img_data.astype(np.uint8)
+            
+            # OpenCV 默认使用 BGR 格式，如果你的 new_imgs 是 RGB，需要转换
+            # img_to_save = cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
+            
+            # 保存图片
+            cv2.imwrite(target_path, img_data)
+            print(f"已保存: {target_path}")
+
+        print(f"\n全部完成！图片已保存至: {save_dir}")
+        '''
         results["img"] = new_imgs
         results["img_shape"] = [x.shape[:2] for x in new_imgs]
         
@@ -200,6 +235,48 @@ class LoadFeatMaps(ResizeCropFlipImage):
             import cv2
             cv2.imwrite('depth_1.png',feat.astype(np.uint8))
             '''
+        '''
+        import os
+        import cv2
+        import numpy as np
+        from datetime import datetime
+
+        # 1. 路径设置
+        base_dir = "/home/lianghao/wangyushen/Projects/GaussTR/temp"
+        current_date = datetime.now().strftime("%Y%m%d")
+        depth_save_dir = os.path.join(base_dir, current_date, "depths")
+
+        os.makedirs(depth_save_dir, exist_ok=True)
+
+        # 2. 遍历保存深度图
+        for i, depth_map in enumerate(feats):
+            # 提取文件名
+            file_name = os.path.basename(results['filename'][i])
+            # 更改后缀为 .png (深度图建议用 png 无损保存) 或保持 .jpg
+            save_name = os.path.splitext(file_name)[0] + "_depth.png"
+            target_path = os.path.join(depth_save_dir, save_name)
+
+            # --- 处理深度图以便可视化 ---
+            # 如果 feats 是原始深度值，需要归一化到 0-255
+            d_min = depth_map.min()
+            d_max = depth_map.max()
+            
+            if d_max - d_min > 1e-5:
+                # 归一化并转为 uint8
+                depth_viz = (depth_map - d_min) / (d_max - d_min) * 255.0
+                depth_viz = depth_viz.astype(np.uint8)
+            else:
+                depth_viz = np.zeros_like(depth_map, dtype=np.uint8)
+
+            # 使用伪彩色增强可视化效果 (可选)
+            # depth_color = cv2.applyColorMap(depth_viz, cv2.COLORMAP_JET)
+
+            # 保存
+            cv2.imwrite(target_path, depth_viz)
+            print(f"深度图已保存: {target_path}")
+
+        print(f"\n全部深度图保存完成，共 {len(feats)} 张。")
+        '''
         
         results[self.key] = np.array(feats,dtype=np.float32)        
         return results

@@ -224,21 +224,21 @@ train_num_workers=num_workers
 val_batch_size=2
 val_num_workers=num_workers
 
-# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
-# anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
-# logger_interval = 100
-# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
+anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
+logger_interval = 100
+train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 
 
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
-anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-logger_interval = 1
-# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+# anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
+# logger_interval = 1
+# # train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录

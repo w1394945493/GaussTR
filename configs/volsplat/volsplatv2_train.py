@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/outputs/vis'
+save_dir = '/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/outputs/vis5'
 
 custom_hooks = [
     dict(type='DumpResultHook',
@@ -152,16 +152,17 @@ model = dict(
                 kps_generator=dict(
                     type="SparseGaussian3DKeyPointsGenerator",
                     embed_dims=_dim_,
-                    num_learnable_pts=2, # todo 定义了9个采样点
-                    fix_scale=[
-                        [0, 0, 0],
-                        [0.45, 0, 0],
-                        [-0.45, 0, 0],
-                        [0, 0.45, 0],
-                        [0, -0.45, 0],
-                        [0, 0, 0.45],
-                        [0, 0, -0.45],
-                    ],
+                    num_learnable_pts=4, # todo 定义了9个采样点
+                    fix_scale=None,
+                    # fix_scale=[
+                    #     [0, 0, 0],
+                    #     [0.45, 0, 0],
+                    #     [-0.45, 0, 0],
+                    #     [0, 0.45, 0],
+                    #     [0, -0.45, 0],
+                    #     [0, 0, 0.45],
+                    #     [0, 0, -0.45],
+                    # ],
                     pc_range=vol_range,
                     scale_range=[gaussian_scale_min,gaussian_scale_max],
                 ),
@@ -184,40 +185,6 @@ model = dict(
         ), 
                     
     ),
-    
-    
-
-    
-    # sparse_unet=dict(
-    #     type='SparseUNetWithAttention', # todo 3D Unet 用于体素特征间交互
-    #     in_channels=_dim_, # 128
-    #     out_channels=_dim_, # 128
-    #     num_blocks=3,
-    #     use_attention=False, 
-    #     # use_attention=True, # 是否引入一个注意力层   
-    #     ), 
-    
-    # sparse_unet=dict(
-    #     type='FullResSparseUNet',
-    #     in_channels=_dim_, # 128
-    #     out_channels=_dim_, # 128        
-    #     num_blocks=3,
-    # ),
-    
-    # sparse_gs=dict(
-    #     type='SparseGaussianHead',
-    #     in_channels=_dim_, 
-    #     out_channels=out_channels),       
-    
-    
-    # gaussian_adapter=dict(
-    #     type='GaussianAdapter_depth',
-    #     gaussian_scale_min = gaussian_scale_min,
-    #     gaussian_scale_max = gaussian_scale_max,        
-        
-    #     sh_degree=sh_degree,
-    # ),
-    
     decoder = dict(
         type='GaussianDecoder',
         voxelizer = dict(
@@ -238,6 +205,9 @@ model = dict(
         far = far,
         use_sh = use_sh,
         renderer_type = renderer_type,        
+
+        scale_range=[gaussian_scale_min,gaussian_scale_max],        
+        semantic_dim = num_class,
     )
 )
 
@@ -256,8 +226,8 @@ val_interval=1
 batch_size=4
 num_workers=8
 train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
-
+# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+val_ann_file =  "nuscenes_infos_train_sweeps_occ.pkl"
 
 
 # data_root = '/c20250502/wangyushen/Datasets/nuscenes' # 数据集根目录
@@ -308,11 +278,15 @@ test_pipeline = [
 
 # final_dim = (112,200)
 final_dim = (448,800)
+patch_size = 14
+featmap_dim = [int(final_dim[0]/patch_size*4),int(final_dim[1]/patch_size*4)]
+
 # final_dim = (896,1600)
 # output_dim = (112,200)
 
 data_aug_conf = {
     "final_dim": final_dim,
+    "featmap_dim": featmap_dim,
     "bot_pct_lim": (0.0, 0.0),
     "rot_lim": (0.0, 0.0),
     "H": 900,

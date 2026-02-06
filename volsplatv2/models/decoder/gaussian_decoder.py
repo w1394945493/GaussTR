@@ -129,7 +129,7 @@ class GaussianDecoder(BaseModule):
         opacities = opacities.sigmoid().squeeze(-1) # todo (1 25600)
         colors = colors.sigmoid() # todo (1 25600 3)
         covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
-        semantics = F.softplus(features) # todo (1 25600 18)
+        features = F.softplus(features) # todo (1 25600 18)
                 
         # means3d = gaussians.means # todo (b n 3)
         # # harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
@@ -184,7 +184,7 @@ class GaussianDecoder(BaseModule):
                 covariances,
                 colors,
                 opacities,
-                semantics,)            
+                features,)            
             
             outputs = [{
                 # 'depth_pred': rendered_depth, # (b v h w)

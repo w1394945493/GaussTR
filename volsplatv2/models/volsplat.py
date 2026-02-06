@@ -264,6 +264,7 @@ class VolSplat(BaseModel):
             # todo 前top_k 个先验与 n个可学习token cat 共同作为 解码的目标查询
             anchor = torch.cat([topk_anchor,anchor],dim=1)
             instance_feature = torch.cat([topk_instance_feature,instance_feature],dim=1)  
+        
         # anchor = topk_anchor
         # instance_feature = topk_instance_feature
         
@@ -289,6 +290,11 @@ class VolSplat(BaseModel):
         predictions = self.encoder(anchor, instance_feature, feats, projection_mat, featmap_wh)
 
         if mode == 'predict':
+            
+            
+            
+            
+            
             return self.decoder(predictions[-1],data,mode=mode)
         
         losses = {}

@@ -57,6 +57,7 @@ PYTHONPATH=. torchrun --nproc_per_node=2 \
     /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
     /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_train.py \
     --launcher pytorch \
+    --load-from /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_2.pth \
     --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train
 
 # todo 评估
@@ -64,7 +65,7 @@ export CUDA_VISIBLE_DEVICES=6
 python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py \
     /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_train.py \
     --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/test \
-    --checkpoint /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_16.pth \
+    --checkpoint /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_24.pth \
 
 
 # todo 多卡训练

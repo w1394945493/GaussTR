@@ -383,5 +383,18 @@
             "console": "integratedTerminal",
             // "justMyCode": false,
         },
+        {
+            "name": "run test volsplatv2(experiment)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py",
+            "args": [
+                "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py",
+                "--work-dir",
+                "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

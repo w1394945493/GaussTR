@@ -290,11 +290,6 @@ class VolSplat(BaseModel):
         predictions = self.encoder(anchor, instance_feature, feats, projection_mat, featmap_wh)
 
         if mode == 'predict':
-            
-            
-            
-            
-            
             return self.decoder(predictions[-1],data,mode=mode)
         
         losses = {}

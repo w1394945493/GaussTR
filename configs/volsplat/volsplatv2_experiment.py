@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/outputs/vis5'
+save_dir = '/c20250502/wangyushen/Outputs/gausstr/volsplatv2/outputs/vis'
 
 custom_hooks = [
     dict(type='DumpResultHook',
@@ -191,6 +191,11 @@ model = dict(
             type='GaussianVoxelizer',
             vol_range=vol_range,
             voxel_size=voxel_size,
+            cuda_kwargs=dict(
+                scale_multiplier=3,
+                H=200, W=200, D=16,
+                pc_min=[-50.0, -50.0, -5.0],
+                grid_size=0.5), #!          
             filter_gaussians=True,
         ),
         num_class = num_class,
@@ -226,8 +231,8 @@ val_interval=1
 batch_size=4
 num_workers=8
 train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
-val_ann_file =  "nuscenes_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+# val_ann_file =  "nuscenes_infos_train_sweeps_occ.pkl"
 
 
 # data_root = '/c20250502/wangyushen/Datasets/nuscenes' # 数据集根目录

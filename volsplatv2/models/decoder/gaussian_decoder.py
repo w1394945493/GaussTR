@@ -93,6 +93,7 @@ class GaussianDecoder(BaseModule):
             # 5. 注册到 buffer, 增加 Batch 维度
             self.register_buffer('empty_mean', means[None, :])           # (1, N_empty, 3)
             self.register_buffer('empty_scale', scales[None, :])         # (1, N_empty, 3)
+            
             self.register_buffer('empty_rot', rots[None, :])             # (1, N_empty, 4)
             # 计算对应的协方差
             self.register_buffer('empty_covs', build_covariance(self.empty_scale, self.empty_rot))
@@ -144,6 +145,8 @@ class GaussianDecoder(BaseModule):
             bs = means3d.shape[0] # 获取当前 Batch Size
 
             empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, n_bg, 3)
+
+            empty_scale = self.empty_scale.expand(bs, -1, -1)   # (B, n_bg, 3)
             empty_covs = self.empty_covs.expand(bs, -1, -1, -1) # (B, n_bg, 3, 3) 如果是矩阵
             empty_sem = self.empty_sem.expand(bs, -1, -1).clone()       # (B, n_bg, num_classes)
             
@@ -156,6 +159,9 @@ class GaussianDecoder(BaseModule):
             features = torch.cat([features, empty_sem], dim=1)
               
             means3d = torch.cat([means3d, empty_mean], dim=1)
+            scales = torch.cat([scales, empty_scale], dim=1)
+
+
             covariances = torch.cat([covariances,empty_covs],dim=1)
             
             opacities = torch.cat([opacities,empty_opa],dim=1)
@@ -168,7 +174,9 @@ class GaussianDecoder(BaseModule):
         
         # todo --------------------------------------#
         # todo 占用预测
-        density, grid_feats = self.voxelizer(means3d, covariances, opacities, features) # (b,200,200,16) (b,200,200,16,18)
+        # density, grid_feats = self.voxelizer(means3d, scales, covariances, opacities, features) # (b,200,200,16) (b,200,200,16,18)
+        grid_feats = self.voxelizer(means3d, scales, covariances, opacities, features)
+        
         occ_mask, occ_gt = data_samples['occ_cam_mask'],data_samples['occ_label'] # (b,200,200,16) (b,200,200,16)
         
         # todo ---------------------------------------#

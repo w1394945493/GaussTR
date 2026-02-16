@@ -1,3 +1,4 @@
+from einops import rearrange
 import torch
 import torch.nn as nn
 import triton
@@ -5,6 +6,9 @@ import triton.language as tl
 from mmdet3d.registry import MODELS
 
 import gauss_splatting_cuda
+import local_aggregate
+
+
 
 from ..utils import unbatched_forward,apply_to_items
 
@@ -420,6 +424,7 @@ class GaussianVoxelizer(nn.Module):
     def __init__(self,
                  vol_range,
                  voxel_size,
+                 cuda_kwargs,
                  filter_gaussians=True):
         super().__init__()
         self.voxel_size = voxel_size                 
@@ -428,11 +433,31 @@ class GaussianVoxelizer(nn.Module):
         self.grid_shape = ((vol_range[3:] - vol_range[:3]) /
                            voxel_size).int().tolist()
         self.filter_gaussians = filter_gaussians
+        
+        # surroundocc
+        self.aggregator = local_aggregate.LocalAggregator(**cuda_kwargs)
+        
+    
+    def get_meshgrid(self, ranges, grid, reso):
+        xxx = torch.arange(grid[0], dtype=torch.float) * reso + 0.5 * reso + ranges[0]
+        yyy = torch.arange(grid[1], dtype=torch.float) * reso + 0.5 * reso + ranges[1]
+        zzz = torch.arange(grid[2], dtype=torch.float) * reso + 0.5 * reso + ranges[2]
+
+        xxx = xxx[:, None, None].expand(*grid)
+        yyy = yyy[None, :, None].expand(*grid)
+        zzz = zzz[None, None, :].expand(*grid)
+
+        xyz = torch.stack([
+            xxx, yyy, zzz
+        ], dim=-1)
+        return xyz
+
     
     @unbatched_forward
-    def forward(self,means3d,covariances,opacities,features):
+    def forward(self,means3d,scales,covariances,opacities,features):
         gaussians = dict(
             means3d=means3d, # (n,3)
+            scales=scales,
             covs=covariances,
             opacities=opacities,
             features=features,)
@@ -449,14 +474,14 @@ class GaussianVoxelizer(nn.Module):
         
         if self.filter_gaussians: # todo 剔除一下透明度过低的高斯点(多bs时，可能是为对齐bs的填充高斯)
             mask = opacities > 1e-6
-            # for i in range(3):
-            #     mask &= (means3d[:, i] >= self.vol_range[i]) & (
-            #             means3d[:, i] <= self.vol_range[i + 3])
+            for i in range(3):
+                mask &= (means3d[:, i] >= self.vol_range[i]) & (
+                        means3d[:, i] <= self.vol_range[i + 3])
             gaussians = apply_to_items(lambda x: x[mask], gaussians)
             
         
         
-        # todo trion 版本
+        # todo trion: gauss -> voxel splatting
         # density, grid_feats = GaussSplatting3D.apply(
         #     gaussians['means3d'], 
         #     gaussians['covs'], 
@@ -467,14 +492,34 @@ class GaussianVoxelizer(nn.Module):
         #     self.grid_shape
         # )
         
-        # todo cuda 版本
-        density, grid_feats = GaussSplatting3DCuda.apply(
-            gaussians['means3d'], 
-            gaussians['covs'], 
-            gaussians['opacities'], 
-            gaussians['features'], # (n dims)
-            self.vol_range, 
-            self.voxel_size, 
-            self.grid_shape
-        )
-        return density, grid_feats    
+        # todo cuda: gauss -> voxel splatting
+        # density, grid_feats = GaussSplatting3DCuda.apply(
+        #     gaussians['means3d'], 
+        #     gaussians['covs'], 
+        #     gaussians['opacities'], 
+        #     gaussians['features'], # (n dims)
+        #     self.vol_range, 
+        #     self.voxel_size, 
+        #     self.grid_shape
+        # )
+        # return density, grid_feats 
+        
+        # gaussianformer localagg: gauss -> voxel splatting
+        sampled_xyz = self.get_meshgrid([-50, -50, -5.0, 50, 50, 3.0], [200, 200, 16], 0.5).to(gaussians['means3d'].device) # (200 200 16 3)
+        sampled_xyz = sampled_xyz.reshape(-1, 3).unsqueeze(0)
+        
+        means = gaussians['means3d'].unsqueeze(0)
+        opacities = gaussians['opacities'].unsqueeze(0)
+        features = gaussians['features'].unsqueeze(0)
+        scales = gaussians['scales'].unsqueeze(0) # todo (1 n 3)
+        inv_covs = torch.inverse(gaussians['covs']).contiguous().unsqueeze(0) # todo (1 n 3 3)
+
+        semantics = self.aggregator(
+            sampled_xyz,
+            means,
+            opacities,
+            features,
+            scales,
+            inv_covs,)
+        grid_feats = rearrange(semantics,"(x y z) dim -> x y z dim",x=200,y=200,z=16)  
+        return grid_feats 

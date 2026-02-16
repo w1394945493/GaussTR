@@ -34,7 +34,9 @@ python setup.py install --blas=openblas
 # 编译自定义包时，避免环境隔离：--no-build-isolation
 pip install -e . --no-build-isolation
 pip install . --no-build-isolation # 放弃可编辑模式
-
+pip install . --no-build-isolation
+python setup.py install
+rm -rf build/ dist/ *.egg-info
 
 
 
@@ -48,32 +50,26 @@ export CUDA_LAUNCH_BLOCKING=1
 export CUDA_VISIBLE_DEVICES=6
 
 python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
-    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_train.py \
+    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
     --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train \
     --resume /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_16.pth
 
 
 PYTHONPATH=. torchrun --nproc_per_node=2 \
     /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
-    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_train.py \
+    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
     --launcher pytorch \
     --load-from /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_2.pth \
-    --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train
+    --work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv2/train
 
 # todo 评估
 export CUDA_VISIBLE_DEVICES=6
 python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py \
-    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_train.py \
-    --work-dir /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/test \
-    --checkpoint /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_24.pth \
+    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
+    --work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv2/test \
+    --checkpoint /c20250502/wangyushen/Outputs/gausstr/volsplatv2/train/epoch_24.pth \
 
 
-# todo 多卡训练
-PYTHONPATH=. torchrun --nproc_per_node=4 \
-    /home/lianghao/wangyushen/Projects/GaussTR/train.py \
-    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv2_main.py \
-    --launcher pytorch \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/train4
 
 
 

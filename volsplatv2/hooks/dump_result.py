@@ -105,8 +105,10 @@ class DumpResultHook(Hook):
                     # 3. scales (N, 3)
                     scales = outputs[0]['gaussian'].scales[i].cpu().numpy()
 
+                    # 4. rotations (N,4)
+                    rotations = outputs[0]['gaussian'].rotations[i].cpu().numpy()
 
-                    res_data =  np.concatenate([means, probs, scales], axis=1)
+                    res_data =  np.concatenate([means, probs, scales, rotations], axis=1)
                     
                     save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.npy"
                     save_path = os.path.join(self.occ_depth, save_name)

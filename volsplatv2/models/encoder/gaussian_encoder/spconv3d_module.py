@@ -52,6 +52,7 @@ class SparseConv3DModule(nn.Module):
 
         return self.output_proj(output) # todo (1 25600 128)
 
+# todo -------------------------------------#
 @MODELS.register_module()
 class SparseGaussianHead(nn.Module):
     def __init__(self, in_channels=128, out_channels=14):

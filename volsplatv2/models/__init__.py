@@ -4,3 +4,5 @@ from .decoder import GaussianDecoder,GaussianVoxelizer
 # from .pixel import DepthUNet
 
 from .lifter import *
+
+from .volsplat_3 import VolSplatV3

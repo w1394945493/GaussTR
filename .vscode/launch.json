@@ -384,7 +384,7 @@
             // "justMyCode": false,
         },
         {
-            "name": "run test volsplatv2(experiment)",
+            "name": "run test volsplatv2(experiment )",
             "type": "debugpy",
             "request": "launch",
             "program": "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py",
@@ -392,6 +392,20 @@
                 "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py",
                 "--work-dir",
                 "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        
+        {
+            "name": "run test volsplatv3",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/test.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

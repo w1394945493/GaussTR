@@ -30,8 +30,6 @@ class GaussianDecoder(BaseModule):
                  voxelizer,
                  near,
                  far,
-                 scale_range,
-                 semantic_dim,
                  use_sh = True,
                  background_color=[0.0, 0.0, 0.0],
                  renderer_type = "vanilla",
@@ -58,8 +56,8 @@ class GaussianDecoder(BaseModule):
         self.lovasz_ignore = num_class - 1
         self.num_classes = num_class
         
-        self.scale_range = scale_range
-        self.semantic_dim = semantic_dim
+        # self.scale_range = scale_range
+        # self.semantic_dim = semantic_dim
         
         
         if with_empty:
@@ -116,57 +114,39 @@ class GaussianDecoder(BaseModule):
         
         
     def forward(self,
-                # gaussians,
-                raw_gaussians,
+                gaussians,
                 data,
                 mode='tensor',
                 **kwargs):
 
         data_samples = data
-        means3d, scales, rotations, opacities, colors, features = raw_gaussians.split([3,3,4,1,3,self.semantic_dim],dim=-1)
-        
-        scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * torch.sigmoid(scales) # todo (1 25600 3)
-        rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + 1e-8) # todo (1 25600 4)
-        opacities = opacities.sigmoid().squeeze(-1) # todo (1 25600)
-        colors = colors.sigmoid() # todo (1 25600 3)
-        covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
-        features = F.softplus(features) # todo (1 25600 18)
-                
-        # means3d = gaussians.means # todo (b n 3)
-        # # harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
-        # opacities = gaussians.opacities # todo (b n)
-        # scales = gaussians.scales
-        # rotations = gaussians.rotations
-        # covariances = gaussians.covariances
-        # features = gaussians.semantics # (b n num_class)
+
+        means3d = gaussians.means # todo (b n 3)
+        # harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
+        opacities = gaussians.opacities # todo (b n)
+        scales = gaussians.scales # todo (b n 3)
+        rotations = gaussians.rotations # todo (b n 4)
+        covariances = gaussians.covariances # todo (b n 3 3)
+        features = gaussians.semantics # todo (b n num_class)
 
         if self.with_empty:
             
             bs = means3d.shape[0] # 获取当前 Batch Size
 
             empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, n_bg, 3)
-
             empty_scale = self.empty_scale.expand(bs, -1, -1)   # (B, n_bg, 3)
             empty_rot = self.empty_rot.expand(bs, -1, -1)
-
             empty_covs = self.empty_covs.expand(bs, -1, -1, -1) # (B, n_bg, 3, 3) 如果是矩阵
             empty_sem = self.empty_sem.expand(bs, -1, -1).clone()       # (B, n_bg, num_classes)
-            
             empty_opa = torch.sigmoid(self.empty_opa).expand(bs, -1)       # (B, 1)         
-            
             empty_scalar = F.softplus(self.empty_scalar) # 确保背景增益＞0
             empty_sem[..., self.lovasz_ignore] += empty_scalar.expand(bs, -1)
-
             
             features = torch.cat([features, empty_sem], dim=1)
-              
             means3d = torch.cat([means3d, empty_mean], dim=1)
-
             scales = torch.cat([scales, empty_scale], dim=1)
             rotations = torch.cat([rotations, empty_rot], dim=1)
-
             covariances = torch.cat([covariances,empty_covs],dim=1)
-            
             opacities = torch.cat([opacities,empty_opa],dim=1)
 
 
@@ -187,16 +167,6 @@ class GaussianDecoder(BaseModule):
         if mode == 'predict':
             probs = torch.softmax(grid_feats,dim=-1)
             occ_pred = probs.argmax(-1)
-            
-            gaussians = Gaussians(
-                means3d,
-                scales,
-                rotations,
-                covariances,
-                colors,
-                opacities,
-                features,)            
-            
             outputs = [{
                 # 'depth_pred': rendered_depth, # (b v h w)
                 # 'img_pred': colors, # (b v 3 112 200)

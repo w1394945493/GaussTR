@@ -55,8 +55,10 @@ class VolSplat(BaseModel):
                 use_checkpoint,
                 # refine_voxel_resolution,
                 voxel_resolution,
+                scale_range,
+                semantic_dim,
                 
-                 **kwargs):
+                **kwargs):
         super().__init__(**kwargs)
 
         # self.backbone = MODELS.build(backbone)
@@ -96,6 +98,9 @@ class VolSplat(BaseModel):
         
         self.voxel_resolution = voxel_resolution
         
+        self.scale_range = scale_range
+        self.semantic_dim = semantic_dim
+        
         self.decoder = MODELS.build(decoder)
         print(cyan(f'successfully init Model!'))
 
@@ -124,35 +129,7 @@ class VolSplat(BaseModel):
             valid_mask[batch_indices, 0, local_idx] = True
             return batched_features, valid_mask
         return batched_features
-        
-        
-        # batch_features_list = []
-        # batch_sizes = []
-        # max_voxels = 0
-
-        # for batch_idx in range(batch_size):
-        #     mask = coordinates[:, 0] == batch_idx
-        #     batch_feats = features[mask]  # [N_i, C]
-        #     batch_features_list.append(batch_feats)
-        #     batch_sizes.append(batch_feats.shape[0])
-        #     max_voxels = max(max_voxels, batch_feats.shape[0])
-        # # Create padded tensor [b, 1, N_max, C]
-        # batched_features = torch.zeros(batch_size, 1, max_voxels, c, device=device)
-
-        # # Create valid data mask [b, 1, N_max]
-        # if return_mask:
-        #     valid_mask = torch.zeros(batch_size, 1, max_voxels, dtype=torch.bool, device=device)
-
-        # for batch_idx, batch_feats in enumerate(batch_features_list):
-        #     n_voxels = batch_feats.shape[0]
-        #     batched_features[batch_idx, 0, :n_voxels, :] = batch_feats
-        #     if return_mask:
-        #         valid_mask[batch_idx, 0, :n_voxels] = True
-
-        # if return_mask:
-        #     return batched_features, valid_mask
-        # return batched_features
-
+    
     def extract_img_feat(self, img, status="train"):
         """Extract features of images."""
         B, N, C, H, W = img.size()
@@ -169,6 +146,29 @@ class VolSplat(BaseModel):
             _, C, H, W = img_feat.size()
             img_feats_reshaped.append(img_feat.view(B, N, C, H, W))
         return img_feats_reshaped
+    
+    def post_process(self, raw_gaussians):
+        
+        means3d, scales, rotations, opacities, colors, features = raw_gaussians.split([3,3,4,1,3,self.semantic_dim],dim=-1)
+        scales = self.scale_range[0] + (self.scale_range[1] - self.scale_range[0]) * torch.sigmoid(scales) # todo (1 25600 3)
+        rotations = rotations / (rotations.norm(dim=-1, keepdim=True) + 1e-8) # todo (1 25600 4)
+        opacities = opacities.sigmoid().squeeze(-1) # todo (1 25600)
+        colors = colors.sigmoid() # todo (1 25600 3)
+        covariances = build_covariance(scales, rotations) # todo (1 25600 3 3)
+        features = F.softplus(features) # todo (1 25600 18)
+        
+        
+        gaussians = Gaussians(
+                means3d,
+                scales,
+                rotations,
+                covariances,
+                colors,
+                opacities,
+                features,
+        )
+        
+        return gaussians
     
     def forward(self, mode='loss',**data):
         
@@ -290,11 +290,13 @@ class VolSplat(BaseModel):
         predictions = self.encoder(anchor, instance_feature, feats, projection_mat, featmap_wh)
 
         if mode == 'predict':
-            return self.decoder(predictions[-1],data,mode=mode)
+            gaussians = self.post_process(predictions[-1])
+            return self.decoder(gaussians,data,mode=mode)
         
         losses = {}
         for i in range(len(predictions)):
-            loss = self.decoder(predictions[i],data,mode=mode)
+            gaussians = self.post_process(predictions[i])
+            loss = self.decoder(gaussians,data,mode=mode)
             for k, v in loss.items():
                 losses[f'{k}/{i}'] = v
         
@@ -456,7 +458,7 @@ class VolSplat(BaseModel):
     #     # todo 预测高斯后处理
     #     gaussians = self.gaussian_adapter.forward(
     #         opacities = opacities,   # (b 1 n 1 1)
-    #         raw_gaussians = (raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
+    #         raw_gaussians = rearrange(raw_gaussians,"b v r srf c -> b v r srf () c"), # (b 1 n 1 1 c)
     #         points = batched_points, # (b 1 n 3)
     #         voxel_resolution = self.voxel_resolution, #! 体素网格尺寸 
     #     )        

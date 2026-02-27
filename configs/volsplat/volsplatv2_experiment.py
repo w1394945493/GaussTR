@@ -74,6 +74,7 @@ model = dict(
     
     # refine_voxel_resolution = refine_voxel_resolution,
     voxel_resolution = voxel_resolution,
+    scale_range=[gaussian_scale_min,gaussian_scale_max],     
     
     # backbone=dict(
     #     type='mmdet.ResNet',
@@ -185,17 +186,21 @@ model = dict(
         ), 
                     
     ),
+    
+    
     decoder = dict(
         type='GaussianDecoder',
         voxelizer = dict(
             type='GaussianVoxelizer',
             vol_range=vol_range,
             voxel_size=voxel_size,
+            
             cuda_kwargs=dict(
                 scale_multiplier=3,
                 H=200, W=200, D=16,
                 pc_min=[-50.0, -50.0, -5.0],
-                grid_size=0.5), #!          
+                grid_size=voxel_size), #!          
+            
             filter_gaussians=True,
         ),
         num_class = num_class,
@@ -211,7 +216,7 @@ model = dict(
         use_sh = use_sh,
         renderer_type = renderer_type,        
 
-        scale_range=[gaussian_scale_min,gaussian_scale_max],        
+        # scale_range=[gaussian_scale_min,gaussian_scale_max],        
         semantic_dim = num_class,
     )
 )

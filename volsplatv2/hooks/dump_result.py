@@ -95,17 +95,11 @@ class DumpResultHook(Hook):
                     pickle.dump(output, f)  
                 
                 if 'gaussian' in outputs[0]:
-                    # 1. 均值 (N, 3)
-                    means = outputs[0]['gaussian'].means[i].cpu().numpy()
 
-                    # 2. 类别 (N, 1)
+                    means = outputs[0]['gaussian'].means[i].cpu().numpy()
                     semantics = outputs[0]['gaussian'].semantics[i]
                     probs = semantics.argmax(-1).cpu().numpy().reshape(-1, 1)
-
-                    # 3. scales (N, 3)
                     scales = outputs[0]['gaussian'].scales[i].cpu().numpy()
-
-                    # 4. rotations (N,4)
                     rotations = outputs[0]['gaussian'].rotations[i].cpu().numpy()
 
                     res_data =  np.concatenate([means, probs, scales, rotations], axis=1)

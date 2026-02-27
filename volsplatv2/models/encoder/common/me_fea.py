@@ -64,11 +64,8 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     
     # todo 2.体素化：将连续的3D点云转化为结构化的栅格特征
     with torch.no_grad():
-        # todo 剔除不在occ感知范围内的点
-        x_min, y_min, z_min, x_max, y_max, z_max = vol_range
-        mask = (all_points[:, 0] >= x_min) & (all_points[:, 0] <= x_max) & \
-                (all_points[:, 1] >= y_min) & (all_points[:, 1] <= y_max) & \
-                (all_points[:, 2] >= z_min) & (all_points[:, 2] <= z_max)    
+    
+ 
                 
         
         quantized_coords = torch.round(all_points / voxel_resolution).long() # 2.1量化: 通过all_points / voxel_resolution并取整 将3D坐标映射到整数索引的体素网格
@@ -77,8 +74,12 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
         combined_coords = torch.cat([batch_indices, quantized_coords], dim=1) # todo (n,4): 4维内容：(bs x y z)
         
         # todo 剔除不在occ感知空间范围内的点
-        combined_coords = combined_coords[mask]
-        
+        if vol_range is not None:
+            x_min, y_min, z_min, x_max, y_max, z_max = vol_range
+            mask = (all_points[:, 0] >= x_min) & (all_points[:, 0] <= x_max) & \
+                    (all_points[:, 1] >= y_min) & (all_points[:, 1] <= y_max) & \
+                    (all_points[:, 2] >= z_min) & (all_points[:, 2] <= z_max)           
+            combined_coords = combined_coords[mask]
         
         # 2.2唯一化：去重，找出所有被占据的唯一体素坐标，并记录每个体素包含多少个原始点，以及映射关系
         # Get unique voxel IDs and mapping indices
@@ -120,12 +121,13 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     #     device=device
     # )
     
+    #? 使用spconv提供的库方法进行稀疏3D卷积
     spatial_shape = unique_coords[:, 1:].max(0)[0].tolist()
     spatial_shape = [s + 1 for s in spatial_shape]
     sparse_tensor = spconv.SparseConvTensor(
         features=aggregated_feats,
         indices=unique_coords.int(),
-        spatial_shape=spatial_shape,
+        spatial_shape=spatial_shape, # todo 需要预先定义网格的最大尺寸
         batch_size=b,
     )
 

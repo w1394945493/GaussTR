@@ -262,6 +262,15 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     --work-dir "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/omniscene/train"
 
 
+# todo ---------------------------------------------------------#
+# todo volsplatv3
 
+export CUDA_VISIBLE_DEVICES=5
+python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/train2
 
-
+python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
+    /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py \
+    --checkpoint /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/train2/epoch_24.pth \
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/test \

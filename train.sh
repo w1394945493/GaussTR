@@ -34,7 +34,6 @@ python setup.py install --blas=openblas
 # 编译自定义包时，避免环境隔离：--no-build-isolation
 pip install -e . --no-build-isolation
 pip install . --no-build-isolation # 放弃可编辑模式
-pip install . --no-build-isolation
 python setup.py install
 rm -rf build/ dist/ *.egg-info
 

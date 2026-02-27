@@ -2,7 +2,7 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv2/outputs/vis28'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/outputs/vis2'
 
 # custom_hooks = [
 #     dict(type='DumpResultHook',
@@ -43,17 +43,16 @@ with_empty = True # 是否使用空高斯
 
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
-# out_channels += num_class-1 if with_empty else num_class
 out_channels += num_class
 
 #! 高斯尺度相关
 # voxel_resolution = 0.5
-voxel_resolution = 0.2
+voxel_resolution = 0.001
 
 # gaussian_scale_min = 0.1
 # gaussian_scale_max = 0.5
 gaussian_scale_min = 0.08
-gaussian_scale_max = 0.64
+gaussian_scale_max = 0.5
 
 use_checkpoint = True
 _dim_ = 128
@@ -68,129 +67,59 @@ patch_sizes=[8, 8, 4, 2]
 
 
 model = dict(
-    type = 'VolSplat',
+    type = 'VolSplatV3',
 
     use_checkpoint = use_checkpoint,
-    
-    # refine_voxel_resolution = refine_voxel_resolution,
     voxel_resolution = voxel_resolution,
-    scale_range=[gaussian_scale_min,gaussian_scale_max],     
-    semantic_dim = num_class,   
     
-    # backbone=dict(
-    #     type='mmdet.ResNet',
-    #     depth=50,
-    #     in_channels=3,
-    #     num_stages=4,
-    #     out_indices=(0, 1, 2, 3),
-    #     frozen_stages=-1,
-    #     norm_cfg=dict(type='BN', requires_grad=False),
-    #     norm_eval=True,
-    #     style='pytorch',
-    #     init_cfg=dict(
-    #         type='Pretrained',
-    #         # checkpoint='pretrained/dino_resnet50_pretrain.pth',
-    #         checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
-    #         prefix=None)),
+    backbone=dict(
+        type='mmdet.ResNet',
+        depth=50,
+        in_channels=3,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=-1,
+        norm_cfg=dict(type='BN', requires_grad=False),
+        norm_eval=True,
+        style='pytorch',
+        init_cfg=dict(
+            type='Pretrained',
+            # checkpoint='pretrained/dino_resnet50_pretrain.pth',
+            checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
+            prefix=None)),
 
-    # neck=dict(
-    #     type='mmdet.FPN',
-    #     in_channels=[256, 512, 1024, 2048],
-    #     out_channels=_dim_,
-    #     # start_level=1,
-    #     start_level = 0,
-    #     add_extra_convs='on_input',
-    #     num_outs=4),
-    
-    model_url = '/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dinov2_vitb14_reg4_pretrain.pth',
     neck=dict(
-        type='ViTDetFPN',
-        in_channels=feat_dims,
+        type='mmdet.FPN',
+        in_channels=[256, 512, 1024, 2048],
         out_channels=_dim_,
-        norm_cfg=dict(type='LN2d')),    
-    
-    top_k = 25600,
-    # top_k = 0,
-    
-    foreground_head=dict(
+        # start_level=1,
+        start_level = 0,
+        add_extra_convs='on_input',
+        num_outs=4),
+
+    sparse_unet=dict(
+        type='SparseUNetSpconv',
+        in_channels=_dim_, # 128
+        out_channels=_dim_, # 128
+        num_blocks=3,
+        ),   
+    sparse_gs =  dict(
         type='SparseGaussianHead',
         in_channels=_dim_, 
         out_channels=out_channels,
-        ),     
-    
-    lifter = dict(
-        type='GaussianLifter',
-        num_anchor=12800,
-        embed_dims=_dim_,
-        semantic_dim=num_class,
-        pc_range=vol_range,
-    ),
-    
-    encoder = dict(
-        type = 'GaussianOccEncoder',
-        num_decoder=3,
-        anchor_encoder=dict(
-            type='MLP',
-            input_dim=out_channels, 
-            output_dim=_dim_),      
-        
-        norm_layer=dict(type="LN", normalized_shape=_dim_),
-        ffn=dict(
-            type="AsymmetricFFN",
-            in_channels=_dim_ * 2,
-            embed_dims=_dim_,
-            feedforward_channels=_dim_ * 4,
-        ),
-        deformable_layer=dict(
-                type='DeformableFeatureAggregation',
-                embed_dims=_dim_,
-                num_groups=4,
-                num_levels=4,
-                num_cams=num_cams,
-                attn_drop=0.15,
-                use_deformable_func=True,
-                use_camera_embed=True,
-                residual_mode="cat",
-                kps_generator=dict(
-                    type="SparseGaussian3DKeyPointsGenerator",
-                    embed_dims=_dim_,
-                    num_learnable_pts=4, # todo 可学习尺寸采样点数
-                    learnable_fixed_scale=1,
-                    fix_scale=None, # todo 固定尺寸采样点数：若为None，则为1
-                    # fix_scale=[
-                    #     [0, 0, 0],
-                    #     [0.45, 0, 0],
-                    #     [-0.45, 0, 0],
-                    #     [0, 0.45, 0],
-                    #     [0, -0.45, 0],
-                    #     [0, 0, 0.45],
-                    #     [0, 0, -0.45],
-                    # ],
-                    pc_range=vol_range,
-                    scale_range=[gaussian_scale_min,gaussian_scale_max],
-                ),
-            ),    
-        spconv_layer=dict(
-            type='SparseConv3DModule', 
-            in_channels=_dim_,
-            embed_channels=_dim_,
-            pc_range=vol_range,
-            grid_size=[voxel_size, voxel_size, voxel_size],
         ),  
-        refine_layer=dict(
-            type='SparseGaussian3DRefinementModule',
-            embed_dims=_dim_,
-            output_dim = out_channels,
-            semantic_dim = num_class,
-            pc_range=vol_range,
-            voxel_size = voxel_size,
-            scale_range=[gaussian_scale_min,gaussian_scale_max],
-        ), 
-                    
-    ),
+    gaussian_adapter=dict(
+        type='GaussianAdapter_depth',
+        
+        gaussian_scale_min = gaussian_scale_min,
+        gaussian_scale_max = gaussian_scale_max,        
+        
+        sh_degree=sh_degree,
+    ),  
     
     decoder = dict(
         type='GaussianDecoder',
+        
         voxelizer = dict(
             type='GaussianVoxelizer',
             vol_range=vol_range,
@@ -215,10 +144,8 @@ model = dict(
         far = far,
         use_sh = use_sh,
         renderer_type = renderer_type,
-
-        # scale_range=[gaussian_scale_min,gaussian_scale_max],        
-        # semantic_dim = num_class,
     )
+        
 )
 
 # todo ----------------------------------#
@@ -229,24 +156,24 @@ num_workers=4
 train_batch_size=batch_size
 train_num_workers=num_workers
 
-val_batch_size=2
+val_batch_size=1
 val_num_workers=num_workers
 
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
-anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
-logger_interval = 100
-train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/' 
+# anno_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/nuscenes/' # todo 全部训练
+# logger_interval = 100
+# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 
 
-# data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
-# anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
-# logger_interval = 1
-# # train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
+anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
+logger_interval = 1
+train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
 # train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
-# # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
 
 # occ_path = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/surroundocc/mini_samples/" # mini surroundocc标注根目录
@@ -281,8 +208,13 @@ test_pipeline = [
 
 # final_dim = (112,200)
 final_dim = (448,800)
-patch_size = 14
-featmap_dim = [int(final_dim[0]/patch_size*4),int(final_dim[1]/patch_size*4)]
+#! 使用vit作为backbone
+# patch_size = 14
+# featmap_dim = [int(final_dim[0]/patch_size*4),int(final_dim[1]/patch_size*4)]
+
+#! 使用resnet作为backbone
+featmap_dim = [int(final_dim[0]/4),int(final_dim[1]/4)]
+
 # final_dim = (896,1600)
 # output_dim = (112,200)
 
@@ -368,7 +300,7 @@ test_evaluator = val_evaluator
 train_cfg = dict(type='EpochBasedTrainLoop', 
                  max_epochs=24, 
                  val_interval=1, # todo 评估间隔
-                #  val_interval=2,
+                 #  val_interval=2,
                  )
 val_cfg = dict(type='ValLoop') # todo
 test_cfg = dict(type='TestLoop')

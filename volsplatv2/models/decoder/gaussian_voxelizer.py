@@ -504,7 +504,7 @@ class GaussianVoxelizer(nn.Module):
         # )
         # return density, grid_feats 
         
-        # gaussianformer localagg: gauss -> voxel splatting
+        # todo gaussianformer localagg: gauss -> voxel splatting
         sampled_xyz = self.get_meshgrid([-50, -50, -5.0, 50, 50, 3.0], [200, 200, 16], 0.5).to(gaussians['means3d'].device) # (200 200 16 3)
         sampled_xyz = sampled_xyz.reshape(-1, 3).unsqueeze(0)
         

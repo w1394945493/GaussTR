@@ -2,16 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/outputs/vis2'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/outputs/vis4'
 
-# custom_hooks = [
-#     dict(type='DumpResultHook',
-#          save_dir = save_dir, 
-#          save_occ=True,
-#          save_gaussian=True,    
-#         ),]  #  # 保存结果
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir, 
+        ),]  #  # 保存结果
 
-custom_imports = dict(imports=['volsplatv2']) # todo
+custom_imports = dict(imports=['volsplatv3']) # todo
 
 # todo ----------------------------------#
 # todo 图像预处理参数
@@ -47,12 +45,12 @@ out_channels += num_class
 
 #! 高斯尺度相关
 # voxel_resolution = 0.5
-voxel_resolution = 0.001
+voxel_resolution = 0.2 # todo 0.001 - too smal
 
 # gaussian_scale_min = 0.1
 # gaussian_scale_max = 0.5
-gaussian_scale_min = 0.08
-gaussian_scale_max = 0.5
+gaussian_scale_min = 0.08 
+gaussian_scale_max = 0.64
 
 use_checkpoint = True
 _dim_ = 128
@@ -67,8 +65,7 @@ patch_sizes=[8, 8, 4, 2]
 
 
 model = dict(
-    type = 'VolSplatV3',
-
+    type = 'VolSplat',
     use_checkpoint = use_checkpoint,
     voxel_resolution = voxel_resolution,
     
@@ -98,19 +95,20 @@ model = dict(
         num_outs=4),
 
     sparse_unet=dict(
-        type='SparseUNetSpconv',
+        type='SparseUNetWithAttention',
+        # type='SparseUNetSpconv',
         in_channels=_dim_, # 128
         out_channels=_dim_, # 128
         num_blocks=3,
         ),   
     sparse_gs =  dict(
         type='SparseGaussianHead',
+        # type='SparseGaussianHeadSpconv',
         in_channels=_dim_, 
         out_channels=out_channels,
         ),  
     gaussian_adapter=dict(
         type='GaussianAdapter_depth',
-        
         gaussian_scale_min = gaussian_scale_min,
         gaussian_scale_max = gaussian_scale_max,        
         
@@ -170,8 +168,8 @@ val_num_workers=num_workers
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-mini' # 数据集根目录
 anno_root = "/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nuscenes_cam/mini/" # 标注根目录
 logger_interval = 1
-train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
-# train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 # val_ann_file = "nuscenes_mini_infos_train_sweeps_occ.pkl"
 val_ann_file = "nuscenes_mini_infos_val_sweeps_occ.pkl"
 
@@ -208,15 +206,9 @@ test_pipeline = [
 
 # final_dim = (112,200)
 final_dim = (448,800)
-#! 使用vit作为backbone
-# patch_size = 14
-# featmap_dim = [int(final_dim[0]/patch_size*4),int(final_dim[1]/patch_size*4)]
-
-#! 使用resnet作为backbone
 featmap_dim = [int(final_dim[0]/4),int(final_dim[1]/4)]
 
-# final_dim = (896,1600)
-# output_dim = (112,200)
+
 
 data_aug_conf = {
     "final_dim": final_dim,

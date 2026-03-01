@@ -265,10 +265,11 @@ python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
 # todo ---------------------------------------------------------#
 # todo volsplatv3
 
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=0
 python /home/lianghao/wangyushen/Projects/GaussTR/train.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py \
-    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/train2
+    --work-dir /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/train2 \
+    --resume /home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/train2/epoch_6.pth \
 
 python /home/lianghao/wangyushen/Projects/GaussTR/test.py \
     /home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py \

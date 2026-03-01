@@ -23,6 +23,7 @@ from .utils import flatten_multi_scale_feats, flatten_bsn_forward,cam2world
 from .encoder.common.gaussians import build_covariance
 from ..geometry.projection import sample_image_grid,get_world_rays
 
+import MinkowskiEngine as ME
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -32,7 +33,7 @@ def cyan(text: str) -> str:
 
 
 @MODELS.register_module()
-class VolSplatV3(BaseModel):
+class VolSplat(BaseModel):
     def __init__(self,
                  
                 backbone,
@@ -107,6 +108,7 @@ class VolSplatV3(BaseModel):
             return batched_features, valid_mask
         return batched_features
 
+
     def post_process(self,gaussian_params,valid_mask,batched_points):
         opacity_raw = gaussian_params[..., :1]  # [b, 1, N_max, 1]
         
@@ -146,8 +148,9 @@ class VolSplatV3(BaseModel):
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) #! cam -> ori_img
         extrinsics = data_samples['cam2lidar']
 
-        bs,n = intrinsics.shape[:2]
+        bs, n = intrinsics.shape[:2]
         
+        # todo 体素化
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)    
@@ -158,25 +161,64 @@ class VolSplatV3(BaseModel):
                 b=bs, v=n,
                 normal=False,
                 img_aug_mat=img_aug_mat,
+                
+                # vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], # todo 仅保留范围内的点
+                vol_range=None,
+                
                 )   
-        
+
+
+        # todo ---------------------------------------------
+        # todo MinkowskiEngine 版本
         
         # todo 3D UNet网络
         sparse_out = self.sparse_unet(sparse_input)
         
         # todo 残差连接
-        if torch.equal(sparse_out.indices, sparse_input.indices) and sparse_out.features.shape[1] == sparse_input.features.shape[1]:
-            new_features = sparse_out.features + sparse_input.features
-            sparse_out_with_residual = sparse_out.replace_feature(new_features)
+        if torch.equal(sparse_out.C, sparse_input.C) and sparse_out.F.shape[1] == sparse_input.F.shape[1]: # todo sparse_out.C: (N,4) 4(batch_indices,x,y,z)
+            # Create new feature tensor
+            new_features = sparse_out.F + sparse_input.F # todo 见论文 3(C).1) Feature Refinement 的 公式(8)
+
+            sparse_out_with_residual = ME.SparseTensor(
+                features=new_features,
+                coordinate_map_key=sparse_out.coordinate_map_key,
+                coordinate_manager=sparse_out.coordinate_manager
+            )
         else:
+            # Handle coordinate mismatch
             print("Warning: Input and output coordinates inconsistent, skipping residual connection")
             sparse_out_with_residual = sparse_out
         
         gaussians = self.gaussian_head(sparse_out_with_residual)
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
-        gaussian_params, valid_mask = self._sparse_to_batched(gaussians.features, gaussians.indices, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
-        batched_points = self._sparse_to_batched(aggregated_points, gaussians.indices, bs)  # [b, 1, N_max, 3]        
+        gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
+        batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
+
+
+
+        # # todo ---------------------------------------------
+        # # todo spconv 版本
+        # sparse_out = self.sparse_unet(sparse_input)
+        # # 判断坐标和特征维度是否一致
+        # if torch.equal(sparse_out.indices, sparse_input.indices) and sparse_out.features.shape[1] == sparse_input.features.shape[1]:
+            
+        #     # 执行残差相加：直接操作 features 属性
+        #     new_features = sparse_out.features + sparse_input.features
+        #     # 使用 replace_feature 生成带残差的新 Tensor
+        #     sparse_out_with_residual = sparse_out.replace_feature(new_features)
+        # else:
+        #     # 坐标或维度不匹配时的回退逻辑
+        #     print("Warning: Input and output coordinates/channels inconsistent, skipping residual connection")
+        #     sparse_out_with_residual = sparse_out   
+            
+        # gaussians = self.gaussian_head(sparse_out_with_residual)
+        # del sparse_out_with_residual,sparse_out,sparse_input,new_features
+        
+        # gaussian_params, valid_mask = self._sparse_to_batched(gaussians.features, gaussians.indices, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
+        # batched_points = self._sparse_to_batched(aggregated_points, gaussians.indices, bs)  # [b, 1, N_max, 3]              
+
+
 
         gaussians = self.post_process(gaussian_params,valid_mask,batched_points)
         return self.decoder(gaussians,data,mode=mode)

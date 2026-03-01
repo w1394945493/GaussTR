@@ -57,9 +57,7 @@ class SparseConv3DModule(nn.Module):
 class SparseGaussianHead(nn.Module):
     def __init__(self, in_channels=128, out_channels=14):
         super().__init__()
-        
         self.num_gaussian_parameters = out_channels
-        
         # ME.MinkowskiConvolution -> spconv.SubMConv3d
         self.conv1 = spconv.SubMConv3d(
             in_channels, 
@@ -69,9 +67,7 @@ class SparseGaussianHead(nn.Module):
             padding=1, # SubMConv 通常需要 padding 来保持原尺寸
             bias=True
         )
-        
         self.act = nn.GELU() 
-        
         self.conv2 = spconv.SubMConv3d(
             out_channels, 
             out_channels, 

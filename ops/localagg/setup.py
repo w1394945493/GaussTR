@@ -15,12 +15,12 @@ import os
 os.path.dirname(os.path.abspath(__file__))
 
 setup(
-    name="local_aggregate",
-    packages=['local_aggregate'],
+    name="local_aggregate", # python包的名字
+    packages=['local_aggregate'], # 告诉python哪些文件夹应该被视为python包
     ext_modules=[
-        CUDAExtension(
-            name="local_aggregate._C",
-            sources=[
+        CUDAExtension(  # CUDAExtension(): 定义了如何编译底层代码
+            name="local_aggregate._C", # 编译出来的二进制文件名：通过from . import _C来调用
+            sources=[                  # 列出所有需要编译的源文件，包括实现逻辑的.cu文件和将C++接口暴露给Pytorch的ext.cpp
             "src/aggregator_impl.cu",
             "src/forward.cu",
             "src/backward.cu",
@@ -32,6 +32,6 @@ setup(
             extra_compile_args={"nvcc": ["-Xcompiler", "-fno-gnu-unique"]})
         ],
     cmdclass={
-        'build_ext': BuildExtension
+        'build_ext': BuildExtension # 告诉python使用Pytorch提供的编译器
     }
 )

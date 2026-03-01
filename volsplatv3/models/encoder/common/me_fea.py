@@ -4,13 +4,13 @@ from ....geometry.projection import get_world_rays
 from ....geometry.projection import sample_image_grid
 import torch.nn.functional as F
 
-# import MinkowskiEngine as ME
+import MinkowskiEngine as ME
 import spconv.pytorch as spconv 
 
 def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v,
                            normal=False, # 是否归一化
                            img_aug_mat=None, # 图像变换矩阵
-                           vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], # todo surroundocc中感知范围
+                           vol_range = None, # todo surroundocc中感知范围
                            ):
     device = out.device
 
@@ -32,17 +32,8 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
         post_trans = img_aug_mat[..., :3, 3] # (b,v,3)    
         # 逆平移
         coordinates = coordinates - post_trans.unsqueeze(-2)
-        
-        dets = torch.linalg.det(post_rots)
-        is_singular = torch.abs(dets) < 1e-9
-        if is_singular.any():
-            print(post_rots)
-            raise RuntimeError("linalg.inv 将失败：输入矩阵中包含奇异矩阵.")
         # 逆旋转 (b, v, n, 3)
         coordinates = (torch.inverse(post_rots).unsqueeze(2) @ coordinates.unsqueeze(-1)).squeeze(-1)
-        
-        
-        
         # 去掉齐次位并对齐维度 (b, v, n, 1, 1, 2)
         coordinates = rearrange(coordinates[...,:-1], "b v n xy -> b v n () () xy")
     else:
@@ -97,9 +88,11 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
         )
     
     # todo 剔除不在occ感知范围内的点
-    all_points = all_points[mask]
-    feats_flat = feats_flat[mask]
+    if vol_range is not None:
+        all_points = all_points[mask]
+        feats_flat = feats_flat[mask]
         
+    
     # todo 3. 特征聚合：将落在同一个3D体素内的像素点的特征进行聚合
     num_voxels = unique_coords.shape[0]
     # todo 3.1 将落在同一体素内的所有像素特征累加并取平均
@@ -120,21 +113,22 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     #?--------------------------------------------------------------------------------------------------#
     #? 学习一下MinkowskiEngine的使用：将像素特征 -> 体素空间中的特征，并使用ME进行后续处理
     # Use correct coordinate format: batch index + quantized coordinates
-    # sparse_tensor = ME.SparseTensor(
-    #     features=aggregated_feats, # todo 非空体素在3D空间的位置
-    #     coordinates=unique_coords.int(), # todo 每个坐标对应的向量信息 (N,4) -> [batch_index, x, y, z] bs + 体素点在体素网格中的索引
-    #     tensor_stride=1,
-    #     device=device
-    # )
+    
+    sparse_tensor = ME.SparseTensor(
+        features=aggregated_feats, # todo 非空体素在3D空间的位置
+        coordinates=unique_coords.int(), # todo 每个坐标对应的向量信息 (N,4) -> [batch_index, x, y, z] bs + 体素点在体素网格中的索引
+        tensor_stride=1,
+        device=device
+    )
     
     #? 使用spconv提供的库方法进行稀疏3D卷积
-    spatial_shape = unique_coords[:, 1:].max(0)[0].tolist()
-    spatial_shape = [s + 1 for s in spatial_shape]
-    sparse_tensor = spconv.SparseConvTensor(
-        features=aggregated_feats,
-        indices=unique_coords.int(),
-        spatial_shape=spatial_shape, # todo 需要预先定义网格的最大尺寸
-        batch_size=b,
-    )
+    # spatial_shape = unique_coords[:, 1:].max(0)[0].tolist()
+    # spatial_shape = [s + 1 for s in spatial_shape]
+    # sparse_tensor = spconv.SparseConvTensor(
+    #     features=aggregated_feats,
+    #     indices=unique_coords.int(),
+    #     spatial_shape=spatial_shape, # todo 需要预先定义网格的最大尺寸
+    #     batch_size=b,
+    # )
 
     return sparse_tensor, aggregated_points, counts

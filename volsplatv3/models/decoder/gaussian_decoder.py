@@ -43,6 +43,8 @@ class GaussianDecoder(BaseModule):
         super().__init__()
 
         self.voxelizer = MODELS.build(voxelizer)
+        
+        self.silog_loss = MODELS.build(dict(type='SiLogLoss', _scope_='mmseg'))
 
         self.use_sh = use_sh
         self.near = near
@@ -112,27 +114,11 @@ class GaussianDecoder(BaseModule):
         self.with_empty = with_empty
         self.class_weights = torch.tensor(manual_class_weight)
         
+    
+    def add_empty_gaussian(self,means3d, scales, rotations, covariances, opacities, features):
         
-    def forward(self,
-                gaussians,
-                data,
-                mode='tensor',
-                **kwargs):
-
-        data_samples = data
-
-        means3d = gaussians.means # todo (b n 3)
-        # harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
-        opacities = gaussians.opacities # todo (b n)
-        scales = gaussians.scales # todo (b n 3)
-        rotations = gaussians.rotations # todo (b n 4)
-        covariances = gaussians.covariances # todo (b n 3 3)
-        features = gaussians.semantics # todo (b n num_class)
-
         if self.with_empty:
-            
             bs = means3d.shape[0] # 获取当前 Batch Size
-
             empty_mean = self.empty_mean.expand(bs, -1, -1)     # (B, n_bg, 3)
             empty_scale = self.empty_scale.expand(bs, -1, -1)   # (B, n_bg, 3)
             empty_rot = self.empty_rot.expand(bs, -1, -1)
@@ -147,29 +133,62 @@ class GaussianDecoder(BaseModule):
             scales = torch.cat([scales, empty_scale], dim=1)
             rotations = torch.cat([rotations, empty_rot], dim=1)
             covariances = torch.cat([covariances,empty_covs],dim=1)
-            opacities = torch.cat([opacities,empty_opa],dim=1)
-
-
-        # 视图渲染
-        # colors, rendered_depth = self.render_gaussians(extrinsics, intrinsics, 
-        #                                                means3d, harmonics,opacities,scales,rotations,covariances,
-        #                                                (h,w),device,)
+            opacities = torch.cat([opacities,empty_opa],dim=1)        
         
+        return means3d, scales, rotations, covariances, opacities, features
+    
+    
+    def forward(self,
+                gaussians,
+                data,
+                mode='tensor',
+                **kwargs):
+
+        data_samples = data
+
+        means3d = gaussians.means # todo (b n 3)
+        harmonics = gaussians.harmonics # todo (b n 3 d_sh) | (b n c), c=rgb
+        opacities = gaussians.opacities # todo (b n)
+        scales = gaussians.scales # todo (b n 3)
+        rotations = gaussians.rotations # todo (b n 4)
+        covariances = gaussians.covariances # todo (b n 3 3)
+        features = gaussians.semantics # todo (b n num_class)
+
+        
+        
+        ori_imgs = data_samples['ori_img'] # todo (1 6 3 900 1600)
+        ori_depth = data_samples['ori_depth'] # todo (1 6 224 400)
+        
+        h, w = ori_imgs.shape[-2:]
+        intrinsics = data_samples['cam2img'][...,:3,:3]
+        extrinsics = data_samples['cam2lidar']
+        
+        # todo --------------------------------------#
+        # todo 视图渲染
+        colors, rendered_depth = self.render_gaussians(extrinsics, intrinsics, 
+                                                       means3d, harmonics,opacities,scales,rotations,covariances,
+                                                       (h,w),
+                                                       is_normalized=False,
+                                                       )        
+        
+        
+        means3d, scales, rotations, covariances, opacities, features = self.add_empty_gaussian(means3d, scales, rotations, covariances, opacities, features)
+
         # todo --------------------------------------#
         # todo 占用预测
         density, grid_feats = self.voxelizer(means3d, scales, covariances, opacities, features) # (b,200,200,16) (b,200,200,16,18)
         # grid_feats = self.voxelizer(means3d, scales, covariances, opacities, features)
-        
+        # todo 占据真值
         occ_mask, occ_gt = data_samples['occ_cam_mask'],data_samples['occ_label'] # (b,200,200,16) (b,200,200,16)
         
         # todo ---------------------------------------#
         # todo 推理
         if mode == 'predict':
-            probs = torch.softmax(grid_feats,dim=-1)
-            occ_pred = probs.argmax(-1)
+            occ_pred = torch.softmax(grid_feats,dim=-1).argmax(-1)
+                    
             outputs = [{
-                # 'depth_pred': rendered_depth, # (b v h w)
-                # 'img_pred': colors, # (b v 3 112 200)
+                'depth_pred': rendered_depth, # (b v h w)
+                'img_pred': colors, # (b v 3 h w)
                 'occ_pred': occ_pred, # (b,200,200,16)
                 'occ_mask': occ_mask, # (b,200,200,16)
                 'occ_gt': occ_gt,     # (b,200,200,16)
@@ -182,34 +201,35 @@ class GaussianDecoder(BaseModule):
         # todo 占用预测损失
         semantics = grid_feats[occ_mask].unsqueeze(0).transpose(1,2)
         sampled_label = occ_gt[occ_mask].unsqueeze(0)
+                
+        losses['loss_voxel_ce'] = 10 * CE_ssc_loss(
+            semantics,  # (b n_class n)
+            sampled_label,  # (b n)
+            self.class_weights.type_as(semantics), 
+            ignore_index=255,
+            )
         
-        losses['loss_voxel_ce'] = 10.0 * \
-            CE_ssc_loss(semantics,  # (b n_class n)
-                        sampled_label,  # (b n)
-                        self.class_weights.type_as(semantics), 
-                        ignore_index=255,
-                        )
         lovasz_input = torch.softmax(semantics, dim=1)
         losses['loss_voxel_lovasz'] = 1.0 * lovasz_softmax(
             lovasz_input.transpose(1, 2).flatten(0, 1), 
             sampled_label.flatten(), 
-            ignore=self.lovasz_ignore) # todo 忽略背景类
-        
-        
-        
+            ignore=self.lovasz_ignore,
+            ) # todo 忽略背景类
+                
         # todo ----------------------------------------#
-        # todo 深度预测损失：
-        # rendered_depth = rendered_depth.flatten(0,1) # todo ((b v) h w) v=6 h=112 w=192
-        # depth = depth.flatten(0,1)  # todo ((b v) h w) depth: 来自Metric 3D生成的
-        # losses['loss_depth'] = self.depth_loss(rendered_depth, depth)
-
-        # rgb = colors.flatten(0,1) # todo rgb.shape:torch.Size([6, 3, 112, 192])
-        # rgb_gt = data_samples['output_img']
-        # rgb_gt = rgb_gt.flatten(0,1) / 255. # todo rgb_gt.shape: torch.Size([6, 3, 112, 192])
+        # todo 渲染损失：
+        d_h,d_w = ori_depth.shape[-2:]
+        rendered_depth = F.interpolate(rendered_depth,size=(d_h, d_w), mode='bilinear',align_corners=False)
         
-        # reg_loss = (rgb - rgb_gt) ** 2
-        # losses['loss_l2'] = reg_loss.mean()
-        # losses['loss_lpips'] = self.loss_lpips(rgb_gt, rgb)
+        rendered_depth = rendered_depth.flatten(0,1) # todo ((b v) h w) v=6 h=112 w=192
+        ori_depth = ori_depth.flatten(0,1)  # todo ((b v) h w) depth: 来自Metric 3D生成的
+        
+        
+        losses['loss_depth'] = self.depth_loss(rendered_depth, ori_depth)
+
+        colors = colors.flatten(0,1) # todo [6, 3, h, w]
+        rgb_gt = ori_imgs.flatten(0,1) / 255. # todo [6, 3, h, w]
+        losses['loss_img'] = F.l1_loss(colors,rgb_gt)
         
         return losses
 
@@ -218,6 +238,7 @@ class GaussianDecoder(BaseModule):
     def render_gaussians(self,
                          extrinsics,
                          intrinsics,
+                         
                          means3d,
                          harmonics,
                          opacities,
@@ -226,28 +247,29 @@ class GaussianDecoder(BaseModule):
                          covariances,
                          
                          image_shape,
-                         device,
+                         is_normalized = False,
                          ):
-        bs, n = extrinsics.shape[:2]
-        h, w = image_shape
         if self.renderer_type == "gsplat":
             colors, rendered_depth = rasterize_gaussians(
                 extrinsics=extrinsics,
                 intrinsics=intrinsics,
-                image_shape = (h,w),
+                image_shape = image_shape,
+                
                 means3d=means3d,
                 rotations=rotations,
                 scales=scales,
                 covariances=covariances,
                 opacities=opacities.squeeze(-1),
                 colors=rearrange(harmonics,"b g c d_sh -> b g d_sh c") if self.use_sh else harmonics, # todo (b n c d_sh)
-                use_sh=self.use_sh,
                 
+                use_sh=self.use_sh,
                 near_plane=self.near,                 
                 far_plane=self.far,
+                is_normalized = is_normalized, #! 相机内参已经是对应image_shape的内参
 
                 render_mode='RGB+D',  # NOTE: 'ED' mode is better for visualization
                 channel_chunk=32)
+        
         # elif self.renderer_type == "vanilla":
 
         #     near = repeat(torch.tensor([self.near],device=device),"1 -> b v",b=bs,v=n)
@@ -256,7 +278,7 @@ class GaussianDecoder(BaseModule):
         #     colors, rendered_depth = render_cuda(
         #         extrinsics=rearrange(extrinsics, "b v i j -> (b v) i j"),
         #         intrinsics=rearrange(intrinsics, "b v i j -> (b v) i j"),
-        #         image_shape = (h,w),
+        #         image_shape = image_shape,
         #         near=rearrange(near, "b v -> (b v)"),
         #         far=rearrange(far, "b v -> (b v)"),
         #         background_color=repeat(self.background_color, "c -> (b v) c", b=bs, v=n),

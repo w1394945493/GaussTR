@@ -410,5 +410,18 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
+        {
+            "name": "run train volsplatv3",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/GaussTR/train.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py",
+                "--work-dir",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

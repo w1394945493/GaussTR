@@ -85,10 +85,23 @@ class DumpResultHook(Hook):
                 # todo --------------------------------------#
                 # todo 保存占用图
                 occ_pred = outputs[0]['occ_pred'][i].cpu().numpy()
-                occ_gt = outputs[0]['occ_gt'][i].cpu().numpy()
+                occ_gt = outputs[0]['occ_gt'][i].cpu().numpy() # (200,200,16)
+                occ_mask = outputs[0]['occ_mask'][i].cpu().numpy() # (200,200,16)
+                
+                
+                density_mask = None
+                if 'density_mask' in outputs[0]:
+                    density_mask = outputs[0]['density_mask'][i].cpu().numpy()
+                
+                
+                
                 output = dict(
                     occ_pred = occ_pred,
-                    occ_gt = occ_gt, )                    
+                    occ_gt = occ_gt,
+                    occ_mask = occ_mask,
+                    density_mask = density_mask,
+                )                    
+                
                 save_name = f"{data_batch['scene_token'][i]}_{data_batch['token'][i]}.pkl"
                 save_path = os.path.join(self.occ_path, save_name)
                 with open(save_path, 'wb') as f:

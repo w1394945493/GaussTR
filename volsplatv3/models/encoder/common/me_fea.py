@@ -114,6 +114,8 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     #? 学习一下MinkowskiEngine的使用：将像素特征 -> 体素空间中的特征，并使用ME进行后续处理
     # Use correct coordinate format: batch index + quantized coordinates
     
+    
+    
     sparse_tensor = ME.SparseTensor(
         features=aggregated_feats, # todo 非空体素在3D空间的位置
         coordinates=unique_coords.int(), # todo 每个坐标对应的向量信息 (N,4) -> [batch_index, x, y, z] bs + 体素点在体素网格中的索引

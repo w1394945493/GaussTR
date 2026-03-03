@@ -150,6 +150,10 @@ class VolSplat(BaseModel):
 
         bs, n = intrinsics.shape[:2]
         
+        
+        
+        
+        
         # todo 体素化
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
@@ -162,8 +166,8 @@ class VolSplat(BaseModel):
                 normal=False,
                 img_aug_mat=img_aug_mat,
                 
-                # vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], # todo 仅保留范围内的点
-                vol_range=None,
+                vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], # todo 仅保留范围内的点
+                # vol_range=None, # 
                 
                 )   
 
@@ -194,31 +198,6 @@ class VolSplat(BaseModel):
         
         gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
         batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
-
-
-
-        # # todo ---------------------------------------------
-        # # todo spconv 版本
-        # sparse_out = self.sparse_unet(sparse_input)
-        # # 判断坐标和特征维度是否一致
-        # if torch.equal(sparse_out.indices, sparse_input.indices) and sparse_out.features.shape[1] == sparse_input.features.shape[1]:
-            
-        #     # 执行残差相加：直接操作 features 属性
-        #     new_features = sparse_out.features + sparse_input.features
-        #     # 使用 replace_feature 生成带残差的新 Tensor
-        #     sparse_out_with_residual = sparse_out.replace_feature(new_features)
-        # else:
-        #     # 坐标或维度不匹配时的回退逻辑
-        #     print("Warning: Input and output coordinates/channels inconsistent, skipping residual connection")
-        #     sparse_out_with_residual = sparse_out   
-            
-        # gaussians = self.gaussian_head(sparse_out_with_residual)
-        # del sparse_out_with_residual,sparse_out,sparse_input,new_features
-        
-        # gaussian_params, valid_mask = self._sparse_to_batched(gaussians.features, gaussians.indices, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
-        # batched_points = self._sparse_to_batched(aggregated_points, gaussians.indices, bs)  # [b, 1, N_max, 3]              
-
-
 
         gaussians = self.post_process(gaussian_params,valid_mask,batched_points)
         return self.decoder(gaussians,data,mode=mode)

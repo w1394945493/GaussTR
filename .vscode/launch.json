@@ -71,7 +71,6 @@
             "console": "integratedTerminal",
             // "justMyCode": false,
         },
-
         {
             "name": "dubug generate sam2",
             "type": "debugpy",
@@ -329,7 +328,6 @@
             "console": "integratedTerminal",
             // "justMyCode": false,
         },
-        
         {
             "name": "generate depth",
             "type": "debugpy",
@@ -337,8 +335,7 @@
             "program": "/home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py",
             "console": "integratedTerminal",
             // "justMyCode": false,
-        },        
-
+        },
         {
             "name": "run train gausstrv2",
             "type": "debugpy",
@@ -396,7 +393,6 @@
             "console": "integratedTerminal",
             "justMyCode": false,
         },
-        
         {
             "name": "run test volsplatv3",
             "type": "debugpy",
@@ -406,6 +402,8 @@
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py",
                 "--work-dir",
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+                "--checkpoint",
+                "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/train2/epoch_24.pth",
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

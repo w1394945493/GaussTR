@@ -156,20 +156,39 @@ class GaussianDecoder(BaseModule):
 
         
         
-        ori_imgs = data_samples['ori_img'] # todo (1 6 3 900 1600)
-        ori_depth = data_samples['ori_depth'] # todo (1 6 224 400)
+        # ori_imgs = data_samples['ori_img'] # todo (1 6 3 900 1600)
+        # bs, n, c, h, w = ori_imgs.shape
+        # # ori_imgs = ori_imgs.flatten(0, 1)
         
-        h, w = ori_imgs.shape[-2:]
-        intrinsics = data_samples['cam2img'][...,:3,:3]
-        extrinsics = data_samples['cam2lidar']
+        # ori_depth = data_samples['ori_depth'] # todo (1 6 224 400)
+        # # d_h,d_w = ori_depth.shape[-2:]
         
-        # todo --------------------------------------#
-        # todo 视图渲染
-        colors, rendered_depth = self.render_gaussians(extrinsics, intrinsics, 
-                                                       means3d, harmonics,opacities,scales,rotations,covariances,
-                                                       (h,w),
-                                                       is_normalized=False,
-                                                       )        
+        # # ori_imgs = F.interpolate(
+        # #     ori_imgs, 
+        # #     size=(d_h, d_w), 
+        # #     mode='bilinear', 
+        # #     align_corners=False
+        # # )
+        # # ori_imgs = ori_imgs.view(bs,n,c,d_h,d_w)
+
+        # intrinsics = data_samples['cam2img'][...,:3,:3] # todo (1 6 3 3)
+        # # scale_x = d_w / w
+        # # scale_y = d_h / h
+        # # intrinsics[..., 0, 0] *= scale_x
+        # # intrinsics[..., 0, 2] *= scale_x
+        # # intrinsics[..., 1, 1] *= scale_y
+        # # intrinsics[..., 1, 2] *= scale_y        
+        
+        # extrinsics = data_samples['cam2lidar']
+        
+        # # todo --------------------------------------#
+        # # todo 视图渲染
+        # colors, rendered_depth = self.render_gaussians(extrinsics, intrinsics, 
+        #                                                means3d, harmonics,opacities,scales,rotations,covariances,
+        #                                             #    (d_h,d_w),
+        #                                                (h,w),
+        #                                                is_normalized=False,
+        #                                                )        
         
         
         means3d, scales, rotations, covariances, opacities, features = self.add_empty_gaussian(means3d, scales, rotations, covariances, opacities, features)
@@ -187,9 +206,12 @@ class GaussianDecoder(BaseModule):
             occ_pred = torch.softmax(grid_feats,dim=-1).argmax(-1)
                     
             outputs = [{
-                'depth_pred': rendered_depth, # (b v h w)
-                'img_pred': colors, # (b v 3 h w)
+                # 'depth_pred': rendered_depth, # (b v h w)
+                # 'img_pred': colors, # (b v 3 h w)
+                
                 'occ_pred': occ_pred, # (b,200,200,16)
+                'density_mask': (density > 0.7).to(torch.int32), # (b,200,200,16)
+                
                 'occ_mask': occ_mask, # (b,200,200,16)
                 'occ_gt': occ_gt,     # (b,200,200,16)
                 'gaussian': gaussians,
@@ -218,18 +240,17 @@ class GaussianDecoder(BaseModule):
                 
         # todo ----------------------------------------#
         # todo 渲染损失：
-        d_h,d_w = ori_depth.shape[-2:]
-        rendered_depth = F.interpolate(rendered_depth,size=(d_h, d_w), mode='bilinear',align_corners=False)
+        # d_h,d_w = ori_depth.shape[-2:]
+        # rendered_depth = F.interpolate(rendered_depth,size=(d_h, d_w), mode='bilinear',align_corners=False)
         
-        rendered_depth = rendered_depth.flatten(0,1) # todo ((b v) h w) v=6 h=112 w=192
-        ori_depth = ori_depth.flatten(0,1)  # todo ((b v) h w) depth: 来自Metric 3D生成的
-        
-        
-        losses['loss_depth'] = self.depth_loss(rendered_depth, ori_depth)
+        # rendered_depth = rendered_depth.flatten(0,1) # todo ((b v) h w) v=6 h=112 w=192
+        # ori_depth = ori_depth.flatten(0,1)  # todo ((b v) h w) depth: 来自Metric 3D生成的
+        # losses['loss_depth'] = self.depth_loss(rendered_depth, ori_depth)
 
-        colors = colors.flatten(0,1) # todo [6, 3, h, w]
-        rgb_gt = ori_imgs.flatten(0,1) / 255. # todo [6, 3, h, w]
-        losses['loss_img'] = F.l1_loss(colors,rgb_gt)
+        # colors = colors.flatten(0,1) # todo [6, 3, h, w]
+        # rgb_gt = ori_imgs.flatten(0,1) / 255. # todo [6, 3, h, w]
+        # loss_img = (colors - rgb_gt) ** 2
+        # losses['loss_img'] = loss_img.mean()
         
         return losses
 

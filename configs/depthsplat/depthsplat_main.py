@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/outputs/vis9'
+save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/depthsplat/outputs/vis4'
 
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir, 
-        ),]  #  # 保存结果
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir, 
+#         ),]  #  # 保存结果
 
-custom_imports = dict(imports=['volsplatv3']) # todo
+custom_imports = dict(imports=['depthsplat']) # todo
 
 # todo ----------------------------------#
 # todo 图像预处理参数
@@ -45,7 +45,7 @@ out_channels += num_class
 
 #! 高斯尺度相关
 # voxel_resolution = 0.5
-voxel_resolution = 0.5 # todo 0.001 - too small, 0.1, 0.2, 0.5
+voxel_resolution = 0.2 # todo 0.001 - too smal
 
 # gaussian_scale_min = 0.1
 # gaussian_scale_max = 0.5
@@ -53,7 +53,7 @@ gaussian_scale_min = 0.08
 gaussian_scale_max = 0.64
 
 use_checkpoint = True
-_dim_ = 128
+feature_channels = 128
 feat_dims = 768
 
 
@@ -65,84 +65,28 @@ patch_sizes=[8, 8, 4, 2]
 
 
 model = dict(
-    type = 'VolSplat',
-    use_checkpoint = use_checkpoint,
-    voxel_resolution = voxel_resolution,
+    type = 'DepthSplat',
     
-    backbone=dict(
-        type='mmdet.ResNet',
-        depth=50,
-        in_channels=3,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,
-        norm_cfg=dict(type='BN', requires_grad=False),
-        norm_eval=True,
-        style='pytorch',
-        init_cfg=dict(
-            type='Pretrained',
-            # checkpoint='pretrained/dino_resnet50_pretrain.pth',
-            checkpoint='/home/lianghao/wangyushen/data/wangyushen/Weights/pretrained/dino_resnet50_pretrain.pth',
-            prefix=None)),
-
-    neck=dict(
-        type='mmdet.FPN',
-        in_channels=[256, 512, 1024, 2048],
-        out_channels=_dim_,
-        # start_level=1,
-        start_level = 0,
-        add_extra_convs='on_input',
-        num_outs=4),
-
-    sparse_unet=dict(
-        type='SparseUNetWithAttention',
-        # type='SparseUNetSpconv',
-        in_channels=_dim_, # 128
-        out_channels=_dim_, # 128
-        num_blocks=3,
-        ),   
-    sparse_gs =  dict(
-        type='SparseGaussianHead',
-        # type='SparseGaussianHeadSpconv',
-        in_channels=_dim_, 
-        out_channels=out_channels,
-        ),  
-    gaussian_adapter=dict(
-        type='GaussianAdapter_depth',
-        gaussian_scale_min = gaussian_scale_min,
-        gaussian_scale_max = gaussian_scale_max,        
-        
-        sh_degree=sh_degree,
-    ),  
+    backbone = dict(
+        type = 'CNNEncoder',
+        output_dim=feature_channels, # 128
+        num_output_scales=1, # 1
+        downsample_factor=4, # 4
+        lowest_scale=4, # 4
+        return_all_scales=True, # 4        
+    ),
     
-    decoder = dict(
-        type='GaussianDecoder',
+    transformer = dict(
+        type = 'MultiViewFeatureTransformer',
+        num_layers=6,
+        d_model=feature_channels,
+        nhead=1,
+        ffn_dim_expansion=4
+    ),
         
-        voxelizer = dict(
-            type='GaussianVoxelizer',
-            vol_range=vol_range,
-            voxel_size=voxel_size,
-            cuda_kwargs=dict(
-                scale_multiplier=3,
-                H=200, W=200, D=16,
-                pc_min=[-50.0, -50.0, -5.0],
-                grid_size=voxel_size), #!   
-            filter_gaussians=True,
-        ),
         
-        num_class = num_class,
         
-        with_empty = with_empty,
-        empty_args=dict(
-            vol_range = vol_range,
-            voxel_size = voxel_size
-        ),
-        
-        near = near,
-        far = far,
-        use_sh = use_sh,
-        renderer_type = renderer_type,
-    )
+    
         
 )
 

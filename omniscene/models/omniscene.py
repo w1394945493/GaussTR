@@ -29,15 +29,21 @@ def cyan(text: str) -> str:
 class OmniScene(BaseModel):
 
     def __init__(self,
+                
                 backbone,
                 neck,
+                
                 pixel_gs,
+                volume_gs,
+                
                 gauss_head,
                 near,
                 far,
                 d_sh,
                 ori_image_shape,
                 use_checkpoint,
+                pc_range,
+                
                  **kwargs):
         super().__init__(**kwargs)
 
@@ -45,6 +51,7 @@ class OmniScene(BaseModel):
 
         self.neck = MODELS.build(neck)
         self.pixel_gs = MODELS.build(pixel_gs)
+        self.volume_gs = MODELS.build(volume_gs)
 
         self.gauss_head = MODELS.build(gauss_head)
         self.near = near
@@ -52,6 +59,8 @@ class OmniScene(BaseModel):
         self.d_sh = d_sh
         self.ori_image_shape = ori_image_shape
         self.use_checkpoint = use_checkpoint
+        
+        self.pc_range = pc_range
 
 
         print(cyan(f'successfully init Model!'))
@@ -186,8 +195,9 @@ class OmniScene(BaseModel):
         # todo backbone 特征提取
         img_feats = self.extract_img_feat(img=inputs)
 
+        # todo --------------------------------------------#
         # todo 像素高斯预测
-        pixel_gaussians = self.pixel_gs(
+        pixel_gaussians, gaussians_feat = self.pixel_gs(
                 rearrange(img_feats[0], "b v c h w -> (b v) c h w"), # img_feats[0].shape torch.Size([1, 6, 128, 28, 48])
                 data_samples["depth"], # (b v h w)
                 pluckers, # torch.Size([1, 6, 6, 112, 192])
@@ -195,6 +205,25 @@ class OmniScene(BaseModel):
                 directions, # torch.Size([1, 6, 112, 192, 3])
                 intrinsics = data_samples['cam2img'][...,:3,:3], # data_samples['cam2img'][...,:3,:3].shape torch.Size([1, 6, 3, 3])
                 extrinsics = data_samples['cam2ego'],)  # data_samples['cam2ego'].shape torch.Size([1, 6, 4, 4])
+        
+        # todo --------------------------------------------#
+        # todo 体素高斯预测
+        x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -3.0, 50.0, 50.0, 12.0]
+        gaussians_means_mask, gaussians_feat_mask = [], []
+        means = pixel_gaussians.means
+        for b in range(bs):
+            mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
+                        (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
+                        (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
+            gaussians_means_mask_i = means[b][mask_pixel_i]
+            gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
+            gaussians_means_mask.append(gaussians_means_mask_i)
+            gaussians_feat_mask.append(gaussians_feat_mask_i)        
+        
+        
+        
+        
+        
         
         '''
         import numpy as np

@@ -4,10 +4,10 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
 save_dir = '/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/volsplatv3/outputs/vis9'
 
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir, 
-        ),]  #  # 保存结果
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir, 
+#         ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv3']) # todo
 

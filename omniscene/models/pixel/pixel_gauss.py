@@ -255,9 +255,9 @@ class PixelGaussian(BaseModule):
         # todo-----------------------------#
         # todo 6.整合输出
         # gaussians = torch.cat([means, rgbs, opacities, rotations, scales], dim=-1) # todo：gaussians：每个点的几何与外观属性
-        # features = rearrange(features, "(b v) c h w -> b (v h w) c", b=bs, v=self.num_cams) # todo：features：对应点的高维语义特征
-        # features = features.unsqueeze(2) # b v*h*w n c
-        # features = rearrange(features, "b r n c -> b (r n) c")
+        
+        features = rearrange(features, "(b v) c h w -> b (v h w) c", b=bs, v=self.num_cams) # todo：features：对应点的高维语义特征
+                
         pixel_gaussians = Gaussians(
             means=means, # (b N 3)
             covariances=covariances, # (b N 3 3)
@@ -267,5 +267,5 @@ class PixelGaussian(BaseModule):
             opacities=opacities.squeeze(-1), # (b N 1) -> (b N)
 
         )
-        return pixel_gaussians
+        return pixel_gaussians, features
 

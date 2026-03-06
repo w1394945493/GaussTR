@@ -49,6 +49,84 @@ num_heads = 8
 num_layers = 1
 patch_sizes=[8, 8, 4, 2]
 
+pc_range = [-50.0, -50.0, -3.0, 50.0, 50.0, 12.0]
+pc_xrange, pc_yrange, pc_zrange = pc_range[3] - pc_range[0], pc_range[4] - pc_range[1], pc_range[5] - pc_range[2]
+
+tpv_h_ = 192
+tpv_w_ = 192
+tpv_z_ = 16
+scale_h = 1
+scale_w = 1
+scale_z = 1
+gpv = 3
+
+
+num_points_in_pillar = [8, 16, 16]
+num_points = [16, 32, 32]
+hybrid_attn_anchors = 16
+hybrid_attn_points = 32
+hybrid_attn_init = 0
+_ffn_dim_ = _dim_ * 2
+
+
+self_cross_layer = dict(
+    type='TPVFormerLayer',
+    attn_cfgs=[
+        dict(
+            type='TPVCrossViewHybridAttention',
+            tpv_h=tpv_h_,
+            tpv_w=tpv_w_,
+            tpv_z=tpv_z_,
+            num_anchors=hybrid_attn_anchors,
+            embed_dims=_dim_,
+            num_heads=num_heads,
+            num_points=hybrid_attn_points,
+            init_mode=hybrid_attn_init,
+            dropout=0.1),
+        dict(
+            type='TPVImageCrossAttention',
+            pc_range=pc_range,
+            num_cams=6,
+            dropout=0.1,
+            deformable_attention=dict(
+                type='TPVMSDeformableAttention3D',
+                embed_dims=_dim_,
+                num_heads=num_heads,
+                num_points=num_points,
+                num_z_anchors=num_points_in_pillar,
+                num_levels=1,
+                floor_sampling_offset=False,
+                tpv_h=tpv_h_,
+                tpv_w=tpv_w_,
+                tpv_z=tpv_z_),
+            embed_dims=_dim_,
+            tpv_h=tpv_h_,
+            tpv_w=tpv_w_,
+            tpv_z=tpv_z_)
+    ],
+    feedforward_channels=_ffn_dim_,
+    ffn_dropout=0.1,
+    operation_order=('self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm'))
+
+self_layer = dict(
+    type='TPVFormerLayer',
+    attn_cfgs=[
+        dict(
+            type='TPVCrossViewHybridAttention',
+            tpv_h=tpv_h_,
+            tpv_w=tpv_w_,
+            tpv_z=tpv_z_,
+            num_anchors=hybrid_attn_anchors,
+            embed_dims=_dim_,
+            num_heads=num_heads,
+            num_points=hybrid_attn_points,
+            init_mode=hybrid_attn_init,
+            dropout=0.1)
+    ],
+    feedforward_channels=_ffn_dim_,
+    ffn_dropout=0.1,
+    operation_order=('self_attn', 'norm', 'ffn', 'norm'))
+
 
 
 
@@ -60,6 +138,7 @@ model = dict(
     d_sh = d_sh,
     ori_image_shape = ori_image_shape,
     use_checkpoint = use_checkpoint,
+    pc_range = pc_range,
 
     data_preprocessor=dict(
         type='Det3DDataPreprocessor', # todo 图像数据：进行归一化处理，打包为patch
@@ -90,6 +169,7 @@ model = dict(
         add_extra_convs='on_input',
         num_outs=4),
 
+    
     pixel_gs=dict(
         type="PixelGaussian",
         use_checkpoint=use_checkpoint,
@@ -123,6 +203,52 @@ model = dict(
 
         ),
 
+    volume_gs = dict(
+        type="VolumeGaussian",
+        use_checkpoint=use_checkpoint,
+
+        encoder=dict(
+            type='TPVFormerEncoder',
+            tpv_h=tpv_h_,
+            tpv_w=tpv_w_,
+            tpv_z=tpv_z_,
+            num_feature_levels=1,
+            num_layers=3,
+            pc_range=pc_range,
+            num_points_in_pillar=num_points_in_pillar,
+            num_points_in_pillar_cross_view=[16, 16, 16],
+            return_intermediate=False,
+            transformerlayers=[
+                self_cross_layer, self_cross_layer, self_layer
+            ],
+            embed_dims=_dim_,
+            positional_encoding=dict(
+                type='TPVFormerPositionalEncoding',
+                num_feats=[48, 48, 32],
+                h=tpv_h_,
+                w=tpv_w_,
+                z=tpv_z_)),
+        
+        gs_decoder = dict(
+            type='VolumeGaussianDecoder',
+            tpv_h=tpv_h_,
+            tpv_w=tpv_w_,
+            tpv_z=tpv_z_,
+            pc_range=pc_range,
+            gs_dim=14,
+            in_dims=_dim_,
+            hidden_dims=2*_dim_,
+            out_dims=_dim_,
+            scale_h=scale_h,
+            scale_w=scale_w,
+            scale_z=scale_z,
+            gpv=gpv,
+            offset_max=[2 * pc_xrange / (tpv_h_*scale_h), 2 * pc_yrange / (tpv_w_*scale_w), 2 * pc_zrange / (tpv_z_*scale_z)],
+            scale_max=[2 * pc_xrange / (tpv_h_*scale_h), 2 * pc_yrange / (tpv_w_*scale_w), 2 * pc_zrange / (tpv_z_*scale_z)]
+        )
+        
+    ),
+    
     gauss_head=dict(
         type='OmniSceneHead',
         loss_lpips=dict(

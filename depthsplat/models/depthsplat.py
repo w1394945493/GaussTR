@@ -22,7 +22,7 @@ class DepthSplat(BaseModel):
         super().__init__(**kwargs)
         
         self.backbone = MODELS.build(backbone)
-        self.transformer = MODELS
+        self.transformer = MODELS.build(transformer)
         
         
         

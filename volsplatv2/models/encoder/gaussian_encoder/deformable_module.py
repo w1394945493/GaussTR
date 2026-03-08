@@ -16,7 +16,7 @@ from mmengine.model import xavier_init, constant_init
 from ...utils import get_rotation_matrix, quat_to_rotmat
 from ...utils import flatten_multi_scale_feats
 from .utils import linear_relu_ln
-from .ops import DeformableAggregationFunction as DAF
+from .deformable_aggregation import DeformableAggregationFunction as DAF
 
 def  project_points(key_points, projection_mat, image_wh=None): # todo (1 25600 9 3) (1 6 4 4) (1 6 2)
         #? 齐次坐标变换：将3d坐标(x,y,z)末尾补1，变成(x,y,z,1)

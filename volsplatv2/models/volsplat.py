@@ -285,8 +285,10 @@ class VolSplat(BaseModel):
         # projection_mat = img_aug_mat @ cam2img @ lidar2cam # todo (1 6 4 4)
         # featmap_wh = img_aug_mat.new_tensor([f_w,f_h])
         # featmap_wh = repeat(featmap_wh,"wh -> bs n wh",bs=bs,n=n) # todo (1 6 2)        
+        
         projection_mat = data_samples['projection_mat']
         featmap_wh = data_samples['featmap_wh']
+        
         predictions = self.encoder(anchor, instance_feature, feats, projection_mat, featmap_wh)
 
         if mode == 'predict':

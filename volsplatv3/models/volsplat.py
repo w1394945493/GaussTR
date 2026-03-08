@@ -42,10 +42,14 @@ class VolSplat(BaseModel):
                 sparse_unet,
                 sparse_gs,
                 gaussian_adapter,
+
+                volume_gs,
+
                 decoder,
                 
                 use_checkpoint,
                 voxel_resolution,
+                pc_range,
                 **kwargs):
         super().__init__(**kwargs)
         
@@ -55,11 +59,14 @@ class VolSplat(BaseModel):
         self.sparse_unet = MODELS.build(sparse_unet)
         self.gaussian_head = MODELS.build(sparse_gs)
         self.gaussian_adapter = MODELS.build(gaussian_adapter)
+
+        self.volume_gs = MODELS.build(volume_gs)
         
         self.decoder = MODELS.build(decoder)
 
         self.use_checkpoint = use_checkpoint
         self.voxel_resolution = voxel_resolution
+        self.pc_range = pc_range
         
         print(cyan(f'successfully init Model!'))
 
@@ -136,29 +143,25 @@ class VolSplat(BaseModel):
     def forward(self, mode='loss',**data):
         
         inputs = data['img']
+        bs,n,_,h,w = inputs.shape
         data_samples = data
     
+        img_feats = self.extract_img_feat(img=inputs)
         
-        multi_img_feats = self.extract_img_feat(img=inputs)
-        img_feats = rearrange(multi_img_feats[0], "b v c h w -> (b v) c h w")
         
-        depth = data_samples["depth"]
+        depth = data_samples["depth"] # (b v 112 200)
         
         img_aug_mat = data_samples['img_aug_mat'] #! ori_img -> inputs
         intrinsics = data_samples['cam2img'][...,:3,:3] # (b v 3 3) #! cam -> ori_img
         extrinsics = data_samples['cam2lidar']
 
         bs, n = intrinsics.shape[:2]
-        
-        
-        
-        
-        
+
         # todo 体素化
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)    
-                img_feats,  # (bv c h w)
+                rearrange(img_feats[0], "b v c h w -> (b v) c h w"),  # (bv c h w)
                 depth=depth,
                 
                 voxel_resolution=self.voxel_resolution, 
@@ -170,10 +173,6 @@ class VolSplat(BaseModel):
                 # vol_range=None, # 
                 
                 )   
-
-
-        # todo ---------------------------------------------
-        # todo MinkowskiEngine 版本
         
         # todo 3D UNet网络
         sparse_out = self.sparse_unet(sparse_input)
@@ -193,13 +192,44 @@ class VolSplat(BaseModel):
             print("Warning: Input and output coordinates inconsistent, skipping residual connection")
             sparse_out_with_residual = sparse_out
         
-        gaussians = self.gaussian_head(sparse_out_with_residual)
+        raw_gaussians = self.gaussian_head(sparse_out_with_residual)
+        gaussians_feat = self._sparse_to_batched(sparse_out_with_residual.F, raw_gaussians.C, bs).squeeze(1) # (b 1 N_max 128) -> (b N_max 128)
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
-        gaussian_params, valid_mask = self._sparse_to_batched(gaussians.F, gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
-        batched_points = self._sparse_to_batched(aggregated_points, gaussians.C, bs)  # [b, 1, N_max, 3]        
+        gaussian_params, valid_mask = self._sparse_to_batched(raw_gaussians.F, raw_gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
+        batched_points = self._sparse_to_batched(aggregated_points, raw_gaussians.C, bs)  # [b, 1, N_max, 3]        
+        gaussians = self.post_process(gaussian_params, valid_mask, batched_points)
 
-        gaussians = self.post_process(gaussian_params,valid_mask,batched_points)
+
+        #------------------------------------------#
+        # todo TPV网格 高斯预测
+        x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
+        gaussians_means_mask, gaussians_feat_mask = [], []
+        means = gaussians.means
+        for b in range(bs):
+            mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
+                        (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
+                        (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
+            gaussians_means_mask_i = means[b][mask_pixel_i]
+            gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
+            gaussians_means_mask.append(gaussians_means_mask_i)
+            gaussians_feat_mask.append(gaussians_feat_mask_i)  
+
+        img_meats = {
+            'img_shape': [h,w],
+            'lidar2img': data_samples['projection_mat'], # (1 6 4 4)
+        }
+
+        gaussians_volume = self.volume_gs(
+                [img_feats[0]],
+                gaussians_means_mask,
+                gaussians_feat_mask,
+                img_meats,
+                )  # 需要 图像宽高、projection_mat(lidar2img)
+
+
+
+
         return self.decoder(gaussians,data,mode=mode)
         
         

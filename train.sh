@@ -42,7 +42,13 @@ pip install . --no-build-isolation # 放弃可编辑模式
 python setup.py install
 rm -rf build/ dist/ *.egg-info
 
-
+# MinkowskiEngine在cuda 12.8下编译
+git clone https://github.com/chenxi-wang/MinkowskiEngine.git
+cd MinkowskiEngine
+git checkout cuda-12-1
+# Uncomment the following line if you are using CUDA 12.8.
+sed -i 's/\bauto __raw = __to_address(__r.get());/auto __raw = std::__to_address(__r.get());/' /usr/include/c++/11/bits/shared_ptr_base.h
+python setup.py install --blas_include_dirs=${CONDA_PREFIX}/include --blas_library_dirs=${CONDA_PREFIX}/lib --blas=openblas
 
 
 # todo ---------------------------------------------------------#

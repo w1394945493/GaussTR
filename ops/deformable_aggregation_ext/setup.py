@@ -51,8 +51,8 @@ if __name__ == "__main__":
                 "deformable_aggregation_ext",
                 module=".",
                 sources=[
-                    f"src/deformable_aggregation.cpp",
-                    f"src/deformable_aggregation_cuda.cu",
+                    f"deformable_aggregation.cpp",
+                    f"deformable_aggregation_cuda.cu",
                 ],
             ),
         ],

@@ -380,19 +380,7 @@
             "console": "integratedTerminal",
             // "justMyCode": false,
         },
-        {
-            "name": "run test volsplatv2(experiment )",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py",
-            "args": [
-                "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py",
-                "--work-dir",
-                "/vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/debug",
-            ],
-            "console": "integratedTerminal",
-            "justMyCode": false,
-        },
+
         {
             "name": "run test volsplatv3",
             "type": "debugpy",
@@ -417,6 +405,34 @@
                 "/home/lianghao/wangyushen/Projects/GaussTR/configs/volsplat/volsplatv3_main.py",
                 "--work-dir",
                 "/home/lianghao/wangyushen/data/wangyushen/Output/gausstr/ours/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+
+        {
+            "name": "run test volsplatv2(experiment)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py",
+            "args": [
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py",
+                "--work-dir",
+                "/c20250502/wangyushen/Outputs/gausstr/debug",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        
+        {
+            "name": "run test volsplatv3(experiment)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py",
+            "args": [
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py",
+                "--work-dir",
+                "/c20250502/wangyushen/Outputs/gausstr/debug",
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

@@ -220,7 +220,11 @@ class OmniScene(BaseModel):
             gaussians_means_mask.append(gaussians_means_mask_i)
             gaussians_feat_mask.append(gaussians_feat_mask_i)        
         
-        
+        # gaussians_volume = self.volume_gs(
+        #         [img_feats[0]],
+        #         gaussians_means_mask,
+        #         gaussians_feat_mask,
+        #         data_dict["img_metas"])        
         
         
         

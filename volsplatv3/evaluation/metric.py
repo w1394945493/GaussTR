@@ -129,7 +129,8 @@ class OccMetric(BaseMetric):
         table_data += table_rows
         table = AsciiTable(table_data)
         table.inner_footing_row_border = True
-        print_log('\n' + table.table, logger=logger)
+        # print_log('\n' + table.table, logger=logger)
+        print('\n' + table.table)
 
         ret_dict['miou'] = miou * 100
         ret_dict['iou'] = iou * 100

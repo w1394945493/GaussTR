@@ -17,12 +17,17 @@ python /home/lianghao/wangyushen/Projects/GaussTR/tools/generate_depth.py
 
 
 conda deactivate
-conda create --prefix /vepfs-mlp2/mlp-public/haoce/conda_env/wangyushentemp python==3.10 -y
+conda create --prefix /vepfs-mlp2/c20250502/haoce/wangyushen/conda_env/wangyushentemp python=3.10 pip openssl -y
+conda activate /vepfs-mlp2/c20250502/haoce/wangyushen/conda_env/wangyushentemp
+conda install pip --force-reinstall -y # !!! 明确告诉它装到你的新环境路径下
+# 检查
+which pip 
+python -c "import ssl; print('SSL OK')"
 python -c "import platform; print(platform.python_implementation())"
 # 
 pip install /c20250502/wangyushen/whl/torch-2.1.1+cu121-cp310-cp310-linux_x86_64.whl
 pip install /c20250502/wangyushen/whl/torchvision-0.16.1+cu121-cp310-cp310-linux_x86_64.whl
-python -c "import torch; print(torch.version.cuda)"
+
 pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/index.html --no-cache-dir
 
 pip install -r /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR_copy/requirements.txt
@@ -54,6 +59,7 @@ python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
     --resume /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/outputs/gausstr/volsplatv2/train/epoch_16.pth
 
 
+
 PYTHONPATH=. torchrun --nproc_per_node=2 \
     /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/train.py \
     /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
@@ -63,8 +69,8 @@ PYTHONPATH=. torchrun --nproc_per_node=2 \
 
 # todo 评估
 export CUDA_VISIBLE_DEVICES=6
-python /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/test.py \
-    /vepfs-mlp2/mlp-public/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
+python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
     --work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv2/test \
     --checkpoint /c20250502/wangyushen/Outputs/gausstr/volsplatv2/train/epoch_24.pth \
 

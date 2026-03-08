@@ -62,7 +62,7 @@ class NuScenesSurroundOccDataset(Dataset):
         
         # todo -------------------------------#
         # todo 均匀抽取1/N 训练/评估
-        # self.keyframes = self.keyframes[::100]
+        self.keyframes = self.keyframes[::100]
         
         
         self.data_aug_conf = data_aug_conf

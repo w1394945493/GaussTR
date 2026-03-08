@@ -6,7 +6,7 @@ import triton.language as tl
 from mmdet3d.registry import MODELS
 
 import gauss_splatting_cuda
-import local_aggregate
+# import local_aggregate
 
 
 
@@ -435,7 +435,7 @@ class GaussianVoxelizer(nn.Module):
         self.filter_gaussians = filter_gaussians
         
         # surroundocc
-        self.aggregator = local_aggregate.LocalAggregator(**cuda_kwargs)
+        # self.aggregator = local_aggregate.LocalAggregator(**cuda_kwargs)
         
     
     def get_meshgrid(self, ranges, grid, reso):

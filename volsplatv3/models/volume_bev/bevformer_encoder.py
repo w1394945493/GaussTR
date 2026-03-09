@@ -105,6 +105,58 @@ class BEVFormerEncoder(TransformerLayerSequence):
         ref_3d = ref_3d[None].repeat(bs, 1, 1, 1) # (1 8 50 50 3)
         return ref_3d
 
+    # 计算参考点在二维图像中的位置和坐标
+    def point_sampling(self, reference_points, pc_range, img_metas):
+        h, w = img_metas['img_shape']
+        lidar2img = img_metas['lidar2img'] # todo (1 6 4 4)
+        B,N,_,_=lidar2img.shape
+        reference_points = reference_points.clone() # (1 num h*w 3) 参考点归一化坐标
+        
+        reference_points[..., 0:1] = reference_points[..., 0:1] * \
+            (pc_range[3] - pc_range[0]) + pc_range[0]
+        reference_points[..., 1:2] = reference_points[..., 1:2] * \
+            (pc_range[4] - pc_range[1]) + pc_range[1]
+        reference_points[..., 2:3] = reference_points[..., 2:3] * \
+            (pc_range[5] - pc_range[2]) + pc_range[2]        
+
+        reference_points = torch.cat(
+            (reference_points, torch.ones_like(reference_points[..., :1])), -1) # 变为齐次坐标 # (1 num h*w 4)
+        
+        reference_points = reference_points.permute(1, 0, 2, 3)
+        D, B_ref, num_query = reference_points.size()[:3]
+
+        num_cam = lidar2img.size(1)
+        
+        reference_points = reference_points.view(D, B_ref, 1, num_query, 4).repeat(
+            1, B // B_ref, num_cam, 1, 1).unsqueeze(-1)
+        
+        lidar2img = lidar2img.view(1, B, num_cam, 1, 4,
+                                   4).repeat(D, 1, 1, num_query, 1, 1)
+        
+        reference_points_cam = torch.matmul(
+            lidar2img.to(torch.float32),
+            reference_points.to(torch.float32)).squeeze(-1)
+        eps = 1e-5        
+        bev_mask = (reference_points_cam[..., 2:3] > eps)
+        
+        reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
+            reference_points_cam[..., 2:3],
+            torch.ones_like(reference_points_cam[..., 2:3]) * eps)
+        reference_points_cam[..., 0] /= w
+        reference_points_cam[..., 1] /= h
+        
+        bev_mask = (
+            bev_mask & (reference_points_cam[..., 1:2] > 0.0)
+            & (reference_points_cam[..., 1:2] < 1.0)
+            & (reference_points_cam[..., 0:1] < 1.0)
+            & (reference_points_cam[..., 0:1] > 0.0))
+
+        bev_mask = torch.nan_to_num(bev_mask)
+        reference_points_cam = reference_points_cam.permute(2, 1, 3, 0, 4)
+        bev_mask = bev_mask.permute(2, 1, 3, 0, 4).squeeze(-1)
+
+        return reference_points_cam, bev_mask
+
 
     def forward(self, mlvl_feats, project_feats, img_metas):
         bs = mlvl_feats[0].shape[0]
@@ -134,3 +186,24 @@ class BEVFormerEncoder(TransformerLayerSequence):
                                             lvl:lvl + 1, :].to(dtype)
             spatial_shapes.append(spatial_shape)
             feat_flatten.append(feat)
+
+        feat_flatten = torch.cat(feat_flatten, 2)
+        spatial_shapes = torch.as_tensor(
+            spatial_shapes, dtype=torch.long, device=device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros(
+            (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        feat_flatten = feat_flatten.permute(
+            0, 2, 1, 3)
+        
+        reference_points_cams, bev_masks = [], []
+        ref_3ds = [self.ref_3d_hw]
+        for ref_3d in ref_3ds:
+            reference_points_cam, bev_mask = self.point_sampling(
+                ref_3d, self.pc_range,
+                img_metas)              
+            reference_points_cams.append(reference_points_cam)
+            bev_masks.append(bev_mask)
+        
+        # todo --------------------------#
+        # 注意力层编码
+

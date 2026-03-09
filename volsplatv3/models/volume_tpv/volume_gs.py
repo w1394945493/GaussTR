@@ -42,7 +42,7 @@ class VolumeGaussian(BaseModule):
             _, c = candidate_feats[0].shape
             # todo-----------------------------#
             # todo 1. TPV(三维投影体素)映射：将三维点云投影到三个平面: tpv_h,tpv_w,tpv_z: 192, 192, 16
-            project_feats_hw = candidate_feats[0].new_zeros((bs, self.tpv_h, self.tpv_w, c)) # HW平面，沿Z方向投影 张量数据类型与设备和candidate_feats一致
+            project_feats_hw = candidate_feats[0].new_zeros((bs, self.tpv_h, self.tpv_w, c)) # HW平面，沿Z方向投影 张量数据类型与设备和candidate_feats一致 # (1 50 50 128)  这里为自定义的网格尺寸h w z
             project_feats_zh = candidate_feats[0].new_zeros((bs, self.tpv_z, self.tpv_h, c)) # ZH平面，沿Y方向投影
             project_feats_wz = candidate_feats[0].new_zeros((bs, self.tpv_w, self.tpv_z, c)) # WZ平面，沿X方向投影
 

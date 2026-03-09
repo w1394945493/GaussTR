@@ -86,12 +86,54 @@ python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
     --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train \
 
+--work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv3/train
+--work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train 
+
+# 多卡训练
+PYTHONPATH=. torchrun --nproc_per_node=4 \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
+    --launcher pytorch \
+    --work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv3/train
+
+
 python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
     --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/test \
     --checkpoint /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train/epoch_24.pth \
 
+#----------------------------------------------------------#
+# 创建自定义任务
+# 入口命令：
+cd /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR
+. /root/miniconda3/bin/activate
+conda activate /vepfs-mlp2/c20250502/haoce/wangyushen/conda_env/wangyushentemp
+bash run_task.sh
+
+# 参考示例 ------------------------------------------------------------------------#
+# 选择 GPU 实例规格时，通过环境变量配置每个实例上的训练进程数量与 GPU 数量一致 
+python -m torch.distributed.launch \
+    --nproc_per_node $MLP_WORKER_GPU \
+    --master_addr $MLP_WORKER_0_HOST \
+    --node_rank $MLP_ROLE_INDEX \
+    --master_port $MLP_WORKER_0_PORT \
+    --nnodes $MLP_WORKER_NUM <代码文件的绝对路径>
+
+# 原命令 - 多卡训练
+PYTHONPATH=. torchrun --nproc_per_node=8 \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
+    --launcher pytorch \
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train
 
 
-
-
+PYTHONPATH=. python -m torch.distributed.launch \
+    --nproc_per_node=$MLP_WORKER_GPU \
+    --master_addr=$MLP_WORKER_0_HOST \
+    --node_rank=$MLP_ROLE_INDEX \
+    --master_port=$MLP_WORKER_0_PORT \
+    --nnodes=$MLP_WORKER_NUM \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
+    --launcher pytorch \
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train

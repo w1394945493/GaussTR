@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from einops import rearrange, repeat
 from ....geometry.projection import get_world_rays
 from ....geometry.projection import sample_image_grid
@@ -123,6 +124,20 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
         device=device
     )
     
+    '''
+    # debug 可视化初始的体素网格
+    mask_3d = sparse_to_dense_mask(sparse_tensor, vol_range, voxel_resolution)
+    import pickle
+    data={
+        'mask': mask_3d,
+        'vol_range': vol_range,
+        'voxel_resolution':voxel_resolution,
+    }
+    save_path = 'mask_3d.pkl'
+    with open(save_path, 'wb') as f:
+        pickle.dump(data, f)
+    '''
+    
     #? 使用spconv提供的库方法进行稀疏3D卷积
     # spatial_shape = unique_coords[:, 1:].max(0)[0].tolist()
     # spatial_shape = [s + 1 for s in spatial_shape]
@@ -134,3 +149,44 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
     # )
 
     return sparse_tensor, aggregated_points, counts
+
+# Debug调试用：可视化初始的体素网格
+def sparse_to_dense_mask(sparse_tensor, vol_range, voxel_resolution,bs=0):
+    """
+    将 SparseTensor 转换为 (H, W, Z) 的 0/1 数组
+    """
+    # 1. 计算网格的维度尺寸 (Grid Shape)
+    # H = (x_max - x_min) / res, W = (y_max - y_min) / res, Z = (z_max - z_min) / res
+    x_min, y_min, z_min, x_max, y_max, z_max = vol_range
+    
+    grid_h = int(round((x_max - x_min) / voxel_resolution))
+    grid_w = int(round((y_max - y_min) / voxel_resolution))
+    grid_z = int(round((z_max - z_min) / voxel_resolution))
+    
+    print(f"目标网格尺寸: {grid_h} x {grid_w} x {grid_z}")
+
+    # 2. 提取第一个 Batch 的坐标 (N, 4) -> [b, x, y, z]
+    coords = sparse_tensor.C
+    mask = coords[:, 0] == bs
+    # 这里的 batch_coords 是量化后的整数索引
+    batch_coords = coords[mask, 1:].long() 
+
+    # 3. 将量化坐标平移到从 0 开始的索引空间
+    # 注意：unique_coords 是用 all_points / voxel_resolution 算的
+    # 所以索引 0 对应的是物理空间 0m 处。
+    # 我们需要把 [-50, 50] 映射到 [0, 250]
+    offset = torch.tensor([x_min, y_min, z_min], device=coords.device) / voxel_resolution
+    grid_indices = batch_coords - torch.round(offset).long()
+
+    # 4. 剔除越界的点（防止因为浮点误差导致的索引越界）
+    valid_mask = (grid_indices[:, 0] >= 0) & (grid_indices[:, 0] < grid_h) & \
+                 (grid_indices[:, 1] >= 0) & (grid_indices[:, 1] < grid_w) & \
+                 (grid_indices[:, 2] >= 0) & (grid_indices[:, 2] < grid_z)
+    grid_indices = grid_indices[valid_mask]
+
+    # 5. 填充数组
+    # 使用 torch 并在最后转 numpy，速度最快
+    dense_voxels = torch.zeros((grid_h, grid_w, grid_z), dtype=torch.uint8, device=coords.device)
+    dense_voxels[grid_indices[:, 0], grid_indices[:, 1], grid_indices[:, 2]] = 1
+
+    return dense_voxels.cpu().numpy()

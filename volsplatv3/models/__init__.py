@@ -3,4 +3,4 @@ from .encoder import *
 from .decoder import GaussianDecoder,GaussianVoxelizer
 
 
-from .volume import *
+from .volume_tpv import *

@@ -27,7 +27,9 @@ class TPVFormerEncoder(TransformerLayerSequence):
                  num_layers=5,
                  transformerlayers=None,
                  positional_encoding=None,
-                 return_intermediate=False):
+                 return_intermediate=False
+                 
+                 ):
         super().__init__(transformerlayers, num_layers)
 
         self.tpv_h = tpv_h
@@ -48,7 +50,7 @@ class TPVFormerEncoder(TransformerLayerSequence):
             self.project_transform_hw = nn.Conv2d(embed_dims, embed_dims, 3, 1, 1)
             self.project_transform_zh = nn.Conv2d(embed_dims, embed_dims, 3, 1, 1)
             self.project_transform_wz = nn.Conv2d(embed_dims, embed_dims, 3, 1, 1)
-
+        # 生成参考点坐标
         ref_3d_hw = self.get_reference_points(tpv_h, tpv_w, self.real_z,
                                               num_points_in_pillar[0])
         ref_3d_zh = self.get_reference_points(tpv_z, tpv_h, self.real_w,
@@ -64,7 +66,7 @@ class TPVFormerEncoder(TransformerLayerSequence):
         self.register_buffer('ref_3d_wz', ref_3d_wz)
 
         cross_view_ref_points = self.get_cross_view_ref_points(
-            tpv_h, tpv_w, tpv_z, num_points_in_pillar_cross_view)
+            tpv_h, tpv_w, tpv_z, num_points_in_pillar_cross_view) # (2500+400+400 3 16 2)
         self.register_buffer('cross_view_ref_points', cross_view_ref_points)
 
         # positional encoding
@@ -85,24 +87,24 @@ class TPVFormerEncoder(TransformerLayerSequence):
         normal_(self.cams_embeds)
 
     @staticmethod
-    def get_cross_view_ref_points(tpv_h, tpv_w, tpv_z, num_points_in_pillar):
+    def get_cross_view_ref_points(tpv_h, tpv_w, tpv_z, num_points_in_pillar): # 跨视图参考点
         # ref points generating target: (#query)hw+zh+wz, (#level)3, #p, 2
         # generate points for hw and level 1
-        h_ranges = torch.linspace(0.5, tpv_h - 0.5, tpv_h) / tpv_h
-        w_ranges = torch.linspace(0.5, tpv_w - 0.5, tpv_w) / tpv_w
-        h_ranges = h_ranges.unsqueeze(-1).expand(-1, tpv_w).flatten()
-        w_ranges = w_ranges.unsqueeze(0).expand(tpv_h, -1).flatten()
+        h_ranges = torch.linspace(0.5, tpv_h - 0.5, tpv_h) / tpv_h # (50)
+        w_ranges = torch.linspace(0.5, tpv_w - 0.5, tpv_w) / tpv_w # (50) 在h和w方向均匀取点
+        h_ranges = h_ranges.unsqueeze(-1).expand(-1, tpv_w).flatten() # (2500)
+        w_ranges = w_ranges.unsqueeze(0).expand(tpv_h, -1).flatten() # (50,50) -> (2500)
         hw_hw = torch.stack([w_ranges, h_ranges], dim=-1)  # hw, 2
         hw_hw = hw_hw.unsqueeze(1).expand(-1, num_points_in_pillar[2],
-                                          -1)  # hw, #p, 2
+                                          -1)  # hw, #p, 2 # 生成参考点 (2500 16 2) 每个位置n个参考点 hw_hw: 参考点即为自己
         # generate points for hw and level 2
         z_ranges = torch.linspace(0.5, tpv_z - 0.5,
-                                  num_points_in_pillar[2]) / tpv_z  # #p
-        z_ranges = z_ranges.unsqueeze(0).expand(tpv_h * tpv_w, -1)  # hw, #p
+                                  num_points_in_pillar[2]) / tpv_z  # #p (16)
+        z_ranges = z_ranges.unsqueeze(0).expand(tpv_h * tpv_w, -1)  # hw, #p (2500 16)
         h_ranges = torch.linspace(0.5, tpv_h - 0.5, tpv_h) / tpv_h
         h_ranges = h_ranges.reshape(-1, 1, 1).expand(
-            -1, tpv_w, num_points_in_pillar[2]).flatten(0, 1)
-        hw_zh = torch.stack([h_ranges, z_ranges], dim=-1)  # hw, #p, 2
+            -1, tpv_w, num_points_in_pillar[2]).flatten(0, 1) # (2500,16)
+        hw_zh = torch.stack([h_ranges, z_ranges], dim=-1)  # hw, #p, 2 (2500 16 2)
         # generate points for hw and level 3
         z_ranges = torch.linspace(0.5, tpv_z - 0.5,
                                   num_points_in_pillar[2]) / tpv_z  # #p
@@ -110,7 +112,7 @@ class TPVFormerEncoder(TransformerLayerSequence):
         w_ranges = torch.linspace(0.5, tpv_w - 0.5, tpv_w) / tpv_w
         w_ranges = w_ranges.reshape(1, -1, 1).expand(
             tpv_h, -1, num_points_in_pillar[2]).flatten(0, 1)
-        hw_wz = torch.stack([z_ranges, w_ranges], dim=-1)  # hw, #p, 2
+        hw_wz = torch.stack([z_ranges, w_ranges], dim=-1)  # hw, #p, 2 (2500 16 2)
 
         # generate points for zh and level 1
         w_ranges = torch.linspace(0.5, tpv_w - 0.5,
@@ -196,16 +198,16 @@ class TPVFormerEncoder(TransformerLayerSequence):
         zs = torch.linspace(
             0.5, Z - 0.5, num_points_in_pillar,
             dtype=dtype, device=device).view(-1, 1, 1).expand(
-                num_points_in_pillar, H, W) / Z
+                num_points_in_pillar, H, W) / Z # Z方向从0.5到Z-0.5生成Z个点 (8,50 50)
         xs = torch.linspace(
             0.5, W - 0.5, W, dtype=dtype, device=device).view(1, 1, -1).expand(
-                num_points_in_pillar, H, W) / W
+                num_points_in_pillar, H, W) / W # w方向从0.5到w-0.5生成W个点 归一化的值
         ys = torch.linspace(
             0.5, H - 0.5, H, dtype=dtype, device=device).view(1, -1, 1).expand(
                 num_points_in_pillar, H, W) / H
-        ref_3d = torch.stack((xs, ys, zs), -1)
+        ref_3d = torch.stack((xs, ys, zs), -1) # (8 50 50 3)
         ref_3d = ref_3d.permute(0, 3, 1, 2).flatten(2).permute(0, 2, 1)
-        ref_3d = ref_3d[None].repeat(bs, 1, 1, 1)
+        ref_3d = ref_3d[None].repeat(bs, 1, 1, 1) # (1 8 50 50 3)
         return ref_3d
 
     def point_sampling(self, reference_points, pc_range, img_metas):
@@ -307,14 +309,14 @@ class TPVFormerEncoder(TransformerLayerSequence):
             project_feats_hw = rearrange(self.project_transform_hw(project_feats_hw), "b c h w -> b (h w) c")
             project_feats_zh = rearrange(self.project_transform_zh(project_feats_zh), "b c z h -> b (z h) c")
             project_feats_wz = rearrange(self.project_transform_wz(project_feats_wz), "b c w z -> b (w z) c")
-            # todo：将来自3D反投影的特征加到TPV query上
-            tpv_queries_hw = tpv_queries_hw + project_feats_hw
+            # todo：将来自3D投影的特征加到TPV query上
+            tpv_queries_hw = tpv_queries_hw + project_feats_hw # (1 2500 128) + (1 2500 128)
             tpv_queries_zh = tpv_queries_zh + project_feats_zh
             tpv_queries_wz = tpv_queries_wz + project_feats_wz
 
         tpv_query = [tpv_queries_hw, tpv_queries_zh, tpv_queries_wz]
         # todo：构造三平面位置编码
-        tpv_pos_hw = self.positional_encoding(bs, device, 'z')
+        tpv_pos_hw = self.positional_encoding(bs, device, 'z') # 位置编码：这里直接采用的可学习的位置编码
         tpv_pos_zh = self.positional_encoding(bs, device, 'w')
         tpv_pos_wz = self.positional_encoding(bs, device, 'h')
         tpv_pos = [tpv_pos_hw, tpv_pos_zh, tpv_pos_wz]
@@ -327,9 +329,9 @@ class TPVFormerEncoder(TransformerLayerSequence):
             bs, num_cam, c, h, w = feat.shape
             spatial_shape = (h, w)
             feat = feat.flatten(3).permute(1, 0, 3, 2)  # num_cam, bs, hw, c
-            feat = feat + self.cams_embeds[:, None, None, :].to(dtype) # 加入相机嵌入
+            feat = feat + self.cams_embeds[:, None, None, :].to(dtype) # 加入相机嵌入 self.cams_embeds: (6 128)
             feat = feat + self.level_embeds[None, None,
-                                            lvl:lvl + 1, :].to(dtype) # 加入层级嵌入
+                                            lvl:lvl + 1, :].to(dtype) # 加入层级嵌入 self.level_embeds: (1 128)
             spatial_shapes.append(spatial_shape) # 记录尺度的空间形状(多尺度注意力)
             feat_flatten.append(feat)
 
@@ -343,7 +345,7 @@ class TPVFormerEncoder(TransformerLayerSequence):
 
         # todo：三平面参考点采样：
         reference_points_cams, tpv_masks = [], []
-        ref_3ds = [self.ref_3d_hw, self.ref_3d_zh, self.ref_3d_wz]
+        ref_3ds = [self.ref_3d_hw, self.ref_3d_zh, self.ref_3d_wz] # ref_3d_hw: (1 8 hxw 3) ref_3d_zh: (1 8 zxh 3)
         for ref_3d in ref_3ds:
             reference_points_cam, tpv_mask = self.point_sampling(
                 ref_3d, self.pc_range,

@@ -1,13 +1,10 @@
 _base_ = 'mmdet3d::_base_/default_runtime.py'
 
-# from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
-# from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/outputs/vis2'
-
-custom_hooks = [
-    dict(type='DumpResultHook',
-         save_dir = save_dir, 
-        ),]  #  # 保存结果
+# save_dir = '/vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/outputs/vis2'
+# custom_hooks = [
+#     dict(type='DumpResultHook',
+#          save_dir = save_dir, 
+#         ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv3']) # todo
 
@@ -206,8 +203,8 @@ model = dict(
             num_feature_levels=1,
             num_layers=3,
             pc_range=pc_range,
-            num_points_in_pillar=num_points_in_pillar,
-            num_points_in_pillar_cross_view=[16, 16, 16],
+            num_points_in_pillar=num_points_in_pillar, # [8 16 16] 参考点数量 跨视图每个tpv网格参考点数量
+            num_points_in_pillar_cross_view=[16, 16, 16], # 跨平面每个位置参考点的数量
             return_intermediate=False,
             transformerlayers=[
                 self_cross_layer, self_cross_layer, self_layer
@@ -297,13 +294,13 @@ train_num_workers=num_workers
 val_batch_size=batch_size
 val_num_workers=num_workers
 
-logger_interval = 1 # 打印间隔
+logger_interval = 50 # 打印间隔
 val_interval=1 # 评估间隔
 
 data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/' 
 anno_root = '/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-trainval/' # todo 全部训练
-# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-train_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 occ_path = "/c20250502/wangyushen/Datasets/surroundocc/samples/" # all

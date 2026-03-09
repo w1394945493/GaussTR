@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from mmdet.models import inverse_sigmoid
 
-from .encoder.common.me_fea import project_features_to_me
+from .encoder.common.me_fea import project_features_to_me,sparse_to_dense_mask
 from .utils.types import Gaussians
 
 from .utils import flatten_multi_scale_feats, flatten_bsn_forward,cam2world
@@ -60,7 +60,7 @@ class VolSplat(BaseModel):
         self.gaussian_head = MODELS.build(sparse_gs)
         self.gaussian_adapter = MODELS.build(gaussian_adapter)
 
-        # self.volume_gs = MODELS.build(volume_gs)
+        self.volume_gs = MODELS.build(volume_gs)
         
         self.decoder = MODELS.build(decoder)
 
@@ -157,6 +157,7 @@ class VolSplat(BaseModel):
 
         bs, n = intrinsics.shape[:2]
 
+        vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
         # todo 体素化
         sparse_input, aggregated_points, counts = project_features_to_me(
                 intrinsics, # (b v 3 3)
@@ -169,11 +170,29 @@ class VolSplat(BaseModel):
                 normal=False,
                 img_aug_mat=img_aug_mat,
                 
-                vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0], # todo 仅保留范围内的点
+                vol_range = vol_range, # todo 仅保留范围内的点
                 # vol_range=None, # 
                 
                 )   
         
+        '''
+        # debug
+        import pickle
+        occ_gt = data_samples['occ_label']
+        for b in range(bs):
+            mask_3d = sparse_to_dense_mask(sparse_input, vol_range, self.voxel_resolution,bs=b)
+        
+            data={
+                'mask': mask_3d,
+                'occ_gt': occ_gt[b].cpu().numpy(),
+                'vol_range': vol_range,
+                'voxel_size':self.voxel_resolution,
+            }
+            save_path = f'mask_3d_{b}.pkl'
+            with open(save_path, 'wb') as f:
+                pickle.dump(data, f)
+        
+        '''
         # todo 3D UNet网络
         sparse_out = self.sparse_unet(sparse_input)
         
@@ -193,38 +212,38 @@ class VolSplat(BaseModel):
             sparse_out_with_residual = sparse_out
         
         raw_gaussians = self.gaussian_head(sparse_out_with_residual)
-        # gaussians_feat = self._sparse_to_batched(sparse_out_with_residual.F, raw_gaussians.C, bs).squeeze(1) # (b 1 N_max 128) -> (b N_max 128)
+        gaussians_feat = self._sparse_to_batched(sparse_out_with_residual.F, raw_gaussians.C, bs).squeeze(1) # (b 1 N_max 128) -> (b N_max 128)
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
         gaussian_params, valid_mask = self._sparse_to_batched(raw_gaussians.F, raw_gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
         batched_points = self._sparse_to_batched(aggregated_points, raw_gaussians.C, bs)  # [b, 1, N_max, 3]        
         gaussians = self.post_process(gaussian_params, valid_mask, batched_points)
 
-        # #------------------------------------------#
-        # # todo TPV网格 高斯预测
-        # x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
-        # gaussians_means_mask, gaussians_feat_mask = [], []
-        # means = gaussians.means
-        # for b in range(bs):
-        #     mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
-        #                 (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
-        #                 (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
-        #     gaussians_means_mask_i = means[b][mask_pixel_i]
-        #     gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
-        #     gaussians_means_mask.append(gaussians_means_mask_i)
-        #     gaussians_feat_mask.append(gaussians_feat_mask_i)  
+        #------------------------------------------#
+        # todo BEV/TPV网格 高斯预测
+        x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
+        gaussians_means_mask, gaussians_feat_mask = [], []
+        means = gaussians.means
+        for b in range(bs):
+            mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
+                        (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
+                        (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
+            gaussians_means_mask_i = means[b][mask_pixel_i]
+            gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
+            gaussians_means_mask.append(gaussians_means_mask_i)
+            gaussians_feat_mask.append(gaussians_feat_mask_i)  
 
-        # img_meats = {
-        #     'img_shape': list(img_feats[0].shape[-2:]),
-        #     'lidar2img': data_samples['projection_mat'], # (1 6 4 4)
-        # } # 用于计算参考点在图像中归一化的二维坐标
+        img_meats = {
+            'img_shape': list(img_feats[0].shape[-2:]),
+            'lidar2img': data_samples['projection_mat'], # (1 6 4 4)
+        } # 用于计算参考点在图像中归一化的二维坐标
 
-        # gaussians_tpv = self.volume_gs(
-        #         [img_feats[0]],
-        #         gaussians_means_mask,
-        #         gaussians_feat_mask,
-        #         img_meats,
-        #         )  # 需要 img_shape、projection_mat(lidar2img)
+        gaussians_bev = self.volume_gs(
+                [img_feats[0]],
+                gaussians_means_mask,
+                gaussians_feat_mask,
+                img_meats,
+                )  # 需要 img_shape、projection_mat(lidar2img)
 
         # gaussians = Gaussians(
         #     torch.cat([gaussians.means,gaussians_tpv.means],dim=1),

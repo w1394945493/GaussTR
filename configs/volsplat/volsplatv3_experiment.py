@@ -2,12 +2,12 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/c20250502/wangyushen/Outputs/gausstr/volsplatv3/outputs/vis'
+save_dir = '/vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/outputs/vis2'
 
-# custom_hooks = [
-#     dict(type='DumpResultHook',
-#          save_dir = save_dir, 
-#         ),]  #  # 保存结果
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir, 
+        ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv3']) # todo
 
@@ -36,8 +36,8 @@ far = 1000.
 vol_range=[-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
 voxel_size=0.5
 
-# with_empty = False # 是否使用空高斯
-with_empty = True # 是否使用空高斯
+# with_empty = False # 是否使用空高斯进行占位
+with_empty = True 
 
 num_class = 18 # 语义维度
 out_channels = 11 + 3 * (sh_degree + 1)**2 if sh_degree is not None else 14
@@ -73,7 +73,8 @@ tpv_z_ = 4
 scale_h = 1
 scale_w = 1
 scale_z = 1
-gpv = 3
+# gpv = 3 # todo 每个tpv体素位置的高斯数量
+gpv = 1
 
 num_points_in_pillar = [8, 16, 16]
 num_points = [16, 32, 32]
@@ -225,16 +226,31 @@ model = dict(
             tpv_w=tpv_w_,
             tpv_z=tpv_z_,
             pc_range=pc_range,
-            gs_dim=14,
+            # gs_dim=14,
+            gs_dim=out_channels, # 14+18=32
+            
             in_dims=_dim_,
             hidden_dims=2*_dim_,
             out_dims=_dim_,
+            
             scale_h=scale_h,
             scale_w=scale_w,
             scale_z=scale_z,
+            
             gpv=gpv,
-            offset_max=[2 * pc_xrange / (tpv_h_*scale_h), 2 * pc_yrange / (tpv_w_*scale_w), 2 * pc_zrange / (tpv_z_*scale_z)],
-            scale_max=[2 * pc_xrange / (tpv_h_*scale_h), 2 * pc_yrange / (tpv_w_*scale_w), 2 * pc_zrange / (tpv_z_*scale_z)]
+            
+            offset_max=[
+                2 * pc_xrange / (tpv_h_*scale_h), 
+                2 * pc_yrange / (tpv_w_*scale_w), 
+                2 * pc_zrange / (tpv_z_*scale_z)], # 位置偏移量最大预测值
+            
+            # scale_max=[
+            #     2 * pc_xrange / (tpv_h_*scale_h), 
+            #     2 * pc_yrange / (tpv_w_*scale_w), 
+            #     2 * pc_zrange / (tpv_z_*scale_z)], # 高斯尺度最大预测值
+            gaussian_scale_min = gaussian_scale_min,
+            gaussian_scale_max = gaussian_scale_max,         
+        
         )
         
     ),
@@ -273,7 +289,7 @@ model = dict(
 # todo ----------------------------------#
 # todo 训练：
 batch_size=1
-num_workers=0
+num_workers=4
 
 train_batch_size=batch_size
 train_num_workers=num_workers
@@ -281,12 +297,13 @@ train_num_workers=num_workers
 val_batch_size=batch_size
 val_num_workers=num_workers
 
-logger_interval = 1
-val_interval=1
+logger_interval = 1 # 打印间隔
+val_interval=1 # 评估间隔
 
 data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/' 
 anno_root = '/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-trainval/' # todo 全部训练
-train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 occ_path = "/c20250502/wangyushen/Datasets/surroundocc/samples/" # all

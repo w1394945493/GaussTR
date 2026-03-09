@@ -146,6 +146,7 @@ class ResizeCropFlipImage(object):
         featmap_wh = np.array([f_w, f_h], dtype=img_aug_mat.dtype)
         featmap_wh = np.tile(featmap_wh, (N, 1))
         results['featmap_wh'] = featmap_wh # todo (6,2)
+
         return results
 
     def _get_rot(self, h):

@@ -2,14 +2,14 @@ _base_ = 'mmdet3d::_base_/default_runtime.py'
 
 # from mmdet3d.models.data_preprocessors.data_preprocessor import Det3DDataPreprocessor
 # from mmdet3d.datasets.transforms import Pack3DDetInputs
-save_dir = '/c20250502/wangyushen/Outputs/gausstr/volsplatv2/outputs/vis2'
+save_dir = '/vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv2/outputs/vis3'
 
-# custom_hooks = [
-#     dict(type='DumpResultHook',
-#          save_dir = save_dir, 
-#          save_occ=True,
-#          save_gaussian=True,    
-#         ),]  #  # 保存结果
+custom_hooks = [
+    dict(type='DumpResultHook',
+         save_dir = save_dir, 
+         save_occ=True,
+         save_gaussian=True,    
+        ),]  #  # 保存结果
 
 custom_imports = dict(imports=['volsplatv2']) # todo
 
@@ -229,13 +229,13 @@ model = dict(
 # num_workers=4
 
 
+batch_size=1
+num_workers=4
+logger_interval = 1
+val_interval=1
 
 data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/' 
 anno_root = '/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-trainval/' # todo 全部训练
-logger_interval = 1
-val_interval=1
-batch_size=4
-num_workers=8
 train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
 val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 # val_ann_file =  "nuscenes_infos_train_sweeps_occ.pkl"

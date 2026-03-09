@@ -435,7 +435,7 @@
                 "/c20250502/wangyushen/Outputs/gausstr/debug",
             ],
             "console": "integratedTerminal",
-            "justMyCode": false,
+            // "justMyCode": false,
         },
     ]
 }

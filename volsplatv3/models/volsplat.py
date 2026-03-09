@@ -60,7 +60,7 @@ class VolSplat(BaseModel):
         self.gaussian_head = MODELS.build(sparse_gs)
         self.gaussian_adapter = MODELS.build(gaussian_adapter)
 
-        self.volume_gs = MODELS.build(volume_gs)
+        # self.volume_gs = MODELS.build(volume_gs)
         
         self.decoder = MODELS.build(decoder)
 
@@ -75,11 +75,11 @@ class VolSplat(BaseModel):
         B, N, C, H, W = img.size()
         img = img.view(B * N, C, H, W)
 
-        # if self.use_checkpoint and status != "test":
-        #     img_feats = torch.utils.checkpoint.checkpoint(
-        #                     self.backbone, img, use_reentrant=False)
-        # else:
-        #     img_feats = self.backbone(img)
+        if self.use_checkpoint and status != "test":
+            img_feats = torch.utils.checkpoint.checkpoint(
+                            self.backbone, img, use_reentrant=False)
+        else:
+            img_feats = self.backbone(img)
         
         img_feats = self.backbone(img)
         img_feats = self.neck(img_feats) # BV, C, H, W
@@ -193,44 +193,51 @@ class VolSplat(BaseModel):
             sparse_out_with_residual = sparse_out
         
         raw_gaussians = self.gaussian_head(sparse_out_with_residual)
-        gaussians_feat = self._sparse_to_batched(sparse_out_with_residual.F, raw_gaussians.C, bs).squeeze(1) # (b 1 N_max 128) -> (b N_max 128)
+        # gaussians_feat = self._sparse_to_batched(sparse_out_with_residual.F, raw_gaussians.C, bs).squeeze(1) # (b 1 N_max 128) -> (b N_max 128)
         del sparse_out_with_residual,sparse_out,sparse_input,new_features
         
         gaussian_params, valid_mask = self._sparse_to_batched(raw_gaussians.F, raw_gaussians.C, bs, return_mask=True)  # [b, 1, N_max, 38], [b, 1, N_max]
         batched_points = self._sparse_to_batched(aggregated_points, raw_gaussians.C, bs)  # [b, 1, N_max, 3]        
         gaussians = self.post_process(gaussian_params, valid_mask, batched_points)
 
+        # #------------------------------------------#
+        # # todo TPV网格 高斯预测
+        # x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
+        # gaussians_means_mask, gaussians_feat_mask = [], []
+        # means = gaussians.means
+        # for b in range(bs):
+        #     mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
+        #                 (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
+        #                 (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
+        #     gaussians_means_mask_i = means[b][mask_pixel_i]
+        #     gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
+        #     gaussians_means_mask.append(gaussians_means_mask_i)
+        #     gaussians_feat_mask.append(gaussians_feat_mask_i)  
 
-        #------------------------------------------#
-        # todo TPV网格 高斯预测
-        x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
-        gaussians_means_mask, gaussians_feat_mask = [], []
-        means = gaussians.means
-        for b in range(bs):
-            mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
-                        (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
-                        (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
-            gaussians_means_mask_i = means[b][mask_pixel_i]
-            gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
-            gaussians_means_mask.append(gaussians_means_mask_i)
-            gaussians_feat_mask.append(gaussians_feat_mask_i)  
+        # img_meats = {
+        #     'img_shape': list(img_feats[0].shape[-2:]),
+        #     'lidar2img': data_samples['projection_mat'], # (1 6 4 4)
+        # } # 用于计算参考点在图像中归一化的二维坐标
 
-        img_meats = {
-            'img_shape': [h,w],
-            'lidar2img': data_samples['projection_mat'], # (1 6 4 4)
-        }
+        # gaussians_tpv = self.volume_gs(
+        #         [img_feats[0]],
+        #         gaussians_means_mask,
+        #         gaussians_feat_mask,
+        #         img_meats,
+        #         )  # 需要 img_shape、projection_mat(lidar2img)
 
-        gaussians_volume = self.volume_gs(
-                [img_feats[0]],
-                gaussians_means_mask,
-                gaussians_feat_mask,
-                img_meats,
-                )  # 需要 图像宽高、projection_mat(lidar2img)
+        # gaussians = Gaussians(
+        #     torch.cat([gaussians.means,gaussians_tpv.means],dim=1),
+        #     torch.cat([gaussians.scales,gaussians_tpv.scales],dim=1),
+        #     torch.cat([gaussians.rotations,gaussians_tpv.rotations],dim=1),
+        #     torch.cat([gaussians.covariances,gaussians_tpv.covariances],dim=1),
+        #     torch.cat([gaussians.harmonics,gaussians_tpv.harmonics],dim=1),
+        #     torch.cat([gaussians.opacities,gaussians_tpv.opacities],dim=1),
+        #     torch.cat([gaussians.semantics,gaussians_tpv.semantics],dim=1),
+        # )
 
 
-
-
-        return self.decoder(gaussians,data,mode=mode)
+        return self.decoder(gaussians, data, mode=mode)
         
         
         

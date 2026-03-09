@@ -77,10 +77,19 @@ PYTHONPATH=. torchrun --nproc_per_node=2 \
 export CUDA_VISIBLE_DEVICES=6
 python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv2_experiment.py \
-    --work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv2/test \
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv2/test \
     --checkpoint /c20250502/wangyushen/Outputs/gausstr/volsplatv2/train/epoch_24.pth \
 
+# volsplatv3 train
+export CUDA_VISIBLE_DEVICES=0
+python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train \
 
+python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py \
+    /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/test \
+    --checkpoint /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train/epoch_24.pth \
 
 
 

@@ -219,21 +219,21 @@ class TPVFormerEncoder(TransformerLayerSequence):
 
 
         h, w = img_metas['img_shape']
-        lidar2img = img_metas['lidar2img']
+        lidar2img = img_metas['lidar2img'] # todo (1 6 4 4)
         B,N,_,_=lidar2img.shape
         
         
-        reference_points = reference_points.clone()
+        reference_points = reference_points.clone() # (1 num h*w 3) 归一化的位置
 
         reference_points[..., 0:1] = reference_points[..., 0:1] * \
             (pc_range[3] - pc_range[0]) + pc_range[0]
         reference_points[..., 1:2] = reference_points[..., 1:2] * \
             (pc_range[4] - pc_range[1]) + pc_range[1]
         reference_points[..., 2:3] = reference_points[..., 2:3] * \
-            (pc_range[5] - pc_range[2]) + pc_range[2]
+            (pc_range[5] - pc_range[2]) + pc_range[2] # 变换到世界位置
 
         reference_points = torch.cat(
-            (reference_points, torch.ones_like(reference_points[..., :1])), -1)
+            (reference_points, torch.ones_like(reference_points[..., :1])), -1) # (1 num h*w 4)
 
         reference_points = reference_points.permute(1, 0, 2, 3)
         D, B_ref, num_query = reference_points.size()[:3]
@@ -269,7 +269,6 @@ class TPVFormerEncoder(TransformerLayerSequence):
             & (reference_points_cam[..., 0:1] > 0.0))
 
         tpv_mask = torch.nan_to_num(tpv_mask)
-
         reference_points_cam = reference_points_cam.permute(2, 1, 3, 0, 4)
         tpv_mask = tpv_mask.permute(2, 1, 3, 0, 4).squeeze(-1)
 

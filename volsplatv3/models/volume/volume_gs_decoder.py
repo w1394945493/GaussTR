@@ -1,7 +1,12 @@
+from einops import einsum, rearrange
 
+from mmdet.structures.bbox import scale_boxes
 import torch, torch.nn as nn, torch.nn.functional as F
 from mmengine.model import BaseModule
 from mmengine.registry import MODELS
+
+from .gaussians import build_covariance
+from ..utils.types import Gaussians
 
 def sigmoid_scaling(scaling:torch.Tensor, lower_bound=0.005, upper_bound=0.02):
     sig = torch.sigmoid(scaling)
@@ -10,9 +15,17 @@ def sigmoid_scaling(scaling:torch.Tensor, lower_bound=0.005, upper_bound=0.02):
 @MODELS.register_module()
 class VolumeGaussianDecoder(BaseModule):
     def __init__(
-        self, tpv_h, tpv_w, tpv_z, pc_range, gs_dim=14,
+        self, 
+        tpv_h, tpv_w, tpv_z, 
+        pc_range, 
+        gs_dim,
+        gaussian_scale_min,
+        gaussian_scale_max, 
         in_dims=64, hidden_dims=128, out_dims=None,
-        scale_h=2, scale_w=2, scale_z=2, gpv=4, offset_max=None, scale_max=None,
+        scale_h=2, scale_w=2, scale_z=2, 
+        gpv=1, 
+        offset_max=None, 
+        # scale_max=None,
         use_checkpoint=False
     ):
         super().__init__()
@@ -33,7 +46,7 @@ class VolumeGaussianDecoder(BaseModule):
             nn.Linear(hidden_dims, out_dims)
         )
 
-        self.gs_decoder = nn.Linear(out_dims, gs_dim*gpv)
+        self.gs_decoder = nn.Linear(out_dims, gs_dim*gpv) # todo 解码
         self.use_checkpoint = use_checkpoint
 
         # set activations
@@ -43,11 +56,16 @@ class VolumeGaussianDecoder(BaseModule):
             self.offset_max = [1.0] * 3 # meters
         else:
             self.offset_max = offset_max
+        
         #self.scale_act = lambda x: sigmoid_scaling(x, lower_bound=0.005, upper_bound=0.02)
-        if scale_max is None:
-            self.scale_max = [1.0] * 3 # meters
-        else:
-            self.scale_max = scale_max
+        # if scale_max is None:
+        #     self.scale_max = [1.0] * 3 # meters
+        # else:
+        #     self.scale_max = scale_max
+        self.gaussian_scale_min = gaussian_scale_min
+        self.gaussian_scale_max = gaussian_scale_max
+
+
         self.scale_act = lambda x: torch.sigmoid(x)
         self.opacity_act = lambda x: torch.sigmoid(x)
         self.rot_act = lambda x: F.normalize(x, dim=-1)
@@ -86,7 +104,7 @@ class VolumeGaussianDecoder(BaseModule):
         ref_3d = ref_3d[None].repeat(bs, 1, 1, 1, 1) # b, w, h, z, 3
         return ref_3d
 
-    def forward(self, tpv_list, debug=False):
+    def forward(self, tpv_list):
         """
         tpv_list[0]: bs, h*w, c
         tpv_list[1]: bs, z*h, c
@@ -130,42 +148,46 @@ class VolumeGaussianDecoder(BaseModule):
         #print("after voxelize:{}".format(torch.cuda.memory_allocated(0)))
         gaussians = gaussians.permute(0, 2, 3, 4, 1) # bs, w, h, z, c (bs,192,192,16,128)
         bs, w, h, z, _ = gaussians.shape
-        # todo：解码高斯参数
+        # todo：解码高斯参数 gs_decoder: 一个线性层
         if self.use_checkpoint:
             gaussians = torch.utils.checkpoint.checkpoint(self.decoder, gaussians, use_reentrant=False)
             gaussians = torch.utils.checkpoint.checkpoint(self.gs_decoder, gaussians, use_reentrant=False)
             gaussians = gaussians.view(bs, w, h, z, self.gpv, -1)
         else:
             gaussians = self.decoder(gaussians) # (bs,192,192,16,128)
-            gaussians = self.gs_decoder(gaussians) # (bs,192,192,16,gpv*14) self.gpv:3 表示每个体素的高斯数量
+            gaussians = self.gs_decoder(gaussians) # (bs,192,192,16,gpv*14) self.gpv:3 表示每个体素位置预测的高斯数量
             gaussians = gaussians.view(bs, w, h, z, self.gpv, -1) # (bs,192,192,16,3,gpv)
-        # todo：解析高斯参数，
-        #print("after decode:{}".format(torch.cuda.memory_allocated(0)))
+        
+        # ----------------------------------------------------------------------------#
+        # todo：解析高斯参数:
         gs_offsets_x = self.pos_act(gaussians[..., :1]) * self.offset_max[0] # bs, w, h, z, 3
         gs_offsets_y = self.pos_act(gaussians[..., 1:2]) * self.offset_max[1] # bs, w, h, z, 3
         gs_offsets_z = self.pos_act(gaussians[..., 2:3]) * self.offset_max[2] # bs, w, h, z, 3
-
-        #gs_offsets = gaussians[..., :3]
         # 偏移量 + 体素网格锚点，得到每个高斯在世界坐标系中的最终中心
-        gs_positions = torch.cat([gs_offsets_x, gs_offsets_y, gs_offsets_z], dim=-1) + self.gs_anchors[:, :, :, :, None, :] # 位置
-        x = torch.cat([gs_positions, gaussians[..., 3:]], dim=-1)
+        means = torch.cat([gs_offsets_x, gs_offsets_y, gs_offsets_z], dim=-1) + self.gs_anchors[:, :, :, :, None, :] # 位置
         # todo 解析具体高斯属性
-        rgbs = self.rgb_act(x[..., 3:6])  # sigmoid 颜色
-        opacity = self.opacity_act(x[..., 6:7]) # sigmoid，将输出限制在0-1之间 透明度
-        rotation = self.rot_act(x[..., 7:11]) # Formalize，确保四元数满足单位长度约束 旋转
-        scale_x = self.scale_act(x[..., 11:12]) * self.scale_max[0] # sigmoid，高斯体在x，y，z三个方向的尺度 尺寸
-        scale_y = self.scale_act(x[..., 12:13]) * self.scale_max[1]
-        scale_z = self.scale_act(x[..., 13:14]) * self.scale_max[2]
-
-        if debug:
-            opacity[:] = 1.0
-            scale_x[:] = 0.5
-            scale_y[:] = 0.5
-            scale_z[:] = 0.5
-            rgbs[..., 0] = 1.0
-            rgbs[..., 1] = 0.0
-            rgbs[..., 2] = 0.0
-
-        gaussians = torch.cat([gs_positions, rgbs, opacity, rotation, scale_x, scale_y, scale_z], dim=-1) # bs, w, h, z, gpv, 14
-
+        rgbs = self.rgb_act(gaussians[..., 3:6])  # sigmoid 颜色
+        opacities = self.opacity_act(gaussians[..., 6:7]) # sigmoid，将输出限制在0-1之间 透明度
+        
+        rotations = self.rot_act(gaussians[..., 7:11]) # Formalize，确保四元数满足单位长度约束 旋转
+        
+        # scale_x = self.scale_act(x[..., 11:12]) * self.scale_max[0] # sigmoid，高斯体在x，y，z三个方向的尺度 尺寸
+        # scale_y = self.scale_act(x[..., 12:13]) * self.scale_max[1]
+        # scale_z = self.scale_act(x[..., 13:14]) * self.scale_max[2]
+        scales = gaussians[...,11:14]
+        scales = self.gaussian_scale_min + (self.gaussian_scale_max - self.gaussian_scale_min) * torch.sigmoid(scales)
+        # 协方差
+        covariances = build_covariance(scales, rotations)          
+        # 语义特征
+        semantics = F.softplus(gaussians[...,14:])
+        
+        gaussians = Gaussians(
+            rearrange(means,"b w h z gpv xyz -> b (w h z gpv) xyz"), # (1 50 50 4 1 3) -> (1 10000 3)
+            rearrange(scales,"b w h z gpv xyz -> b (w h z gpv) xyz"),  # (1 50 50 4 1 3) -> (1 10000 3) 
+            rearrange(rotations,"b w h z gpv d -> b (w h z gpv) d"),  # (1 50 50 4 1 4) -> (1 10000 4)                          
+            rearrange(covariances,"b w h z gpv i j -> b (w h z gpv) i j",), # (1 50 50 4 1 3 3) -> (1 10000 3 3) 
+            rearrange(rgbs,"b w h z gpv c -> b (w h z gpv) c",),  # (1 50 50 4 1 3) -> (1 10000 3) 
+            rearrange(opacities,   "b w h z gpv c -> b (w h z gpv c)"), # (1 50 50 4 1 1) -> (1 10000)
+            rearrange(semantics,"b w h z gpv dim -> b (w h z gpv) dim")  # (1 50 50 4 1 18) -> (1 10000 18)     
+        )
         return gaussians

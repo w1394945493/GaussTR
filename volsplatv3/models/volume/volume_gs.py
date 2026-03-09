@@ -3,12 +3,6 @@ from einops import rearrange
 from mmengine.model import BaseModule
 from mmengine.registry import MODELS
 
-
-
-
-
-
-
 @MODELS.register_module()
 class VolumeGaussian(BaseModule):
     def __init__(self,
@@ -112,7 +106,6 @@ class VolumeGaussian(BaseModule):
 
         if self.use_checkpoint and status != "test":
             input_vars_enc = (img_feats, project_feats, img_metas) # img_feats: 下采样1/4的二维图像特征图 project_feats: TPV特征
-
             # todo -----------------------------------------------------------#
             # todo encoder: 把多视角图像特征整合成统一的三维空间特征表示
             # 把3D场景分成三个平面(HW,ZH,WZ),在每个平面上构建token query; 利用图像特征等来更新token，最终形成体素级别的空间表示
@@ -125,8 +118,12 @@ class VolumeGaussian(BaseModule):
         else:
             outs = self.encoder(img_feats, project_feats, img_metas)
             gaussians = self.gs_decoder(outs)
-        bs = gaussians.shape[0]
-        n_feature = gaussians.shape[-1] # 14
-        gaussians = gaussians.reshape(bs, -1, n_feature) # 展平
+        
+        
+        
+        
+        # bs = gaussians.shape[0]
+        # n_feature = gaussians.shape[-1] # 14
+        # gaussians = gaussians.reshape(bs, -1, n_feature) # 展平
         return gaussians
         

@@ -24,13 +24,15 @@ class BEVFormerEncoder(TransformerLayerSequence):
                  embed_dims=256,
 
                  num_points_in_pillar=[4],
+                 
                  num_layers=5,
+                 transformerlayers=None, # 必须定义！ num_layers和transformerlayers数量要一致
 
-                 transformerlayers=None,
                  positional_encoding=None,
                  return_intermediate=False,
                  ):
-        super().__init__(transformerlayers, num_layers)
+        
+        super().__init__(transformerlayers, num_layers) #!!! 注意力层
 
         self.bev_h = bev_h
         self.bev_w = bev_w
@@ -166,15 +168,17 @@ class BEVFormerEncoder(TransformerLayerSequence):
         bev_queries_hw = self.bev_embedding_hw.weight.to(dtype)
         bev_queries_hw = bev_queries_hw.unsqueeze(0).repeat(bs, 1, 1)
 
+        #----------------------------------------#
+        # 投影特征与初始的BEV特征相加
         if project_feats[0] is not None:
-            project_feats_hw = project_feats
+            project_feats_hw = project_feats[0]
             project_feats_hw = rearrange(self.project_transform_hw(project_feats_hw), "b c h w -> b (h w) c")
             bev_queries_hw = bev_queries_hw + project_feats_hw
 
-            bev_pos_hw = self.positional_encoding(bs, device, 'z')
+        bev_query = [bev_queries_hw]
+        bev_pos_hw = self.positional_encoding(bs, device) # (1 2500 128)
+        bev_pos = [bev_pos_hw]
 
-        # todo -------------------------------------#
-        # todo 跨视图交叉注意力
         feat_flatten = []
         spatial_shapes = []
         for lvl, feat in enumerate(mlvl_feats):
@@ -204,6 +208,30 @@ class BEVFormerEncoder(TransformerLayerSequence):
             reference_points_cams.append(reference_points_cam)
             bev_masks.append(bev_mask)
         
+
         # todo --------------------------#
         # 注意力层编码
+        intermediate = []
+        for layer in self.layers:
+            output = layer(
+                bev_query,      # query
+                feat_flatten,   # key
+                feat_flatten,   # value
+                bev_pos=bev_pos,
+                bev_h=self.bev_h,
+                bev_w=self.bev_w,                
+
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reference_points_cams=reference_points_cams,
+                bev_masks=bev_masks,           
+            )
+            bev_query = output
+            if self.return_intermediate:
+                intermediate.append(output)
+
+        if self.return_intermediate:
+            return torch.stack(intermediate)
+
+        return output
 

@@ -243,19 +243,18 @@ class VolSplat(BaseModel):
                 gaussians_means_mask,
                 gaussians_feat_mask,
                 img_meats,
-                )  # 需要 img_shape、projection_mat(lidar2img)
+                )  
 
-        # gaussians = Gaussians(
-        #     torch.cat([gaussians.means,gaussians_tpv.means],dim=1),
-        #     torch.cat([gaussians.scales,gaussians_tpv.scales],dim=1),
-        #     torch.cat([gaussians.rotations,gaussians_tpv.rotations],dim=1),
-        #     torch.cat([gaussians.covariances,gaussians_tpv.covariances],dim=1),
-        #     torch.cat([gaussians.harmonics,gaussians_tpv.harmonics],dim=1),
-        #     torch.cat([gaussians.opacities,gaussians_tpv.opacities],dim=1),
-        #     torch.cat([gaussians.semantics,gaussians_tpv.semantics],dim=1),
-        # )
-
-
+        gaussians = Gaussians(
+            torch.cat([gaussians.means,gaussians_bev.means],dim=1),
+            torch.cat([gaussians.scales,gaussians_bev.scales],dim=1),
+            torch.cat([gaussians.rotations,gaussians_bev.rotations],dim=1),
+            torch.cat([gaussians.covariances,gaussians_bev.covariances],dim=1),
+            torch.cat([gaussians.harmonics,gaussians_bev.harmonics],dim=1),
+            torch.cat([gaussians.opacities,gaussians_bev.opacities],dim=1),
+            torch.cat([gaussians.semantics,gaussians_bev.semantics],dim=1),
+        )
+        
         return self.decoder(gaussians, data, mode=mode)
         
         

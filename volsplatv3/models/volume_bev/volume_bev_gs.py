@@ -1,10 +1,38 @@
 import torch
+import torch.nn as nn
 from einops import rearrange
 from mmengine.model import BaseModule
 from mmengine.registry import MODELS
 
+
+
+
+
+class MaxDiffusion(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # 使用不同尺度的池化来获取远近不同的特征
+        self.max_p1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+        self.max_p2 = nn.MaxPool2d(kernel_size=5, stride=1, padding=2)
+
+    def forward(self, x):
+        # 通过最大池化，特征只会“扩张”，不会“变淡”
+        feat_p1 = self.max_p1(x)
+        feat_p2 = self.max_p2(x)
+        
+        # 将原始特征和池化后的特征融合
+        # 这里的逻辑是：原值 > 3x3池化 > 5x5池化
+        out = torch.max(x, feat_p1)
+        out = torch.max(out, feat_p2)
+        return out
+
+
+
+
+
+
 @MODELS.register_module()
-class VolumeBEVGaussian(BaseModule):
+class VolumeGaussianBEV(BaseModule):
     def __init__(self,
                  encoder=None,
                  gs_decoder=None,
@@ -17,7 +45,8 @@ class VolumeBEVGaussian(BaseModule):
             self.encoder = MODELS.build(encoder)
         if gs_decoder:
             self.gs_decoder = MODELS.build(gs_decoder)
-
+        
+        # self.max_pool = MaxDiffusion()
 
         self.bev_h = self.encoder.bev_h
         self.bev_w = self.encoder.bev_w
@@ -43,10 +72,8 @@ class VolumeBEVGaussian(BaseModule):
                 candidate_hs_i = (self.bev_h * (candidate_xyzs_i[..., 1] - self.pc_range[1]) / self.pc_yrange - 0.5).int()
                 candidate_ws_i = (self.bev_w * (candidate_xyzs_i[..., 0] - self.pc_range[0]) / self.pc_xrange - 0.5).int()
                 
-                # 特征
                 candidate_feats_i = candidate_feats[i]
                 
-                # 将高斯点特征投影到HW平面上，并对重叠格子做平均
                 candidate_coords_hw_i = torch.stack([candidate_hs_i, candidate_ws_i], dim=-1) # 将h和w合成二维坐标
                 linear_inds_hw_i = (candidate_coords_hw_i[..., 0] * self.bev_w + candidate_coords_hw_i[..., 1]).to(dtype=torch.int64) # 将2D坐标展平为1维索引(H*W)
                 project_feats_hw_i = project_feats_hw[i].view(-1, c)
@@ -59,9 +86,14 @@ class VolumeBEVGaussian(BaseModule):
                 project_feats_hw[i] = project_feats_hw_i
             
             project_feats_hw = rearrange(project_feats_hw, "b h w c -> b c h w")
+            # ----------------------------------- #
+            # todo 向邻域空间max_pool一下特征
+            # project_feats_hw = self.max_pool(project_feats_hw)
+            
             project_feats = [project_feats_hw]
         else:
             project_feats = [None]
+        
         
         if self.use_checkpoint and status != "test":
             input_vars_enc = (img_feats, project_feats, img_metas)
@@ -74,4 +106,6 @@ class VolumeBEVGaussian(BaseModule):
         else:
             outs = self.encoder(img_feats, project_feats, img_metas)
             gaussians = self.gs_decoder(outs)
+        
+        
         return gaussians

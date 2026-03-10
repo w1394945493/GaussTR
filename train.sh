@@ -84,7 +84,7 @@ python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/test.py \
 export CUDA_VISIBLE_DEVICES=0
 python /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
-    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train \
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train2 \
 
 --work-dir /c20250502/wangyushen/Outputs/gausstr/volsplatv3/train
 --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train 

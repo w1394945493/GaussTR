@@ -7,4 +7,5 @@ PYTHONPATH=. python -m torch.distributed.launch \
     /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/train.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/GaussTR/configs/volsplat/volsplatv3_experiment.py \
     --launcher pytorch \
-    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train
+    --work-dir /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train \
+    --resume /vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/gausstr/volsplatv3/train/epoch_3.pth

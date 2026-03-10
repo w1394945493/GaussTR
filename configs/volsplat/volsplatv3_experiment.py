@@ -51,10 +51,8 @@ gaussian_scale_max = 0.64
 
 use_checkpoint = True
 _dim_ = 128
-feat_dims = 768
 
 
-#! depth_unet 相关
 num_heads = 8
 num_layers = 1
 num_cams = 6
@@ -64,80 +62,127 @@ pc_range = vol_range
 pc_xrange, pc_yrange, pc_zrange = pc_range[3] - pc_range[0], pc_range[4] - pc_range[1], pc_range[5] - pc_range[2]
 
 
-tpv_h_ = 50
-tpv_w_ = 50
-tpv_z_ = 4
+# tpv_h_ = 50
+# tpv_w_ = 50
+# tpv_z_ = 4
+# scale_h = 1
+# scale_w = 1
+# scale_z = 1
+# # gpv = 3 # todo 每个tpv体素位置的高斯数量
+# gpv = 1
+
+# num_points_in_pillar = [8, 16, 16]
+# num_points = [16, 32, 32]
+# hybrid_attn_anchors = 16
+# hybrid_attn_points = 32
+# hybrid_attn_init = 0
+# _ffn_dim_ = _dim_ * 2
+
+bev_h_ = 50
+bev_w_ = 50
+bev_z_ = 4
+
 scale_h = 1
 scale_w = 1
 scale_z = 1
-# gpv = 3 # todo 每个tpv体素位置的高斯数量
 gpv = 1
 
-num_points_in_pillar = [8, 16, 16]
-num_points = [16, 32, 32]
-hybrid_attn_anchors = 16
-hybrid_attn_points = 32
-hybrid_attn_init = 0
+num_points_in_pillar = [8]
+num_points = [16]
 _ffn_dim_ = _dim_ * 2
 
+# self_cross_layer = dict(
+#     type='TPVFormerLayer',
+#     attn_cfgs=[
+#         dict(
+#             type='TPVCrossViewHybridAttention',
+#             tpv_h=tpv_h_,
+#             tpv_w=tpv_w_,
+#             tpv_z=tpv_z_,
+#             num_anchors=hybrid_attn_anchors,
+#             embed_dims=_dim_,
+#             num_heads=num_heads,
+#             num_points=hybrid_attn_points,
+#             init_mode=hybrid_attn_init,
+#             dropout=0.1),
+#         dict(
+#             type='TPVImageCrossAttention',
+#             pc_range=pc_range,
+#             num_cams=6,
+#             dropout=0.1,
+#             deformable_attention=dict(
+#                 type='TPVMSDeformableAttention3D',
+#                 embed_dims=_dim_,
+#                 num_heads=num_heads,
+#                 num_points=num_points,
+#                 num_z_anchors=num_points_in_pillar,
+#                 num_levels=1,
+#                 floor_sampling_offset=False,
+#                 tpv_h=tpv_h_,
+#                 tpv_w=tpv_w_,
+#                 tpv_z=tpv_z_),
+#             embed_dims=_dim_,
+#             tpv_h=tpv_h_,
+#             tpv_w=tpv_w_,
+#             tpv_z=tpv_z_)
+#     ],
+#     feedforward_channels=_ffn_dim_,
+#     ffn_dropout=0.1,
+#     operation_order=('self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm'))
+
+# self_layer = dict(
+#     type='TPVFormerLayer',
+#     attn_cfgs=[
+#         dict(
+#             type='TPVCrossViewHybridAttention',
+#             tpv_h=tpv_h_,
+#             tpv_w=tpv_w_,
+#             tpv_z=tpv_z_,
+#             num_anchors=hybrid_attn_anchors,
+#             embed_dims=_dim_,
+#             num_heads=num_heads,
+#             num_points=hybrid_attn_points,
+#             init_mode=hybrid_attn_init,
+#             dropout=0.1)
+#     ],
+#     feedforward_channels=_ffn_dim_,
+#     ffn_dropout=0.1,
+#     operation_order=('self_attn', 'norm', 'ffn', 'norm')) # 作为自注意力
 
 self_cross_layer = dict(
-    type='TPVFormerLayer',
+    type='BEVFormerLayer',
+    
     attn_cfgs=[
         dict(
-            type='TPVCrossViewHybridAttention',
-            tpv_h=tpv_h_,
-            tpv_w=tpv_w_,
-            tpv_z=tpv_z_,
-            num_anchors=hybrid_attn_anchors,
-            embed_dims=_dim_,
-            num_heads=num_heads,
-            num_points=hybrid_attn_points,
-            init_mode=hybrid_attn_init,
-            dropout=0.1),
-        dict(
-            type='TPVImageCrossAttention',
+            type='BEVImageCrossAttention',
             pc_range=pc_range,
             num_cams=6,
             dropout=0.1,
             deformable_attention=dict(
-                type='TPVMSDeformableAttention3D',
+                type='BEVMSDeformableAttention3D',
                 embed_dims=_dim_,
-                num_heads=num_heads,
-                num_points=num_points,
+                num_heads=num_heads, # 注意力头数
+                num_points=num_points, # 每头采样点数
                 num_z_anchors=num_points_in_pillar,
-                num_levels=1,
+                num_levels=1, # 多尺度层数
                 floor_sampling_offset=False,
-                tpv_h=tpv_h_,
-                tpv_w=tpv_w_,
-                tpv_z=tpv_z_),
+                bev_h=bev_h_,
+                bev_w=bev_w_,),
             embed_dims=_dim_,
-            tpv_h=tpv_h_,
-            tpv_w=tpv_w_,
-            tpv_z=tpv_z_)
+            bev_h=bev_h_,
+            bev_w=bev_w_)
     ],
+    
     feedforward_channels=_ffn_dim_,
     ffn_dropout=0.1,
-    operation_order=('self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm'))
+    operation_order=('cross_attn', 'norm', 'ffn', 'norm'),
+    
+    )
 
-self_layer = dict(
-    type='TPVFormerLayer',
-    attn_cfgs=[
-        dict(
-            type='TPVCrossViewHybridAttention',
-            tpv_h=tpv_h_,
-            tpv_w=tpv_w_,
-            tpv_z=tpv_z_,
-            num_anchors=hybrid_attn_anchors,
-            embed_dims=_dim_,
-            num_heads=num_heads,
-            num_points=hybrid_attn_points,
-            init_mode=hybrid_attn_init,
-            dropout=0.1)
-    ],
-    feedforward_channels=_ffn_dim_,
-    ffn_dropout=0.1,
-    operation_order=('self_attn', 'norm', 'ffn', 'norm'))
+
+
+
+
 
 model = dict(
     type = 'VolSplat',
@@ -191,55 +236,109 @@ model = dict(
         sh_degree=sh_degree,
     ),  
 
-    volume_gs = dict(
-        type="VolumeGaussian",
-        use_checkpoint=use_checkpoint,
+    # volume_gs = dict(
+    #     type="VolumeGaussian",
+    #     use_checkpoint=use_checkpoint,
 
+    #     encoder=dict(
+    #         type='TPVFormerEncoder',
+    #         tpv_h=tpv_h_,
+    #         tpv_w=tpv_w_,
+    #         tpv_z=tpv_z_,
+    #         num_feature_levels=1,
+    #         num_layers=3,
+    #         pc_range=pc_range,
+    #         num_points_in_pillar=num_points_in_pillar, # [8 16 16] 参考点数量 跨视图每个tpv网格参考点数量
+    #         num_points_in_pillar_cross_view=[16, 16, 16], # 跨平面每个位置参考点的数量
+    #         return_intermediate=False,
+            
+    #         transformerlayers=[
+    #             self_cross_layer, self_cross_layer, self_layer, # todo -----
+    #         ],
+
+    #         embed_dims=_dim_,
+    #         positional_encoding=dict(
+    #             type='TPVFormerPositionalEncoding',
+    #             num_feats=[48, 48, 32],
+    #             h=tpv_h_,
+    #             w=tpv_w_,
+    #             z=tpv_z_)),
+        
+    #     gs_decoder = dict(
+    #         type='VolumeGaussianDecoder',
+    #         tpv_h=tpv_h_,
+    #         tpv_w=tpv_w_,
+    #         tpv_z=tpv_z_,
+    #         pc_range=pc_range,
+    #         # gs_dim=14,
+    #         gs_dim=out_channels, # 14+18=32
+            
+    #         in_dims=_dim_,
+    #         hidden_dims=2*_dim_,
+    #         out_dims=_dim_,
+            
+    #         scale_h=scale_h,
+    #         scale_w=scale_w,
+    #         scale_z=scale_z,
+            
+    #         gpv=gpv,
+            
+    #         offset_max=[
+    #             2 * pc_xrange / (tpv_h_*scale_h), 
+    #             2 * pc_yrange / (tpv_w_*scale_w), 
+    #             2 * pc_zrange / (tpv_z_*scale_z)], # 位置偏移量最大预测值
+            
+    #         # scale_max=[
+    #         #     2 * pc_xrange / (tpv_h_*scale_h), 
+    #         #     2 * pc_yrange / (tpv_w_*scale_w), 
+    #         #     2 * pc_zrange / (tpv_z_*scale_z)], # 高斯尺度最大预测值
+    #         gaussian_scale_min = gaussian_scale_min,
+    #         gaussian_scale_max = gaussian_scale_max,         
+        
+    #     )
+
+    volume_gs = dict(
+        type="VolumeGaussianBEV",
+        use_checkpoint=use_checkpoint,
         encoder=dict(
-            type='TPVFormerEncoder',
-            tpv_h=tpv_h_,
-            tpv_w=tpv_w_,
-            tpv_z=tpv_z_,
+            type='BEVFormerEncoder',
+            bev_h=bev_h_,
+            bev_w=bev_w_,
             num_feature_levels=1,
-            num_layers=3,
+            num_layers=1, # num_layers和trainsformerlayers数一定要对齐
             pc_range=pc_range,
             num_points_in_pillar=num_points_in_pillar, # [8 16 16] 参考点数量 跨视图每个tpv网格参考点数量
-            num_points_in_pillar_cross_view=[16, 16, 16], # 跨平面每个位置参考点的数量
             return_intermediate=False,
             transformerlayers=[
-                self_cross_layer, self_cross_layer, self_layer
+                self_cross_layer, # todo 进行一次跨图像的交叉注意力
             ],
             embed_dims=_dim_,
             positional_encoding=dict(
-                type='TPVFormerPositionalEncoding',
+                type='BEVFormerPositionalEncoding',
                 num_feats=[48, 48, 32],
-                h=tpv_h_,
-                w=tpv_w_,
-                z=tpv_z_)),
+                h=bev_h_,
+                w=bev_w_,
+                )),
         
         gs_decoder = dict(
-            type='VolumeGaussianDecoder',
-            tpv_h=tpv_h_,
-            tpv_w=tpv_w_,
-            tpv_z=tpv_z_,
+            type='VolumeGaussianDecoderBEV',
+            bev_h=bev_h_,
+            bev_w=bev_w_,
+            bev_z=bev_z_,
             pc_range=pc_range,
             # gs_dim=14,
             gs_dim=out_channels, # 14+18=32
-            
             in_dims=_dim_,
             hidden_dims=2*_dim_,
             out_dims=_dim_,
-            
             scale_h=scale_h,
             scale_w=scale_w,
             scale_z=scale_z,
-            
             gpv=gpv,
-            
             offset_max=[
-                2 * pc_xrange / (tpv_h_*scale_h), 
-                2 * pc_yrange / (tpv_w_*scale_w), 
-                2 * pc_zrange / (tpv_z_*scale_z)], # 位置偏移量最大预测值
+                2 * pc_xrange / (bev_h_*scale_h), 
+                2 * pc_yrange / (bev_w_*scale_w), 
+                2 * pc_zrange / (bev_z_*scale_z)], # 位置偏移量最大预测值
             
             # scale_max=[
             #     2 * pc_xrange / (tpv_h_*scale_h), 
@@ -247,9 +346,8 @@ model = dict(
             #     2 * pc_zrange / (tpv_z_*scale_z)], # 高斯尺度最大预测值
             gaussian_scale_min = gaussian_scale_min,
             gaussian_scale_max = gaussian_scale_max,         
-        
         )
-        
+                
     ),
 
     decoder = dict(
@@ -294,13 +392,14 @@ train_num_workers=num_workers
 val_batch_size=batch_size
 val_num_workers=num_workers
 
-logger_interval = 50 # 打印间隔
+# logger_interval = 50 # 打印间隔
+logger_interval = 1
 val_interval=1 # 评估间隔
 
 data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/' 
 anno_root = '/c20250502/wangyushen/Datasets/NuScenes/nuscenes_cam/v1.0-trainval/' # todo 全部训练
-train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
-# train_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
+# train_ann_file = "nuscenes_infos_train_sweeps_occ.pkl"
+train_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 val_ann_file = "nuscenes_infos_val_sweeps_occ.pkl"
 
 occ_path = "/c20250502/wangyushen/Datasets/surroundocc/samples/" # all

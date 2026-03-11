@@ -1,22 +1,20 @@
 import torch
 import numpy as np
 from einops import rearrange, repeat
-from ....geometry.projection import get_world_rays
-from ....geometry.projection import sample_image_grid
 import torch.nn.functional as F
 
 import MinkowskiEngine as ME
 import spconv.pytorch as spconv 
+from .projection import get_world_rays,sample_image_grid
 
 
-
-def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution, b, v,
-                           normal=False, # 是否归一化
-                           img_aug_mat=None, # 图像变换矩阵
-                           vol_range = None, # todo surroundocc中感知范围
-                           pixel_flag = False, # 是否返回像素特征及3D位置
-                           ):
-    device = out.device    
+def project_features(intrinsics, extrinsics, out, depth,
+                    normal=False, # 是否归一化
+                    img_aug_mat=None, # 图像变换矩阵                    
+                    ):
+    
+    device = out.device
+    b, v = intrinsics.shape[:2]
     h, w = depth.shape[2:]
     _, c, _, _ = out.shape
     # todo 1.坐标变换：从2D像素到3D世界坐标：利用相机内外参和深度图，将图像上每个像素点转换到世界坐标系中
@@ -49,12 +47,32 @@ def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
 
     features = rearrange(out, "(b v) c h w -> b v c h w", b=b, v=v)
     features = rearrange(features, "b v c h w -> b v h w c")
-    features = rearrange(features, "b v h w c -> b v (h w) c")  # [B, V, N, C]
-    
-    #--------------------------------------------#
-    # 1. 展开像素点和特征（保持 batch 维度）
+    features = rearrange(features, "b v h w c -> b v (h w) c")  # [B, V, N, C]    
+
     pixel_points = rearrange(world_coords, "b v n c -> b (v n) c") # [b, vn, 3]
     pixel_feats = rearrange(features, "b v n c -> b (v n) c")      # [b, vn, c]    
+    return pixel_points, pixel_feats
+
+
+
+
+
+
+def project_features_to_me(intrinsics, extrinsics, out, depth, voxel_resolution,
+                           normal=False, # 是否归一化
+                           img_aug_mat=None, # 图像变换矩阵
+                           vol_range = None, # todo surroundocc中感知范围
+                           pixel_flag = False, # 是否返回像素特征及3D位置
+                           ):
+    
+    # 将像素特征反投影至3D空间
+    pixel_points,pixel_feats = project_features(intrinsics, extrinsics, out, depth,
+                           normal=normal, # 是否归一化
+                           img_aug_mat=img_aug_mat, # 图像变换矩
+                           )
+    
+    device = out.device
+    _, c, _, _ = out.shape
 
     all_points = pixel_points
     feats_flat = pixel_feats    

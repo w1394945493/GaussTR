@@ -159,7 +159,7 @@ class VolSplat(BaseModel):
 
         vol_range = [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
         # todo 体素化
-        sparse_input, aggregated_points, counts = project_features_to_me(
+        sparse_input, aggregated_points, counts,pixel_points,pixel_feats = project_features_to_me(
                 intrinsics, # (b v 3 3)
                 extrinsics, # (b v 4 4)    
                 rearrange(img_feats[0], "b v c h w -> (b v) c h w"),  # (bv c h w)
@@ -172,7 +172,7 @@ class VolSplat(BaseModel):
                 
                 vol_range = vol_range, # todo 仅保留范围内的点
                 # vol_range=None, # 
-                
+                pixel_flag=True
                 )   
         
         '''
@@ -222,26 +222,28 @@ class VolSplat(BaseModel):
         #------------------------------------------#
         # todo BEV/TPV网格 高斯预测
         x_start, y_start, z_start, x_end, y_end, z_end = self.pc_range # todo [-50.0, -50.0, -5.0, 50.0, 50.0, 3.0]
-        gaussians_means_mask, gaussians_feat_mask = [], []
-        means = gaussians.means
+        candidate_pos_mask, candidate_feat_mask = [], []
+        # positions = gaussians.means
+        # feats = gaussians_feat
+        
+        positions = pixel_points  # 使用原始的像素特征
+        feats = pixel_feats
+        
         for b in range(bs):
-            mask_pixel_i = (means[b, :, 0] >= x_start) & (means[b, :, 0] <= x_end) & \
-                        (means[b, :, 1] >= y_start) & (means[b, :, 1] <= y_end) & \
-                        (means[b, :, 2] >= z_start) & (means[b, :, 2] <= z_end)            
-            gaussians_means_mask_i = means[b][mask_pixel_i]
-            gaussians_feat_mask_i = gaussians_feat[b][mask_pixel_i]
-            gaussians_means_mask.append(gaussians_means_mask_i)
-            gaussians_feat_mask.append(gaussians_feat_mask_i)  
+            mask_pixel_i = (positions[b, :, 0] >= x_start) & (positions[b, :, 0] <= x_end) & \
+                        (positions[b, :, 1] >= y_start) & (positions[b, :, 1] <= y_end) & \
+                        (positions[b, :, 2] >= z_start) & (positions[b, :, 2] <= z_end)            
+            candidate_pos_mask_i = positions[b][mask_pixel_i]
+            candidate_feat_mask_i = feats[b][mask_pixel_i]
+            candidate_pos_mask.append(candidate_pos_mask_i)
+            candidate_feat_mask.append(candidate_feat_mask_i)  
 
-        img_meats = {
-            'img_shape': list(img_feats[0].shape[-2:]),
-            'lidar2img': data_samples['projection_mat'], # (1 6 4 4)
-        } # 用于计算参考点在图像中归一化的二维坐标
+c # 用于计算参考点在图像中归一化的二维坐标
 
         gaussians_bev = self.volume_gs(
                 [img_feats[0]],
-                gaussians_means_mask,
-                gaussians_feat_mask,
+                candidate_pos_mask,
+                candidate_feat_mask,
                 img_meats,
                 )  
 
@@ -254,6 +256,7 @@ class VolSplat(BaseModel):
             torch.cat([gaussians.opacities,gaussians_bev.opacities],dim=1),
             torch.cat([gaussians.semantics,gaussians_bev.semantics],dim=1),
         )
+        
         
         return self.decoder(gaussians, data, mode=mode)
         

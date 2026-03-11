@@ -7,9 +7,6 @@ from einops import rearrange
 from mmcv.cnn.bricks.transformer import TransformerLayerSequence
 from mmengine.registry import MODELS
 
-
-
-
 @MODELS.register_module()
 class BEVFormerEncoder(TransformerLayerSequence):
     def __init__(self,
@@ -51,7 +48,7 @@ class BEVFormerEncoder(TransformerLayerSequence):
         if not bev_only:
             self.project_transform_hw = nn.Conv2d(embed_dims, embed_dims, 3, 1, 1)
         
-        ref_3d_hw = self.get_reference_points(bev_h, bev_w, self.real_z, num_points_in_pillar[0])
+        ref_3d_hw = self.get_reference_points(bev_h, bev_w, self.real_z, num_points_in_pillar[0]) # 生成参考点
         self.register_buffer('ref_3d_hw', ref_3d_hw)
 
         self.positional_encoding = MODELS.build(positional_encoding) # 位置编码
@@ -95,16 +92,16 @@ class BEVFormerEncoder(TransformerLayerSequence):
         zs = torch.linspace(
             0.5, Z - 0.5, num_points_in_pillar,
             dtype=dtype, device=device).view(-1, 1, 1).expand(
-                num_points_in_pillar, H, W) / Z # Z方向从0.5到Z-0.5生成Z个点 (8,50 50)
+                num_points_in_pillar, H, W) / Z # Z方向从0.5到Z-0.5生成Z个点 (n,50 50)
         xs = torch.linspace(
             0.5, W - 0.5, W, dtype=dtype, device=device).view(1, 1, -1).expand(
                 num_points_in_pillar, H, W) / W # w方向从0.5到w-0.5生成W个点 归一化的值
         ys = torch.linspace(
             0.5, H - 0.5, H, dtype=dtype, device=device).view(1, -1, 1).expand(
                 num_points_in_pillar, H, W) / H
-        ref_3d = torch.stack((xs, ys, zs), -1) # (8 50 50 3)
+        ref_3d = torch.stack((xs, ys, zs), -1) # (n 50 50 3)
         ref_3d = ref_3d.permute(0, 3, 1, 2).flatten(2).permute(0, 2, 1)
-        ref_3d = ref_3d[None].repeat(bs, 1, 1, 1) # (1 8 50 50 3)
+        ref_3d = ref_3d[None].repeat(bs, 1, 1, 1) # (1 n 50 50 3)
         return ref_3d
 
     # 计算参考点在二维图像中的位置和坐标
